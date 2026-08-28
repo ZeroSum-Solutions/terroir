@@ -12,9 +12,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { decodeCsvBuffer, parseCsv } from "./csv-parser";
 import { mapHeader, validateRow, type FieldError, type FieldsInput, type RawRowFields } from "./row-validator";
-import { matchLwinBulk } from "./lwin-matching";
+import { matchLwinBulk, buildLwinQueryVariants, type LwinMatch } from "./lwin-matching";
 import { mergeIntraBatchDuplicates, type IntraBatchDuplicateReason } from "./dedup-key";
-import type { CanonicalHeader } from "./constants";
+import { LWIN_MATCH_MAX_QUERIES, type CanonicalHeader } from "./constants";
 
 /** Inline row-fix overrides (see ConfirmBatchOptions.rowOverrides in
  * batch-service.ts), keyed by the 1-indexed data row number a caller
@@ -36,6 +36,22 @@ export type PreviewRow = {
   lwinStatus: "matched" | "unmatched";
   lwinId: string | null;
   lwinScore: number | null;
+  /** Item 2 (per-row LWIN match visibility): the catalog's own display_name
+   * for lwinId, so the operator can SEE what a match actually claims this
+   * wine is, not just an opaque id + a score — the gap a Sol audit BLOCKed
+   * PR #133 (variant matching) over: at a 77% match rate, a silent wrong
+   * match is the bigger risk than a low match rate ever was.
+   *
+   * BLOCK 2 (round-13 fix) — this is match_lwin_bulk's OWN display_name
+   * (0076_csv_import_batches.sql), carried straight through matchLwinBulk
+   * (lwin-matching.ts) and the best-of-variants reduction below. There used
+   * to be a SECOND, separately-paginated lwin_catalog lookup here that
+   * re-fetched a name match_lwin_bulk had already returned — deleted
+   * outright (see docs/runbooks/csv-import.md) rather than patched, since
+   * the RPC's own result already carries everything this field needs. null
+   * for an unmatched row, or the rare case where match_lwin_bulk's own join
+   * returns a null display_name (never fails preview either way). */
+  lwinDisplayName: string | null;
   costStatus: "present" | "missing";
   resolution: "auto" | "pending" | "include" | "exclude";
   /** P3 §1.5 tier 1: row numbers of other rows in this same upload that
@@ -111,21 +127,83 @@ export async function buildImportPreview(
 
   const validated = parsed.rows.map((cells, idx) => validateRow(cells, columnToField, rowOverrides?.[String(idx + 1)]));
 
-  // Producer-less rows (real-world single-"Wine Name"-column exports) put
-  // the full name into BOTH match legs: match_lwin (0078) hard-gates on
-  // producer-leg similarity, so an empty producer would never match — and
-  // the full name contains the producer anyway. Weak candidates are still
-  // held to apply's own 0.6 confidence bar (0108) before any lwin_id is
-  // written.
+  // Producer-less rows (real-world single-"Wine Name"-column exports) are
+  // matched with several query variants — full name in both legs, plus the
+  // leading 2/3 name tokens as the producer leg (see buildLwinQueryVariants
+  // for the measured rationale) — and each row keeps its best-scoring
+  // match. Weak candidates are still held to apply's own 0.6 confidence
+  // bar (0108) before any lwin_id is written. A row that failed validation
+  // never reaches matching at all (filtered out below), so only VALID rows
+  // ever generate a query.
+  const variantOwners: number[] = [];
   const lwinQueries = validated
     .map((row, idx) => ({ row, idx }))
     .filter(({ row }) => row.state === "valid")
-    .map(({ row, idx }) => {
+    .flatMap(({ row, idx }) => {
       const { producer, name } = row as { producer: string; name: string };
-      return { idx, producer: producer || name, name };
+      return buildLwinQueryVariants(producer, name).map((variant) => {
+        variantOwners.push(idx);
+        return { idx: variantOwners.length - 1, ...variant };
+      });
     });
 
-  const matches = await matchLwinBulk(supabase, lwinQueries);
+  // BLOCK 2 (round 7 fix) — budgets the file/chunk's ACTUAL total generated
+  // query count (a producer-bearing row contributes 1, a producer-less row
+  // up to 3 — buildLwinQueryVariants above), never just the producer-less
+  // subset alone. Checked BEFORE any LWIN RPC call is made (lwinQueries is
+  // already fully built above, but matchLwinBulk hasn't been called yet) —
+  // see LWIN_MATCH_MAX_QUERIES' own comment (constants.ts) for the
+  // derivation this bound comes from, and why the previous version of this
+  // check (PRODUCER_LESS_MAX_ROWS, counting only producer-less rows) let a
+  // mixed file's real query count exceed the same budget it was meant to
+  // enforce.
+  //
+  // WARN 5 (round-29 audit) — this same check runs at both call sites
+  // (preview: no rowOverrides; confirm: with them — see
+  // LWIN_MATCH_MAX_QUERIES' own comment, constants.ts, for why that means
+  // preview and confirm are NOT guaranteed to agree). A row an override
+  // fixed from invalid to valid contributes queries here that preview's
+  // own count never included, since preview never saw the fix. When
+  // rowOverrides is present and non-empty, the message below says so
+  // explicitly, so a file that passed preview and then fails here reads as
+  // an explained consequence of the fixes just applied, never an
+  // unexplained regression.
+  if (lwinQueries.length > LWIN_MATCH_MAX_QUERIES) {
+    const overrideCount = rowOverrides ? Object.keys(rowOverrides).length : 0;
+    const overrideNote =
+      overrideCount > 0
+        ? ` This count reflects the ${overrideCount} row fix${overrideCount === 1 ? "" : "es"} applied since ` +
+          `preview — preview only counts a row toward this budget once it is valid, so fixing a row here can ` +
+          `raise the total beyond what preview showed.`
+        : "";
+    return {
+      ok: false,
+      error: {
+        code: "too_many_lwin_match_queries",
+        message:
+          `This file would generate ${lwinQueries.length} wine-catalog match queries — a producer-less row ` +
+          `("Wine Name" only, no producer/winery) needs up to 3 queries, a row with a producer needs 1 — and ` +
+          `matching that many at once cannot complete reliably.${overrideNote} Add a producer/winery value to ` +
+          `more rows, or split this file into smaller chunks so no single upload generates more than ` +
+          `${LWIN_MATCH_MAX_QUERIES} match queries.`,
+      },
+    };
+  }
+
+  const variantMatches = await matchLwinBulk(supabase, lwinQueries);
+  // Reduce best-per-row over ASCENDING flat index, not Map iteration
+  // order (which follows RPC row order and is not guaranteed): with
+  // strict >, an exact score tie deterministically keeps the
+  // lowest-variant-index match, so preview and confirm — which each
+  // rerun matching independently — always pick the same winner.
+  const matches = new Map<number, LwinMatch>();
+  for (let variantIdx = 0; variantIdx < variantOwners.length; variantIdx++) {
+    const match = variantMatches.get(variantIdx);
+    if (!match) continue;
+    const rowIdx = variantOwners[variantIdx];
+    const current = matches.get(rowIdx);
+    if (!current || match.score > current.score) matches.set(rowIdx, match);
+  }
 
   const rows: PreviewRow[] = validated.map((row, idx) => {
     const rowNumber = idx + 1;
@@ -140,6 +218,7 @@ export async function buildImportPreview(
         lwinStatus: "unmatched",
         lwinId: null,
         lwinScore: null,
+        lwinDisplayName: null,
         costStatus: "present",
         resolution: "exclude",
         mergedFromRowNumbers: [],
@@ -161,6 +240,7 @@ export async function buildImportPreview(
       lwinStatus,
       lwinId: match?.lwinId ?? null,
       lwinScore: match?.score ?? null,
+      lwinDisplayName: match?.displayName ?? null,
       costStatus,
       resolution: needsResolution ? "pending" : "auto",
       mergedFromRowNumbers: [],

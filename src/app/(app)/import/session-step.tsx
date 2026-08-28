@@ -17,10 +17,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
 import { ActionDialog } from "@/components/action-dialog";
-import { CLIENT_CHUNK_TARGET_ROWS, type CanonicalHeader } from "@/domains/import/constants";
+import { CLIENT_CHUNK_TARGET_ROWS, LWIN_MATCH_UX_CEILING_SECONDS, type CanonicalHeader } from "@/domains/import/constants";
 import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
-import type { BatchRow, ErrorRowEntry, RowOverrides } from "./import-client";
+import type { ApprovedLwinRows, BatchRow, ErrorRowEntry, MatchedLwinRowEntry, RejectedLwinRows, RowOverrides } from "./import-client";
 
 // ---------------------------------------------------------------------------
 // Chunk plan / upload state, and the pure functions that drive the two
@@ -61,6 +61,10 @@ export type ChunkedPreviewState = {
   summary: PreviewSummary;
   perChunk: ChunkPreviewEntry[];
   errorRows: ErrorRowEntry[];
+  /** Item 2 (per-row LWIN match visibility): every matched row across every
+   * chunk, mirroring errorRows above exactly (same GLOBAL row-number /
+   * chunkIndex / chunkRowNumber convention). */
+  matchedRows: MatchedLwinRowEntry[];
 };
 
 // Round-5 audit finding 4: "skipped" is a purely CLIENT-SIDE terminal state
@@ -102,6 +106,27 @@ export type ChunkUploadState = {
    * different content_sha256 and can plausibly resolve it on retry).
    * undefined until a duplicate_chunk_content failure actually occurs. */
   sentOverridesSnapshot?: RowOverrides;
+  /** Sol audit round 3, WARN 5: the rejectedLwinRows counterpart to
+   * sentOverridesSnapshot above — this chunk's own slice of GLOBAL row
+   * numbers the operator had rejected, exactly as sent with the failed
+   * duplicate_chunk_content attempt. A rejection changes the v2/v3
+   * content_sha256 namespace exactly like an override does (see
+   * confirmImportBatch's own digest-construction comment), so the
+   * retry gate must compare THIS too, not just sentOverridesSnapshot —
+   * otherwise rejecting (or un-rejecting) a match after a collision left
+   * Confirm/Retry permanently hidden even though the next attempt would
+   * genuinely hash differently. undefined until a duplicate_chunk_content
+   * failure actually occurs. */
+  sentRejectedLwinRowsSnapshot?: number[];
+  /** Sol audit round 3, WARN 5 / BLOCK 2: the approvedLwinRows counterpart
+   * to sentOverridesSnapshot above — this chunk's own slice of GLOBAL row
+   * number -> approved lwin_id, exactly as sent with the failed
+   * duplicate_chunk_content attempt. Same reasoning as
+   * sentRejectedLwinRowsSnapshot: BLOCK 2's approved-match set also
+   * namespaces content_sha256 (v3), so a change here must reopen retry
+   * too. undefined until a duplicate_chunk_content failure actually
+   * occurs. */
+  sentApprovedLwinRowsSnapshot?: ApprovedLwinRows;
   /** Round-5 audit finding 3/4: the sibling chunk index (body.chunkIndex
    * from the server's alreadyExists response) THIS chunk's content
    * collided with, when status is "failed" with code "duplicate_chunk_content"
@@ -169,6 +194,37 @@ const CONFIRM_RATE_WINDOW_MS = 60 * 1000;
 const PREVIEW_RATE_WINDOW_MS = 60 * 1000;
 const PREVIEW_MAX_RETRIES_PER_CHUNK = 5;
 
+/** WARN 4 (round-29 audit) — LWIN_MATCH_MAX_QUERIES (constants.ts) is
+ * SOLVED so each INDIVIDUAL chunk's own LWIN-matching is TARGETED to
+ * complete within LWIN_MATCH_UX_CEILING_SECONDS (round-10 fix: 120s), but
+ * a multi-chunk file is previewed — and later confirmed — one chunk at a
+ * time, sequentially (the loops in planChunkedPreview and
+ * confirmChunkedSession above), never in parallel. Every chunk passing its
+ * own per-chunk budget says nothing about the TOTAL wait for the whole
+ * operation: a 5-chunk file can cost up to roughly 5 x 120s = 600s of
+ * preview, then roughly another 600s to confirm.
+ *
+ * NIT 4 (round-13 fix) — CORRECTED wording: this used to call itself a
+ * "wall-clock bound" and "the honest worst-case total," which overstates
+ * what LWIN_MATCH_UX_CEILING_SECONDS actually is. It's an INHERITED
+ * estimate the query budget is solved against (see
+ * LWIN_MATCH_PER_CALL_SECONDS' own comment, constants.ts, for the
+ * provenance), and matchLwinBulk (lwin-matching.ts) awaits its RPC calls
+ * with no elapsed-time deadline of its own — nothing actually enforces
+ * LWIN_MATCH_UX_CEILING_SECONDS as a cap on any one chunk, so multiplying
+ * it by chunkTotal can't be a bound either. This is an ESTIMATE of the
+ * total for ONE phase (preview OR confirm) of a `chunkTotal`-chunk
+ * operation, reusing the exact same per-chunk figure every chunk's own
+ * budget is already solved against — never a new, separately-tunable
+ * number that could drift from it. Surfaced to the operator BEFORE each
+ * phase's own wait begins (import-client.tsx's UploadStep/PreviewStep, and
+ * SessionStep below) so "every chunk passes" is never silently read as
+ * "the whole operation is fast," and describeWaitEstimate (import-
+ * client.tsx) states it as the estimate it is, not a guaranteed cap. */
+export function estimateChunkedPhaseWaitSeconds(chunkTotal: number): number {
+  return chunkTotal * LWIN_MATCH_UX_CEILING_SECONDS;
+}
+
 export type ChunkedPreviewResult = { ok: true; plan: ChunkedPlanState; preview: ChunkedPreviewState } | { ok: false; error: string };
 
 /** Splits an already-parsed, over-MAX_ROWS file into upload chunks and
@@ -193,6 +249,8 @@ export async function planChunkedPreview(
   const planChunks: ChunkPlanItem[] = [];
   const perChunk: ChunkPreviewEntry[] = [];
   const errorRows: ChunkedPreviewState["errorRows"] = [];
+  // Item 2: mirrors errorRows above exactly.
+  const matchedRows: ChunkedPreviewState["matchedRows"] = [];
   const summary: PreviewSummary = { ...ZERO_SUMMARY };
 
   for (const chunkEntry of chunkEntries) {
@@ -293,6 +351,17 @@ export async function planChunkedPreview(
           errors: row.errors,
           rawText: row.rawText,
         });
+      } else if (row.lwinStatus === "matched" && row.lwinId !== null) {
+        // Item 2 (per-row LWIN match visibility): same GLOBAL-row-number
+        // convention as errorRows above.
+        matchedRows.push({
+          rowNumber: chunkEntry.startRow - 1 + row.rowNumber,
+          chunkIndex: chunkEntry.index,
+          chunkRowNumber: row.rowNumber,
+          lwinId: row.lwinId,
+          lwinDisplayName: row.lwinDisplayName,
+          lwinScore: row.lwinScore ?? 0,
+        });
       }
     }
   }
@@ -300,7 +369,7 @@ export async function planChunkedPreview(
   return {
     ok: true,
     plan: { headerRecord, chunkTotal: chunkEntries.length, chunks: planChunks, sourceSha256 },
-    preview: { summary, perChunk, errorRows },
+    preview: { summary, perChunk, errorRows, matchedRows },
   };
 }
 
@@ -317,6 +386,18 @@ export type ConfirmChunkedSessionParams = {
    * each chunk's own slice into the LOCAL row numbers that chunk's own
    * re-upload of buildImportPreview will assign. */
   rowOverrides?: RowOverrides;
+  /** Item 2 (per-row LWIN match visibility/rejection) — GLOBAL row numbers
+   * (same convention as rowOverrides above) the operator rejected a LWIN
+   * match on. localizeRejectedLwinRows (below) translates each chunk's own
+   * slice into that chunk's own local row numbers, mirroring
+   * localizeRowOverrides exactly. */
+  rejectedLwinRows?: RejectedLwinRows;
+  /** BLOCK 2 (Sol audit round 3, finding 2) — GLOBAL row number -> the
+   * lwin_id the operator saw and accepted for that row in the aggregated
+   * chunked preview (same convention as rowOverrides/rejectedLwinRows
+   * above). localizeApprovedLwinRows (below) translates each chunk's own
+   * slice into that chunk's own local row numbers. */
+  approvedLwinRows?: ApprovedLwinRows;
   onSessionId: (sessionId: string) => void;
   onProgress: (upload: ChunkUploadState[]) => void;
 };
@@ -339,6 +420,41 @@ export function localizeRowOverrides(
   return local;
 }
 
+/** Item 2 (per-row LWIN match visibility/rejection) — the rejectedLwinRows
+ * counterpart to localizeRowOverrides above: translates the operator's
+ * rejected-row set (keyed by the GLOBAL row number the aggregated chunked
+ * preview shows) into the LOCAL row numbers one chunk's own re-upload will
+ * assign. */
+export function localizeRejectedLwinRows(
+  globalRejected: RejectedLwinRows,
+  chunk: { startRow: number; endRow: number },
+): string[] {
+  const local: string[] = [];
+  for (const globalRowNumber of globalRejected) {
+    if (globalRowNumber < chunk.startRow || globalRowNumber > chunk.endRow) continue;
+    local.push(String(globalRowNumber - chunk.startRow + 1));
+  }
+  return local;
+}
+
+/** BLOCK 2 (Sol audit round 3, finding 2) — the approvedLwinRows
+ * counterpart to localizeRowOverrides above: translates the operator's
+ * approved (row -> lwin_id) map (keyed by the GLOBAL row number the
+ * aggregated chunked preview shows) into the LOCAL row numbers one
+ * chunk's own re-upload will assign. */
+export function localizeApprovedLwinRows(
+  globalApproved: ApprovedLwinRows,
+  chunk: { startRow: number; endRow: number },
+): Record<string, string> {
+  const local: Record<string, string> = {};
+  for (const [key, lwinId] of Object.entries(globalApproved)) {
+    const globalRowNumber = Number(key);
+    if (globalRowNumber < chunk.startRow || globalRowNumber > chunk.endRow) continue;
+    local[String(globalRowNumber - chunk.startRow + 1)] = lwinId;
+  }
+  return local;
+}
+
 export type ConfirmChunkedSessionResult =
   | { ok: true }
   /** conflictingSessionId is set when a chunk's content already belongs to
@@ -352,7 +468,18 @@ export type ConfirmChunkedSessionResult =
  * after a failure with the same `plan` and the returned chunkUpload state
  * as `initialUpload` — already-confirmed chunks are skipped. */
 export async function confirmChunkedSession(params: ConfirmChunkedSessionParams): Promise<ConfirmChunkedSessionResult> {
-  const { plan, initialUpload, existingSessionId, fileLabel, timestampsRef, rowOverrides, onSessionId, onProgress } = params;
+  const {
+    plan,
+    initialUpload,
+    existingSessionId,
+    fileLabel,
+    timestampsRef,
+    rowOverrides,
+    rejectedLwinRows,
+    approvedLwinRows,
+    onSessionId,
+    onProgress,
+  } = params;
   let results = initialUpload;
   onProgress(results);
 
@@ -418,6 +545,39 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       }
       const localOverrides = localizeRowOverrides(rowOverrides, chunk);
       if (Object.keys(localOverrides).length > 0) form.append("rowOverrides", JSON.stringify(localOverrides));
+    }
+    // Item 2: same localize-then-append pattern as rowOverrides above.
+    // WARN 5 (Sol audit round 3): this chunk's own GLOBAL rejected-row
+    // slice is also captured here, for the same duplicate_chunk_content
+    // snapshot reason chunkGlobalOverridesSlice is above — a rejection
+    // changes the v2/v3 content_sha256 namespace exactly like an override
+    // does (confirmImportBatch's own digest comment), so the retry gate
+    // needs to see it change too.
+    const chunkGlobalRejectedSlice: number[] = rejectedLwinRows
+      ? Array.from(rejectedLwinRows).filter((n) => n >= chunk.startRow && n <= chunk.endRow)
+      : [];
+    if (chunkGlobalRejectedSlice.length > 0) {
+      const localRejected = localizeRejectedLwinRows(rejectedLwinRows!, chunk);
+      if (localRejected.length > 0) form.append("rejectedLwinRows", JSON.stringify(localRejected));
+    }
+    // BLOCK 2 (Sol audit round 3, finding 2): same localize-then-append
+    // pattern, plus the same GLOBAL-slice snapshot capture as
+    // chunkGlobalRejectedSlice above — an approved-match change also
+    // namespaces content_sha256 (v3).
+    const chunkGlobalApprovedSlice: ApprovedLwinRows = {};
+    if (approvedLwinRows) {
+      for (const [key, lwinId] of Object.entries(approvedLwinRows)) {
+        const globalRowNumber = Number(key);
+        if (globalRowNumber >= chunk.startRow && globalRowNumber <= chunk.endRow) {
+          chunkGlobalApprovedSlice[globalRowNumber] = lwinId;
+        }
+      }
+      // BLOCK 1 (round 5 fix): always send, even `{}` when this chunk has
+      // zero linking matches of its own — see handleConfirm's own comment
+      // in import-client.tsx for why presence (not non-emptiness) is what
+      // confirm needs to fail closed correctly for THIS chunk's rows.
+      const localApproved = localizeApprovedLwinRows(approvedLwinRows, chunk);
+      form.append("approvedLwinRows", JSON.stringify(localApproved));
     }
 
     try {
@@ -548,6 +708,14 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
                 // slice this failed attempt sent, for the "did it actually
                 // change" gate PreviewStep computes on retry.
                 sentOverridesSnapshot: conflictCode === "duplicate_chunk_content" ? chunkGlobalOverridesSlice : c.sentOverridesSnapshot,
+                // WARN 5 (Sol audit round 3): same reasoning, for the
+                // rejected/approved slices — see ChunkUploadState's own
+                // comment on these two fields for why both must be
+                // snapshotted too, not just overrides.
+                sentRejectedLwinRowsSnapshot:
+                  conflictCode === "duplicate_chunk_content" ? chunkGlobalRejectedSlice : c.sentRejectedLwinRowsSnapshot,
+                sentApprovedLwinRowsSnapshot:
+                  conflictCode === "duplicate_chunk_content" ? chunkGlobalApprovedSlice : c.sentApprovedLwinRowsSnapshot,
                 duplicateOfChunkIndex: conflictCode === "duplicate_chunk_content" ? (body.chunkIndex as number) : c.duplicateOfChunkIndex,
               }
             : c,
@@ -585,6 +753,8 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
               error: null,
               code: null,
               sentOverridesSnapshot: undefined,
+              sentRejectedLwinRowsSnapshot: undefined,
+              sentApprovedLwinRowsSnapshot: undefined,
               duplicateOfChunkIndex: undefined,
             }
           : c,

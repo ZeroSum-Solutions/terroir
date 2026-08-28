@@ -42,8 +42,193 @@ sub-chunks via repeated `POST /apply` calls, unchanged by chunking.
   exception handler — no change from chunking.
 - Preview (`buildImportPreview`) still does the same bulk LWIN-matching
   work synchronously, bounded by `LWIN_MATCH_BATCH_SIZE` rows per RPC
-  call, per chunk — still well inside one request even at the 5,000-row
-  cap.
+  call, per chunk. Producer-less rows now issue up to 3 query variants
+  each (`buildLwinQueryVariants`), and `matchLwinBulk` runs chunks at
+  `LWIN_MATCH_CONCURRENCY` (4) in flight.
+  **Correction (BLOCK 2, round 5 fix) — the "still fits one request with
+  more margin than before" claim above was wrong, and has been removed
+  from the arithmetic it was based on.** Taking the documented worst-case
+  per-call cost at face value (~4.4s/100-query call,
+  `0078_match_lwin_trgm_fastpath.sql`), a fully producer-less file at
+  `MAX_ROWS` (5,000) issues 15,000 queries -> 150 chunks -> `ceil(150/4)`
+  = 38 waves at `LWIN_MATCH_CONCURRENCY` (4) -> **~167s worst-case wall
+  clock**, several times over the routes' own 60s design target — not
+  "more margin than before." The "≈0.75× the old sequential time"
+  arithmetic itself was directionally correct (verified this round: see
+  `LWIN_MATCH_CONCURRENCY`'s own comment, `constants.ts`, for a real
+  measurement showing concurrency 4 achieves a 3.61× wall-clock speedup
+  over sequential with only ~9% per-call slowdown from contention) — the
+  error was concluding that a 0.75×-of-a-too-slow-number result is itself
+  fast enough, when the un-multiplied baseline (5,000 single-variant
+  queries, sequential) was never actually the thing being compared
+  against for the 3×-fanned-out case.
+
+  **Corrected again (BLOCK 2, round 7 fix) — the round-5 fix's own cap
+  budgeted the wrong quantity.** `buildImportPreview` enforced
+  `PRODUCER_LESS_MAX_ROWS` (1,500) against the count of producer-less rows
+  ONLY — but a producer-BEARING row still issues one query each, and those
+  queries were never counted against anything. A producer-bearing row
+  generates exactly 1 query; a producer-less row generates up to 3
+  (`buildLwinQueryVariants`) — so the TOTAL query count one preview/confirm
+  unit generates is `validRows + 2 * producerLessRows`, not
+  `producerLessRows` alone. Concretely: a valid 5,000-row upload with
+  1,500 producer-less rows and 3,500 producer-bearing ones passed the old
+  cap outright (1,500 is exactly at the limit) while still issuing
+  3,500 + 3·1,500 = 8,000 queries -> 80 RPC calls -> `ceil(80/4)` = 20
+  waves -> **~88s at the same 4.4s/call estimate** — already well over the
+  60s target the cap exists to enforce.
+
+  The actual fix: `buildImportPreview` (`preview-service.ts`) now checks
+  the file/chunk's ACTUAL generated query count (`lwinQueries.length` —
+  already built, before `matchLwinBulk`'s first RPC call) against
+  `LWIN_MATCH_MAX_QUERIES` (`constants.ts`) — one number derived from the
+  same chain this section documents: queries -> RPC calls at
+  `LWIN_MATCH_BATCH_SIZE` (100) -> waves at `LWIN_MATCH_CONCURRENCY` (4) ->
+  seconds at `LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY`, solved for a 60s
+  UX ceiling (`LWIN_MATCH_UX_CEILING_SECONDS`) — **superseded by the
+  round-10 fix further below: the ceiling is 120s now, not 60s: see its own
+  section for the current number and the derivation that replaced this
+  one.** Both `buildImportPreview` call sites (the preview route, and
+  confirm's own re-derivation) share this exact function and constant, so a
+  file can never pass preview and then fail confirm (or the reverse) on
+  this budget — **corrected by WARN 5 below: this is FALSE whenever row
+  overrides are involved (a fix applied between preview and confirm can add
+  queries preview's own count never saw) — see that section for the actual,
+  narrower guarantee.** A file/chunk whose real query count would exceed
+  the cap fails fast, before any LWIN RPC call is issued, with a message
+  stating the actual generated query count and the remedy (add producer
+  data to more rows, or split the file into smaller chunks) — not a
+  producer-less-only row count that, on a mixed file, no longer describes
+  what actually needs to shrink.
+
+  **Corrected a third time (round-29 audit, BLOCK 3) — the round-7
+  arithmetic above was internally inconsistent with `LWIN_MATCH_CONCURRENCY`'s
+  own comment.** It solved `floor(60 / 4.4)` = 13 waves -> `13 * 4 * 100` =
+  5,200 queries max, using the single-call 4.4s figure directly — but
+  `LWIN_MATCH_CONCURRENCY`'s own comment (`constants.ts`) records a ~9%
+  per-call latency INCREASE from contention at that same concurrency (the
+  same round-5 benchmark this section already cites). 13 waves at the
+  actually-applicable per-call time (4.4 × 1.09 ≈ 4.796s) is
+  13 × 4.796 ≈ **62.3s — over the 60s ceiling** the cap exists to enforce.
+  Recomputed against `LWIN_MATCH_PER_CALL_SECONDS_AT_CONCURRENCY`
+  (`constants.ts`, `LWIN_MATCH_PER_CALL_SECONDS × LWIN_MATCH_CONCURRENCY_LATENCY_INFLATION`
+  — the single source of truth for both this budget and the concurrency
+  comment's own contention note): `floor(60 / 4.796)` = 12 waves ->
+  `12 * 4 * 100` = **4,800 queries max**. 12 waves at ≈4.796s/wave ≈ 57.6s,
+  inside budget; the excluded 13th wave would be ≈62.3s, correctly over
+  it.
+
+  **Also corrected: the `LWIN_MATCH_PER_CALL_SECONDS` (4.4) provenance
+  claim.** This is an INHERITED estimate (0078's own migration-time
+  measurement), not one the round-5 benchmark reproduced. That benchmark
+  ran against a different synthetic catalog (130,000 rows) on different
+  hardware and measured a different absolute per-call time of its own —
+  what it DID independently confirm is the RELATIVE behavior: a 3.61×
+  wall-clock speedup at concurrency 4 (vs. sequential) and the ~9%
+  per-call latency inflation this budget now applies. The 4.4s baseline
+  itself was never re-measured or reproduced this round or last.
+
+  **Corrected a fourth time (round-10 fix) — the contradiction the round-29
+  note above flagged has been resolved, not merely documented.** The
+  round-29 note claimed `MAX_ROWS` (5,000) was "no longer guaranteed to
+  fit under this budget on its own": a plain 5,000-row file where every
+  row carries a producer generates exactly 5,000 queries, which exceeded
+  the then-current 4,800-query cap. That is a capability regression, not a
+  safety win — the ordinary, most common shape of a large import (every
+  row has a producer) was being rejected before any LWIN RPC call ran, and
+  the 60s ceiling that produced the 4,800 figure was never a real platform
+  limit. Two independent audits this session confirmed `maxDuration` is
+  inert on this app's Railway deployment (`railway.toml` runs a
+  long-lived `pnpm start` server, not a per-invocation serverless
+  function) — Railway's real constraint is its HTTP proxy's ~5-minute
+  no-data timeout, which 60s was nowhere near. `LWIN_MATCH_UX_CEILING_SECONDS`
+  moved from 60 to 120 (constants.ts has the full derivation): solving for
+  a query capacity of at least 2× `MAX_ROWS` (10,000 — enough for the pure
+  producer-bearing case with 2x headroom, and for a meaningfully mixed
+  file too) needs `floor(ceiling / 4.796) >= 25`, i.e. `ceiling >= 119.9s`
+  — 120s is the clean round number just above that, and only 40% of
+  Railway's 300s timeout. Recomputed: `floor(120 / 4.796)` = 25 waves ->
+  `25 * 4 * 100` = **10,000 queries max**. A plain `MAX_ROWS`
+  all-producer-bearing file (5,000 queries) now passes with 2x headroom.
+  The producer-less worst case at `MAX_ROWS` (5,000 rows × up to 3 queries
+  = 15,000) still correctly exceeds 10,000 and is still rejected — the
+  budget still prevents a genuinely unbounded wait, it just no longer
+  rejects the product's own documented row-limit capability to do so. The
+  operator sees a live wait estimate before either phase's wait begins
+  (`estimateChunkedPhaseWaitSeconds`, `session-step.tsx`), which derives
+  from this same `LWIN_MATCH_UX_CEILING_SECONDS` — so a longer, honestly
+  estimated bounded wait is the trade for not silently rejecting a normal
+  file. **Round-11 fix — until then, that estimate only actually reached
+  the operator for a chunked (> MAX_ROWS) file, and only once "previewing"
+  was already true: a plain file at or under MAX_ROWS got no estimate at
+  all, on either phase. `import-client.tsx`'s `countPreviewUnits` now
+  computes it for every file (chunked or not) as soon as one is selected —
+  before the operator clicks Preview — and `PreviewStep` shows the confirm
+  estimate on the plain path too, not only the chunked one. The wording
+  also no longer claims more certainty than the numbers support: it's
+  stated as an estimate from measured matching performance, not a
+  guaranteed cap (`LWIN_MATCH_PER_CALL_SECONDS`' own comment, constants.ts,
+  documents it as an INHERITED figure, and `matchLwinBulk` has no
+  elapsed-time deadline of its own). At the time of this fix it was also
+  scoped to LWIN matching only, since a separate catalogue display-name
+  lookup ran after matching and wasn't included — **round-13 fix: that
+  lookup is now deleted (see "Preview is a pure function" below), so the
+  estimate covers the entirety of what preview/confirm actually do over
+  the network; there is no longer anything left to scope it away from.**
+
+  **BLOCK 1 (round-13 fix) — the estimate could still be READ against the
+  wrong file.** `countPreviewUnits` resolves asynchronously (it reads the
+  whole file), so an operator could click Preview in the window before it
+  resolved for the just-selected file, or — worse — read the PREVIOUS
+  file's estimate while a newly-selected, larger file's own count was still
+  in flight, then commit to it. `import-client.tsx` now tracks an explicit
+  `previewUnitsStatus` ("idle" / "pending" / "ready" / "unavailable") that
+  is set to "pending" — clearing the stale value — the instant a new file
+  is selected, before the async count even starts; the Preview button stays
+  disabled for the whole "pending" window on either path.**
+
+  **WARN 5 (round-29 audit) — corrected, not merely noted: "a file can
+  never pass preview and then fail confirm on this budget" (stated above)
+  is FALSE whenever row overrides are involved.** The preview route calls
+  `buildImportPreview` with no `rowOverrides` (there's nothing to override
+  yet); confirm calls it with the operator's fixes applied. A row this
+  function counts as an error (missing/invalid required field) contributes
+  ZERO queries toward the budget — it's filtered out before `lwinQueries`
+  is built. If an override fixes exactly the field that was failing, the
+  same row counts as valid at confirm and contributes up to 3 queries
+  (producer-less) or 1 (producer-bearing) that preview's own count never
+  saw. A file sitting just under the cap at preview, with enough
+  producer-less error rows fixed by overrides, can therefore legitimately
+  EXCEED the cap only at confirm — preview and confirm share one cap, but
+  not always one input, so they are not guaranteed to share one verdict
+  (`preview-service.test.ts`'s "a row fixed by an override can push a file
+  that passed preview over the budget at confirm" proves exactly this: a
+  file passing preview just under the cap, then failing confirm once an
+  override fixes its one invalid row). Confirm's own error message states
+  this explicitly (the row-fix count and the resulting total) rather than
+  leaving the operator to wonder why an already-previewed file suddenly
+  failed — see `buildImportPreview`'s own budget-check comment
+  (`preview-service.ts`).
+
+  **Round-11 fix (WARN 2) — the "2× MAX_ROWS" headroom above was, until
+  now, documentation, not an enforced relationship.** `MAX_ROWS` is
+  assigned independently near the top of `constants.ts`;
+  `LWIN_MATCH_UX_CEILING_SECONDS` is assigned independently further down;
+  only `LWIN_MATCH_MAX_QUERIES` was ever derived from the two. Nothing
+  stopped a later change to `MAX_ROWS` (or to any of the budget's other
+  inputs) from silently recreating the exact contradiction this round-10
+  fix reconciles, and the "MAX_ROWS regression test"
+  (`preview-service.test.ts`) wouldn't have caught it — it hardcoded
+  5,000/10,000 rather than reading these constants. `constants.ts` now
+  exports `LWIN_MATCH_MAX_QUERIES_MAX_ROWS_MULTIPLE` (2) and throws at
+  module load if `LWIN_MATCH_MAX_QUERIES` ever drops below
+  `LWIN_MATCH_MAX_QUERIES_MAX_ROWS_MULTIPLE × MAX_ROWS` — a change that
+  breaks the relationship now fails loudly (every test importing the module
+  fails) instead of shipping silently. `preview-service.test.ts`'s
+  boundary fixtures (the "exactly at the cap," "one over," and "plain
+  MAX_ROWS all-producer-bearing" tests) now compute their row/query counts
+  from `MAX_ROWS` and `LWIN_MATCH_MAX_QUERIES` directly, rather than
+  hardcoding the numbers those constants currently happen to equal.
 
 **What chunking actually needed, that a single-batch design didn't:**
 inventory-level duplicate prevention (§1 — effectively unimplemented
@@ -101,6 +286,29 @@ network call it makes is the read-only `match_lwin_bulk` RPC (0076). Both
 (persists the same computation as a batch) call it — the confirm endpoint
 always re-derives from the uploaded file itself, never trusts a
 client-supplied preview payload.
+
+**NIT 4 (round-13 fix) — this "only network call" claim used to be false.**
+Item 2 (per-row LWIN match visibility) had added a SECOND network call
+here: `match_lwin_bulk` already returns `display_name` with each winning
+candidate (0076's own `match_lwin_bulk` SELECTs it straight from
+`lwin_catalog`), but `matchLwinBulk` (`lwin-matching.ts`) was discarding
+that field, so a later round bolted on a separate, independently-paginated
+`lwin_catalog` lookup to re-fetch a name the RPC had already returned —
+paginated because `MAX_ROWS` (5,000) can exceed PostgREST's 1,000-row
+`db.max_rows` cap, which meant a `.in(distinctLwinIds)` filter that could
+run to roughly 70,000 URL characters at `MAX_ROWS` fully matched, and a
+failure mode where a below-the-fold display name silently degraded to
+"Catalog entry (name unavailable)" while the row was **still** auto-
+approved for application — visibility and approval had quietly drifted
+apart. Deleted outright rather than patched: `display_name` now flows
+straight through `matchLwinBulk`'s own `LwinMatch` and the best-of-variants
+reduction in `buildImportPreview`, so there is nothing left to
+re-fetch, and the claim above is now literally true rather than
+approximately true. An apply-eligible match with no display identity
+(the residual this leaves — `match_lwin_bulk` returning a real `lwin_id`
+but a null `display_name`) is now excluded from `buildApprovedLwinRows`
+(`import-client.tsx`) and its own `linkingMatchedRows` band, rather than
+being shown with a placeholder and auto-approved regardless.
 
 ## Reversibility
 
@@ -782,6 +990,80 @@ least N" whenever the raw read comes back exactly at the cap, rather than
 asserting a possibly-false exact total — but the per-candidate list, count,
 and truncation flag are no longer carried on the error payload at all
 (round-27 audit), since nothing client-side renders them any more.
+
+**BLOCK 2 (Sol audit round 3, finding 2): `match_lwin`'s catalogue
+tie-break is still non-deterministic — this makes a disagreement safe, it
+does not close it.** `match_lwin` (`0078_match_lwin_trgm_fastpath.sql`)
+resolves candidates with `order by score desc limit 1` and no stable
+secondary key. Preview and confirm (`confirmImportBatch`,
+`src/domains/import/batch-service.ts`) each call it independently — preview
+when the operator loads the page, confirm again from scratch when they
+click Confirm, never trusting the client's own preview payload. When two
+catalogue rows genuinely tie on score, the RPC can legitimately return a
+DIFFERENT `lwin_id` on the second call than it returned on the first,
+purely from Postgres's own row-visitation order for that query, with
+nothing in the ORDER BY to break the tie consistently. The correct fix is a
+deterministic secondary `ORDER BY` key inside `match_lwin` itself — i.e. a
+migration. Migrations are locked for this change.
+
+What ships instead (`approvedLwinRows`, threaded from `PreviewStep`'s
+matched-row list through `ConfirmBatchOptions.approvedLwinRows` to
+`applyLwinApprovalVeto`, `batch-service.ts`): the client echoes back, per
+row it showed as a linking match (score >= `LWIN_APPLY_MIN_SCORE`), the
+exact `lwin_id` the operator saw and accepted. Confirm still ALWAYS
+re-derives the match itself and never trusts that value as anything but a
+comparison target — when the re-derived match disagrees with what the
+operator approved, the row is stamped exactly like a rejected row (no LWIN
+link at all) instead of silently persisting whichever candidate the tie
+happened to resolve to on that particular call. This can only ever cause
+LESS to be written than an untrusted client value could, never more or
+different — the same "confirm never trusts a client-supplied preview"
+property every other field in `ConfirmBatchOptions` already holds. The
+residual this leaves: a genuine tie is still resolved non-deterministically
+by the RPC, so an operator can occasionally see a row silently drop to
+"unmatched, needs resolution" between preview and confirm with no
+value-level "wrong wine" ever persisted — annoying, not unsafe. Closing
+that properly (the RPC itself returning the SAME candidate every time)
+still needs the migration described above.
+
+**BLOCK 1 (round 5 audit): the veto above was fail-OPEN for a row the
+operator never saw as linking at all — corrected, now fail-closed.**
+`buildApprovedLwinRows` (`import-client.tsx`) only ever includes a row that
+was shown as LINKING (score >= `LWIN_APPLY_MIN_SCORE`) at preview — a row
+that was unmatched, or matched below that bar, has no entry either way, for
+the exact same "no entry" shape. Before this round, `applyLwinApprovalVeto`
+left ANY row with no entry completely untouched, on the theory that "no
+entry" only ever meant "an older client, or a row never shown as matched."
+That reasoning missed a real case: if a row that was unmatched or
+below-threshold at PREVIEW re-scores >= `LWIN_APPLY_MIN_SCORE` by the time
+confirm re-derives it from scratch (a catalogue update between the two
+calls, or `match_lwin`'s own non-deterministic tie-break landing on a
+candidate this time), the old veto stamped it — a catalogue link the
+operator never saw, contradicting this same UI's own promise that a
+below-threshold/unmatched row imports with no link "no matter what you do
+here" (`import-client.tsx`'s `PreviewStep`).
+
+The fix: `ConfirmBatchOptions.approvedLwinRows`'s mere PRESENCE (checked via
+`!== undefined`, independent of whether it canonicalizes to anything) now
+tells `applyLwinApprovalVeto` the client showed the operator its full
+linking picture for this confirm. `import-client.tsx` (both the plain and
+chunked confirm paths) now ALWAYS sends this field, even as `{}` for a file
+whose preview showed zero linking matches — omitting it for an
+all-non-linking file used to be indistinguishable from an older, non-UI
+client that never sends it at all, which was exactly the ambiguity behind
+the bug. When the field is present, every row that would actually be
+stamped (matched, score >= `LWIN_APPLY_MIN_SCORE`) now needs a MATCHING
+entry to survive — no entry, same as a disagreeing one, both veto. When the
+field is genuinely absent (a bare API caller with no preview UI to show
+anything through), the veto is unchanged from before: there is no signal to
+fail closed with, and absence of data is never treated as evidence of
+rejection. The "never trust the client, can only cause LESS to be written"
+property is unchanged either way. This changed the digest input shape for
+one previously-impossible state (`approvedLwinRows` sent but empty) — see
+`confirmImportBatch`'s own digest-construction comment for the new v4
+namespace this required, kept fully separate from v1/v2/v3 so the new
+full-picture-veto semantics can never collide, digest-wise, with an
+old-style permissive confirm of the same file/overrides/rejections.
 
 ## added_via provenance
 

@@ -15,7 +15,12 @@ import { apiError, Errors } from "@/lib/api/errors";
 import { fileField, parseMultipart } from "@/lib/api/validation";
 import { confirmImportBatch } from "@/domains/import/batch-service";
 import { validateUploadedCsvFile } from "@/domains/import/upload-validation";
-import { ConfirmBatchSessionFieldsSchema, RowOverridesFieldSchema } from "@/domains/import/request-schemas";
+import {
+  ApprovedLwinRowsFieldSchema,
+  ConfirmBatchSessionFieldsSchema,
+  RejectedLwinRowsFieldSchema,
+  RowOverridesFieldSchema,
+} from "@/domains/import/request-schemas";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 export const runtime = "nodejs";
@@ -29,7 +34,12 @@ const CONFIRM_RATE_WINDOW_MS = 60 * 1000;
 // single-file upload omits every one of these and behaves exactly as
 // before.
 const ConfirmSchema = z
-  .object({ file: fileField, rowOverrides: RowOverridesFieldSchema })
+  .object({
+    file: fileField,
+    rowOverrides: RowOverridesFieldSchema,
+    rejectedLwinRows: RejectedLwinRowsFieldSchema,
+    approvedLwinRows: ApprovedLwinRowsFieldSchema,
+  })
   .merge(ConfirmBatchSessionFieldsSchema);
 
 export async function GET() {
@@ -70,7 +80,8 @@ async function postBatches(request: NextRequest) {
 
   const parsed = await parseMultipart(request, ConfirmSchema, { message: "Expected a CSV file upload." });
   if (!parsed.ok) return parsed.response;
-  const { file, sessionId, chunkIndex, chunkTotal, sourceSha256, rowOverrides } = parsed.data;
+  const { file, sessionId, chunkIndex, chunkTotal, sourceSha256, rowOverrides, rejectedLwinRows, approvedLwinRows } =
+    parsed.data;
 
   const uploadCheck = validateUploadedCsvFile(file);
   if (!uploadCheck.ok) {
@@ -96,6 +107,8 @@ async function postBatches(request: NextRequest) {
     chunkTotal,
     sourceSha256,
     rowOverrides,
+    rejectedLwinRows,
+    approvedLwinRows,
     serviceClient,
   });
 

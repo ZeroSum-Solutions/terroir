@@ -19,14 +19,21 @@ import {
   isRowInConfirmedChunk,
   isRowInSkippedChunk,
   buildImportAnywayOverride,
+  buildApprovedLwinRows,
   skipChunk,
   undoSkipChunk,
   MAX_SHOWN_ERROR_ROWS,
   type ErrorRowEntry,
   type BatchDetail,
+  type MatchedLwinRowEntry,
 } from "./import-client";
 import { ZERO_SUMMARY, type ChunkUploadState, type ChunkedPlanState } from "./session-step";
-import { type CanonicalHeader } from "@/domains/import/constants";
+import {
+  CLIENT_CHUNK_TARGET_ROWS,
+  LWIN_MATCH_UX_CEILING_SECONDS,
+  MAX_ROWS,
+  type CanonicalHeader,
+} from "@/domains/import/constants";
 
 const reactTestEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -993,6 +1000,129 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
     expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
   });
 
+  // WARN 5 (Sol audit round 3): a rejection or an approved-match change
+  // also namespaces content_sha256 (the v2/v3 tiers — see
+  // confirmImportBatch's own digest-construction comment), exactly like an
+  // override does — but the gate used to compare ONLY the override slice,
+  // so rejecting (or un-rejecting) a match after a duplicate_chunk_content
+  // collision left Confirm/Retry hidden even though the next attempt would
+  // genuinely hash differently. These mirror the override-differs/
+  // override-unchanged pair above, for the two new slices.
+  it("keeps Retry HIDDEN when the current rejected-match set is UNCHANGED from what was sent and failed", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error: "Chunk 1's content is identical to chunk 2.",
+        code: "duplicate_chunk_content",
+        sentRejectedLwinRowsSnapshot: [1],
+      },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          chunkBreakdown: [{ index: 1, startRow: 1, endRow: 1, summary: ZERO_SUMMARY }],
+          error: chunkUpload[0].error,
+          // Same rejected set the failed attempt already sent.
+          rejectedLwinRows: new Set([1]),
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
+  });
+
+  it("shows Retry once a match is rejected that WASN'T rejected in the failed attempt", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error: "Chunk 1's content is identical to chunk 2.",
+        code: "duplicate_chunk_content",
+        sentRejectedLwinRowsSnapshot: [],
+      },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          chunkBreakdown: [{ index: 1, startRow: 1, endRow: 1, summary: ZERO_SUMMARY }],
+          error: chunkUpload[0].error,
+          // A genuinely new rejection, not present in the sent snapshot.
+          rejectedLwinRows: new Set([1]),
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
+  });
+
+  it("keeps Retry HIDDEN when the current linking-matched set is UNCHANGED from the approved-match snapshot sent and failed", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error: "Chunk 1's content is identical to chunk 2.",
+        code: "duplicate_chunk_content",
+        sentApprovedLwinRowsSnapshot: { 1: "LWIN001" },
+      },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          chunkBreakdown: [{ index: 1, startRow: 1, endRow: 1, summary: ZERO_SUMMARY }],
+          error: chunkUpload[0].error,
+          matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.9 }],
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
+  });
+
+  it("shows Retry once the linking-matched lwin_id DIFFERS from the approved-match snapshot that was sent and failed", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error: "Chunk 1's content is identical to chunk 2.",
+        code: "duplicate_chunk_content",
+        sentApprovedLwinRowsSnapshot: { 1: "LWIN001" },
+      },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          chunkBreakdown: [{ index: 1, startRow: 1, endRow: 1, summary: ZERO_SUMMARY }],
+          error: chunkUpload[0].error,
+          // A genuinely different re-match than the one that was sent.
+          matchedRows: [{ rowNumber: 1, lwinId: "LWIN002", lwinDisplayName: "Domaine B", lwinScore: 0.9 }],
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(true);
+  });
+
   it("does NOT re-enable the button for an override on a DIFFERENT row than the failed chunk's own", async () => {
     const chunkUpload: ChunkUploadState[] = [
       { index: 1, status: "failed", batchId: null, error: "Chunk 1's content is identical to chunk 2.", code: "duplicate_chunk_content" },
@@ -1386,6 +1516,239 @@ describe("PreviewStep — incremental error-row disclosure (Sol round-2 audit fi
   }
 });
 
+// Item 2 (per-row LWIN match visibility/rejection): a PR #133 audit (variant
+// LWIN matching lifted the match rate 29.6% -> 77.0%) BLOCKed on the UI
+// showing only an aggregate "LWIN matched" count — a wrong match applied
+// silently, and the higher the match rate, the more wrong matches. This
+// pins that each matched row's own catalog name + score render, and that
+// the reject toggle round-trips through onToggleLwinReject.
+describe("PreviewStep — matched-row visibility and rejection (item 2)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("renders each matched row's catalog display name and score", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [
+            { rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A Cuvee One 2020", lwinScore: 0.92 },
+          ],
+        })}
+      />,
+    );
+
+    expect(container.textContent).toContain("Matched wines (1)");
+    const item = rowItem(container, "Row 1");
+    expect(item.textContent).toContain("Domaine A Cuvee One 2020");
+    expect(item.textContent).toContain("0.92");
+    expect(findButton(item, "Reject match")).toBeTruthy();
+  });
+
+  // BLOCK 2 (round-13 fix) — this used to render an apply-eligible,
+  // no-identity match under "Matched wines" with a "Catalog entry (name
+  // unavailable)" placeholder AND a live "Reject match" control, while
+  // the row was STILL auto-included in approvedLwinRows regardless of
+  // what the operator did with that control — a wrong match could apply
+  // with no identity ever shown. Now it's treated as not-shown entirely:
+  // it renders under NEITHER band (not "Matched wines" — nothing to
+  // verify; not "Below match threshold" — its score genuinely clears that
+  // bar, so that band's "will import with no catalog link" copy would be
+  // a lie), and buildApprovedLwinRows' own fail-closed test (below) pins
+  // that it's never auto-approved either.
+  it("treats an apply-eligible match with no display identity as not-shown — never under Matched wines, never under Below match threshold", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({ matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: null, lwinScore: 0.65 }] })}
+      />,
+    );
+
+    expect(container.textContent).not.toContain("Matched wines");
+    expect(container.textContent).not.toContain("Below match threshold");
+    expect(container.textContent).not.toContain("Catalog entry (name unavailable)");
+  });
+
+  it("calls onToggleLwinReject with the row number when Reject match is clicked", async () => {
+    const toggled: number[] = [];
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [{ rowNumber: 3, lwinId: "LWIN003", lwinDisplayName: "Wine 3", lwinScore: 0.7 }],
+          onToggleLwinReject: (rowNumber) => toggled.push(rowNumber),
+        })}
+      />,
+    );
+
+    await click(findButton(container, "Reject match")!);
+    expect(toggled).toEqual([3]);
+  });
+
+  it("shows the rejected state and an Undo reject control once a row is in rejectedLwinRows", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.9 }],
+          rejectedLwinRows: new Set([1]),
+        })}
+      />,
+    );
+
+    const item = rowItem(container, "Row 1");
+    expect(item.textContent).toContain("Match rejected");
+    expect(item.textContent).not.toContain("Domaine A");
+    expect(findButton(item, "Undo reject")).toBeTruthy();
+    expect(findButton(item, "Reject match")).toBeFalsy();
+  });
+
+  it("renders nothing when matchedRows is omitted — every pre-existing caller keeps working unchanged", async () => {
+    const { container } = await mount(<PreviewStep {...baseProps()} />);
+    expect(container.textContent).not.toContain("Matched wines");
+  });
+
+  // BLOCK 3 (Sol audit round 3, finding 3): preview classifies a match at
+  // score >= 0.3 (LWIN_MATCH_THRESHOLD), but apply only stamps at score >=
+  // 0.6 (LWIN_APPLY_MIN_SCORE) — a sub-threshold row was previously listed
+  // under "Matched wines" with a live reject control even though rejecting
+  // it (or not) could never change what apply actually writes. These pin
+  // the fix: a sub-threshold candidate renders in its own honestly-labeled
+  // band, with no reject control, and the "Matched wines" count/list only
+  // ever includes rows that will actually link.
+  it("separates a below-apply-threshold candidate into its own band, with no reject control", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [
+            { rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.9 },
+            { rowNumber: 2, lwinId: "LWIN002", lwinDisplayName: "Domaine B", lwinScore: 0.45 },
+          ],
+        })}
+      />,
+    );
+
+    // "Matched wines" only counts/lists the linking row.
+    expect(container.textContent).toContain("Matched wines (1)");
+    expect(rowItem(container, "Row 1").textContent).toContain("Domaine A");
+    expect(findButton(rowItem(container, "Row 1"), "Reject match")).toBeTruthy();
+
+    // The sub-threshold row gets its own band, its own honest copy, and no
+    // reject control at all.
+    expect(container.textContent).toContain("Below match threshold (1)");
+    const belowThresholdItem = rowItem(container, "Row 2");
+    expect(belowThresholdItem.textContent).toContain("Domaine B");
+    expect(belowThresholdItem.textContent).toContain("will import with no catalog link");
+    expect(findButton(belowThresholdItem, "Reject match")).toBeFalsy();
+    expect(findButton(belowThresholdItem, /reject/i)).toBeFalsy();
+  });
+
+  it("renders no 'Matched wines' section when every candidate is below the apply threshold", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.4 }],
+        })}
+      />,
+    );
+
+    expect(container.textContent).not.toContain("Matched wines (");
+    expect(container.textContent).toContain("Below match threshold (1)");
+  });
+
+  it("disables the reject toggle for a row whose chunk is already confirmed, with the same explanatory copy RowFixItem uses (Sol round-2 audit finding 1's reasoning)", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [
+            { rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.9 },
+            { rowNumber: 3, lwinId: "LWIN003", lwinDisplayName: "Domaine C", lwinScore: 0.8 },
+          ],
+          isRowLocked: (rowNumber) => rowNumber === 1,
+        })}
+      />,
+    );
+
+    const lockedItem = rowItem(container, "Row 1");
+    expect(findButton(lockedItem, "Reject match")!.disabled).toBe(true);
+    expect(lockedItem.textContent).toContain("Row already imported with this chunk — revert the import to change it.");
+
+    const unlockedItem = rowItem(container, "Row 3");
+    expect(findButton(unlockedItem, "Reject match")!.disabled).toBe(false);
+  });
+
+  it("disables the reject toggle while a confirm attempt is in flight (same freeze as RowFixItem's own inputs)", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.9 }],
+          confirming: true,
+        })}
+      />,
+    );
+
+    expect(findButton(container, "Reject match")!.disabled).toBe(true);
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+
+  async function click(element: HTMLElement) {
+    await act(async () => element.click());
+  }
+});
+
+function matchedRow(overrides: Partial<MatchedLwinRowEntry> = {}): MatchedLwinRowEntry {
+  return { rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.9, ...overrides };
+}
+
+// BLOCK 2 (round-13 fix) — buildApprovedLwinRows is the actual gate that
+// decides which matches get auto-stamped at confirm (via
+// applyLwinApprovalVeto, batch-service.ts): a row absent from its output
+// is treated exactly like an explicit rejection server-side. These pin the
+// fail-closed residual this round's fix adds: an apply-eligible match with
+// no display identity must never be approved, even though its score alone
+// would otherwise qualify it.
+describe("buildApprovedLwinRows (BLOCK 2, round-13 fix)", () => {
+  it("approves an apply-eligible row with a display identity", () => {
+    expect(buildApprovedLwinRows([matchedRow({ rowNumber: 1, lwinScore: 0.9, lwinDisplayName: "Domaine A" })])).toEqual({
+      1: "LWIN001",
+    });
+  });
+
+  it("fails CLOSED on an apply-eligible row with no display identity — never approved, even though its score alone qualifies", () => {
+    expect(
+      buildApprovedLwinRows([
+        matchedRow({ rowNumber: 1, lwinId: "LWIN001", lwinScore: 0.65, lwinDisplayName: null }),
+      ]),
+    ).toEqual({});
+  });
+
+  it("excludes a below-apply-threshold row regardless of display identity", () => {
+    expect(
+      buildApprovedLwinRows([matchedRow({ rowNumber: 1, lwinScore: 0.45, lwinDisplayName: "Domaine A" })]),
+    ).toEqual({});
+  });
+
+  it("mixes eligible, no-identity, and below-threshold rows correctly in one payload", () => {
+    expect(
+      buildApprovedLwinRows([
+        matchedRow({ rowNumber: 1, lwinId: "LWIN001", lwinScore: 0.9, lwinDisplayName: "Domaine A" }),
+        matchedRow({ rowNumber: 2, lwinId: "LWIN002", lwinScore: 0.65, lwinDisplayName: null }),
+        matchedRow({ rowNumber: 3, lwinId: "LWIN003", lwinScore: 0.4, lwinDisplayName: "Domaine C" }),
+      ]),
+    ).toEqual({ 1: "LWIN001" });
+  });
+});
+
 // Round-5 audit finding 2: even with the server-side hardening (2a/2b),
 // there's a narrow residual — a batch reverting AFTER toAlreadyExistsResult's
 // fresh read but BEFORE the client acts on it. Resuming it is DATA-safe
@@ -1424,6 +1787,7 @@ describe("BatchStep — a resumed batch that reads as reverted is surfaced hones
           validation_errors: [],
           lwin_status: "matched",
           lwin_id: "lwin-1",
+          lwin_score: 0.9,
           cost_status: "present",
           resolution: "auto",
           manual_unit_cost: null,
@@ -1501,6 +1865,7 @@ describe("BatchStep — Revert is reachable for every live status, not only comp
           validation_errors: [],
           lwin_status: "matched",
           lwin_id: "lwin-1",
+          lwin_score: 0.9,
           cost_status: "present",
           resolution: "auto",
           manual_unit_cost: null,
@@ -1571,6 +1936,7 @@ describe("BatchStep — applyAll stops immediately on a reverted batchStatus (ro
           validation_errors: [],
           lwin_status: "matched",
           lwin_id: "lwin-1",
+          lwin_score: 0.9,
           cost_status: "present",
           resolution: "auto",
           manual_unit_cost: null,
@@ -1643,6 +2009,286 @@ describe("BatchStep — applyAll stops immediately on a reverted batchStatus (ro
   async function click(element: HTMLElement) {
     await act(async () => element.click());
   }
+});
+
+// The round-11 fix (d6813cb, "show the expected matching wait before either
+// phase, on every path") is the ENTIRE justification for raising
+// LWIN_MATCH_UX_CEILING_SECONDS from 60s to 120s (see that constant's own
+// comment): the longer wait is only defensible because the operator sees an
+// honest estimate before committing to it, on both the single-file and
+// chunked paths, before Preview AND before Confirm. Nothing exercised
+// countPreviewUnits or this copy before this describe block — a regression
+// silently dropping the disclosure would have shipped green.
+describe("wait-estimate disclosure (justifies LWIN_MATCH_UX_CEILING_SECONDS, round-11 fix d6813cb)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    vi.unstubAllGlobals();
+    document.body.innerHTML = "";
+  });
+
+  // Reproduces import-client.tsx's own (unexported) formatRoughDuration
+  // rule — < 90s renders as "Ns", otherwise ceil(seconds / 60) minutes —
+  // against LWIN_MATCH_UX_CEILING_SECONDS itself, so the expected string is
+  // DERIVED from the constant rather than a hardcoded "2 minutes": a future
+  // change to the ceiling moves this expectation with it, and a component
+  // that hardcodes its own number instead of deriving it from the real
+  // unit count still gets caught.
+  function expectedDuration(units: number): string {
+    const seconds = units * LWIN_MATCH_UX_CEILING_SECONDS;
+    if (seconds < 90) return `${seconds}s`;
+    const minutes = Math.ceil(seconds / 60);
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+
+  function csvFile(name: string, dataRows: number): File {
+    const lines = ["name,quantity"];
+    for (let i = 1; i <= dataRows; i++) lines.push(`Wine ${i},1`);
+    return new File([lines.join("\n") + "\n"], name, { type: "text/csv" });
+  }
+
+  async function mountImportClient(): Promise<{ container: HTMLElement }> {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ batches: [] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+      ),
+    );
+    vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(<ImportClient />));
+    return { container };
+  }
+
+  // countPreviewUnits reads file.arrayBuffer() (a microtask) before its
+  // .then() sets previewUnits — flush enough ticks for that chain to settle
+  // before asserting on the render it produces.
+  async function selectFile(container: HTMLElement, file: File) {
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    Object.defineProperty(input, "files", { value: transfer.files, configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    });
+  }
+
+  async function mountPreviewStep(overrides: Partial<PreviewStepProps>): Promise<{ container: HTMLElement }> {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(<PreviewStep {...baseProps(overrides)} />));
+    return { container };
+  }
+
+  function previewButtonOf(container: HTMLElement): HTMLButtonElement {
+    const button = [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+      b.textContent?.includes("Preview import"),
+    );
+    if (!button) throw new Error("no Preview import button found");
+    return button;
+  }
+
+  it("single-file path: shows the estimate in UploadStep before Preview is clicked", async () => {
+    const { container } = await mountImportClient();
+    await selectFile(container, csvFile("small.csv", 10));
+
+    expect(container.textContent).toContain("Previewing this file is estimated to take");
+    expect(container.textContent).toContain(expectedDuration(1));
+
+    // Not yet clicked: the button still reads "Preview import", never
+    // "Reading file…" (previewing=true) — proves the estimate showed up
+    // BEFORE the operator committed to the wait. And now that the
+    // estimate has settled, the button is enabled (BLOCK 1, round-13 fix).
+    const previewButton = previewButtonOf(container);
+    expect(previewButton.textContent).toContain("Preview import");
+    expect(previewButton.disabled).toBe(false);
+  });
+
+  // WARN 3 (round-13 fix) — this used to only ever exercise MAX_ROWS + 1
+  // rows, which always yields exactly 2 chunks (ceil(5001 / 4000)) — a
+  // production hardcoded to `estimateChunkedPhaseWaitSeconds(2)` would have
+  // passed this unchanged. Parametrized over two DISTINCT chunk counts (2
+  // and 3) so a hardcoded chunk count fails.
+  it.each([
+    { dataRows: MAX_ROWS + 1 },
+    { dataRows: 2 * CLIENT_CHUNK_TARGET_ROWS + 1 },
+  ])(
+    "chunked path: shows the estimate AND the chunk count in UploadStep before Preview is clicked ($dataRows rows)",
+    async ({ dataRows }) => {
+      const { container } = await mountImportClient();
+      const expectedChunks = Math.ceil(dataRows / CLIENT_CHUNK_TARGET_ROWS);
+      await selectFile(container, csvFile("big.csv", dataRows));
+
+      expect(container.textContent).toContain(`This file needs ${expectedChunks} chunks`);
+      expect(container.textContent).toContain(expectedDuration(expectedChunks));
+
+      const previewButton = previewButtonOf(container);
+      expect(previewButton.disabled).toBe(false);
+    },
+  );
+
+  it("plain path: shows the estimate again in PreviewStep before Confirm is clicked", async () => {
+    const { container } = await mountPreviewStep({});
+
+    expect(container.textContent).toContain("Confirming it is estimated to take up to");
+    expect(container.textContent).toContain(expectedDuration(1));
+
+    const confirmButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+      b.textContent?.includes("Confirm import"),
+    );
+    expect(confirmButton).toBeTruthy();
+  });
+
+  // WARN 3 (round-13 fix) — the confirm-side fixture used to only ever use
+  // chunkTotal: 3. Parametrized over two DISTINCT chunk totals (3 and 5)
+  // so a hardcoded `estimateChunkedPhaseWaitSeconds(3)` (or a hardcoded "3
+  // chunks" copy check) fails.
+  it.each([{ chunkTotal: 3 }, { chunkTotal: 5 }])(
+    "chunked path: shows the estimate again in PreviewStep before Confirm is clicked, naming the chunk count (chunkTotal=$chunkTotal)",
+    async ({ chunkTotal }) => {
+      const { container } = await mountPreviewStep({ chunkTotal });
+
+      expect(container.textContent).toContain(`split into ${chunkTotal} chunks`);
+      expect(container.textContent).toContain("Confirming it is estimated to take up to");
+      expect(container.textContent).toContain(expectedDuration(chunkTotal));
+    },
+  );
+
+  // Round-29 audit's old copy ("up to about Xs in the worst case") stated
+  // more certainty than the numbers behind it have — corrected in d6813cb.
+  // Asserts the honest replacement, not just its presence: an explicit
+  // "not a guaranteed cap" disclaimer, and none of the old bound-implying
+  // phrasing ("worst case", "maximum").
+  //
+  // WARN 3 (round-13 fix) — this used to inspect ONLY PreviewStep's own
+  // rendering. UploadStep renders the identical estimate copy
+  // (describeWaitEstimate) through a completely separate code path
+  // (UploadStep's own wait-estimate paragraph, gated on previewUnits/
+  // previewUnitsStatus rather than PreviewStep's props) — a regression
+  // there (e.g. a stray "worst case" reintroduced only in UploadStep's own
+  // JSX) would have shipped green. Now runs the same assertions against
+  // both UploadStep renderings (single-file and chunked) too.
+  it("the wording is honest — an estimate, never a guaranteed/worst-case bound", async () => {
+    const single = await mountPreviewStep({});
+    const chunked = await mountPreviewStep({ chunkTotal: 2 });
+    const uploadSingle = await mountImportClient();
+    await selectFile(uploadSingle.container, csvFile("small.csv", 10));
+    const uploadChunked = await mountImportClient();
+    await selectFile(uploadChunked.container, csvFile("big.csv", MAX_ROWS + 1));
+
+    for (const { container } of [single, chunked, uploadSingle, uploadChunked]) {
+      const text = (container.textContent ?? "").toLowerCase();
+      expect(text).toContain("not a guaranteed cap");
+      expect(text).toContain("estimate");
+      expect(text).not.toContain("worst case");
+      expect(text).not.toMatch(/\bmaximum\b/);
+    }
+  });
+
+  // BLOCK 1 (round-13 fix) — countPreviewUnits resolves asynchronously
+  // (file.arrayBuffer(), then decode/split), so previewUnits/
+  // previewUnitsStatus for the just-selected file is NOT available the
+  // instant `file` changes. Round-12's tests all waited six microtasks
+  // before ever inspecting the button, so neither race below could have
+  // been caught: an operator clicking Preview in that window used to reach
+  // handlePreview with no disclosure ever having been shown.
+  //
+  // Both races below hold a file's own `arrayBuffer()` read open with a
+  // manually-controlled promise (rather than relying on how many
+  // unrelated microtasks `act()` happens to drain on its own) — this makes
+  // the "still pending" window deterministic to observe and settle,
+  // instead of racing the test against React's own internal scheduling.
+  function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  }
+
+  it("clicking immediately after selection can't race ahead of the estimate — Preview is disabled until it settles", async () => {
+    const { container } = await mountImportClient();
+    const file = csvFile("small.csv", 10);
+    const realBytes = await file.arrayBuffer();
+    const gate = deferred<ArrayBuffer>();
+    vi.spyOn(file, "arrayBuffer").mockReturnValue(gate.promise);
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    Object.defineProperty(input, "files", { value: transfer.files, configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    // countPreviewUnits' own file.arrayBuffer() read is deliberately held
+    // open — Preview stays disabled and no estimate is shown for however
+    // long that read takes, proving the gate isn't a fixed number of
+    // microtask ticks that happened to be enough in round-12's own tests.
+    const previewButton = previewButtonOf(container);
+    expect(previewButton.disabled).toBe(true);
+    expect(container.textContent).not.toContain("Previewing this file is estimated to take");
+
+    await act(async () => {
+      gate.resolve(realBytes);
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    });
+    expect(previewButton.disabled).toBe(false);
+    expect(container.textContent).toContain(expectedDuration(1));
+  });
+
+  it("switching from a small file to a large one clears the stale estimate immediately and disables Preview until the NEW file settles", async () => {
+    const { container } = await mountImportClient();
+    await selectFile(container, csvFile("small.csv", 10));
+    expect(container.textContent).toContain(expectedDuration(1));
+    const previewButton = previewButtonOf(container);
+    expect(previewButton.disabled).toBe(false);
+
+    // Swap in a much bigger file whose own arrayBuffer() read is held
+    // open — its estimate deliberately never resolves during this test.
+    const dataRows = 2 * CLIENT_CHUNK_TARGET_ROWS + 1;
+    const expectedChunks = Math.ceil(dataRows / CLIENT_CHUNK_TARGET_ROWS);
+    const bigFile = csvFile("big.csv", dataRows);
+    const bigFileRealBytes = await bigFile.arrayBuffer();
+    const gate = deferred<ArrayBuffer>();
+    vi.spyOn(bigFile, "arrayBuffer").mockReturnValue(gate.promise);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const transfer = new DataTransfer();
+    transfer.items.add(bigFile);
+    Object.defineProperty(input, "files", { value: transfer.files, configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    // The small file's estimate is gone immediately — an operator reading
+    // the screen right now never sees a number that belongs to the file
+    // they just moved away from — and Preview is disabled again for as
+    // long as the NEW file's own read is still open.
+    expect(container.textContent).not.toContain(expectedDuration(1));
+    expect(previewButton.disabled).toBe(true);
+
+    await act(async () => {
+      gate.resolve(bigFileRealBytes);
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    });
+    expect(container.textContent).toContain(`This file needs ${expectedChunks} chunks`);
+    expect(container.textContent).toContain(expectedDuration(expectedChunks));
+    expect(previewButton.disabled).toBe(false);
+  });
 });
 
 function rowItem(root: ParentNode, label: string): HTMLElement {

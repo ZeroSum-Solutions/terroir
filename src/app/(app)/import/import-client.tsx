@@ -10,12 +10,20 @@ import {
 } from "lucide-react";
 import { ActionDialog } from "@/components/action-dialog";
 import { cn } from "@/lib/utils";
-import { CANONICAL_HEADERS, CLIENT_CHUNK_TARGET_ROWS, MAX_FIELD_LENGTH, MAX_ROWS, type CanonicalHeader } from "@/domains/import/constants";
+import {
+  CANONICAL_HEADERS,
+  CLIENT_CHUNK_TARGET_ROWS,
+  LWIN_APPLY_MIN_SCORE,
+  MAX_FIELD_LENGTH,
+  MAX_ROWS,
+  type CanonicalHeader,
+} from "@/domains/import/constants";
 import { validateFields } from "@/domains/import/row-validator";
 import {
   AmbiguousRecordSplitError,
   UnsupportedEncodingError,
   UnsupportedLineEndingError,
+  buildChunkPlan,
   decodeCsvBytesStrict,
   splitLogicalRecords,
 } from "@/domains/import/csv-splitter";
@@ -23,6 +31,7 @@ import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-servic
 import {
   SessionStep,
   ChunkUploadProgress,
+  estimateChunkedPhaseWaitSeconds,
   planChunkedPreview,
   confirmChunkedSessionWithResume,
   readStoredSession,
@@ -32,6 +41,50 @@ import {
   type ChunkedPreviewState,
   type ChunkUploadState,
 } from "./session-step";
+
+/** BLOCK 1 (round-11 fix) — how many preview/confirm "units" (chunks, or 1
+ * for a file at/under MAX_ROWS that never gets split) this file will need,
+ * computed eagerly as soon as a file is selected so the operator wait
+ * estimate (estimateChunkedPhaseWaitSeconds) is known BEFORE they commit to
+ * either phase, not merely once they've already clicked Preview. Shares the
+ * exact decode/split/chunk-plan functions handlePreview itself uses (see
+ * below), so the early estimate and the actual preview path can never
+ * disagree on chunk count. Returns null for a file that can't even be
+ * decoded/split — an early estimate has nothing honest to show for a file
+ * that's about to fail outright; handlePreview surfaces the real error once
+ * the operator actually clicks Preview. */
+async function countPreviewUnits(file: File): Promise<number | null> {
+  try {
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    const text = decodeCsvBytesStrict(bytes);
+    const allRecords = splitLogicalRecords(text);
+    if (allRecords.length === 0) return null;
+    const dataRecords = allRecords.slice(1);
+    if (dataRecords.length <= MAX_ROWS) return 1;
+    return buildChunkPlan(dataRecords, CLIENT_CHUNK_TARGET_ROWS).length;
+  } catch {
+    return null;
+  }
+}
+
+/** BLOCK 1 (round-13 fix) — countPreviewUnits (above) resolves
+ * asynchronously (it reads the whole file), so the wait estimate it
+ * produces is NOT available the instant a file is selected. Without
+ * tracking that gap explicitly, two races were possible: (1) an operator
+ * could click Preview in the window before the estimate ever resolves,
+ * seeing no disclosure at all; (2) switching from a small file to a large
+ * one kept showing the SMALL file's stale estimate/unit count until the
+ * new one resolved, so a click in that window committed to the wrong
+ * file's wait. "pending" is set SYNCHRONOUSLY, DURING RENDER, the instant
+ * `file` changes (see the ImportClient state declared with this type, below —
+ * a render-phase state adjustment, not an effect), clearing whatever the
+ * previous file's status was — Preview stays disabled for the whole
+ * "pending" window on either race. "unavailable" (the file couldn't even
+ * be decoded/split) still allows a click: handlePreview's own real
+ * decode/split surfaces the actual error, there is nothing more honest to
+ * gate on here. */
+type PreviewUnitsStatus = "idle" | "pending" | "ready" | "unavailable";
 
 /** One error row's worth of prefill text for the inline row-fix form —
  * the exact text the row was validated against, for every canonical
@@ -51,6 +104,92 @@ export type ErrorRowEntry = {
   errors: { field: string; message: string }[];
   rawText: Record<CanonicalHeader, string>;
 };
+
+/** Item 2 (per-row LWIN match visibility): one matched row's worth of
+ * display info for the "Matched wines" section — same rowNumber/chunkIndex/
+ * chunkRowNumber convention as ErrorRowEntry above (GLOBAL row number for
+ * both paths; chunkIndex/chunkRowNumber set ONLY for the chunked path, for
+ * the same honest "Chunk N, data row M" label). lwinId is carried so a
+ * reject toggle always knows exactly which match it's rejecting, even
+ * though it isn't rendered directly. */
+export type MatchedLwinRowEntry = {
+  rowNumber: number;
+  chunkIndex?: number;
+  chunkRowNumber?: number;
+  lwinId: string;
+  lwinDisplayName: string | null;
+  lwinScore: number;
+};
+
+/** rowNumber -> true for a matched row whose LWIN link the operator
+ * rejected. GLOBAL row numbers, same keying as RowOverrides/ErrorRowEntry.
+ * Sent to confirm as an explicit rejectedLwinRows payload — server-side
+ * re-validation stays the sole authority (a rejected row that no longer
+ * matches at confirm time, e.g. because an override also changed its text,
+ * is simply a harmless no-op there — see applyLwinRejections'
+ * (batch-service.ts) own comment). */
+export type RejectedLwinRows = Set<number>;
+
+/** BLOCK 2 (Sol audit round 3, finding 2) — GLOBAL row number -> the
+ * lwin_id the operator saw and accepted for that row in preview. Built
+ * fresh at confirm time from the CURRENT matched-rows list (never a
+ * separate piece of user-editable state — there is nothing for the
+ * operator to "set" here beyond what preview already showed), and sent as
+ * an explicit approvedLwinRows payload so confirm's own from-scratch
+ * re-match can VETO a disagreeing result instead of silently persisting
+ * it — see applyLwinApprovalVeto's (batch-service.ts) own comment for the
+ * full mechanics and why this can never let confirm write MORE or
+ * DIFFERENT than its own re-match already decided. */
+export type ApprovedLwinRows = Record<number, string>;
+
+/** BLOCK 2 — builds the approvedLwinRows payload for one confirm attempt
+ * from the matched rows currently shown to the operator: every row at or
+ * above the apply threshold (LWIN_APPLY_MIN_SCORE) gets its currently
+ * shown lwin_id echoed back. Below-threshold matches are excluded — apply
+ * never stamps those regardless of agreement (BLOCK 3), so there is
+ * nothing for the veto to ever protect there. Included even for a row the
+ * operator has separately rejected (rejectedLwinRows) — applyLwinApprovalVeto
+ * runs AFTER rejections are applied server-side, so an approved entry for
+ * an already-rejected row is a harmless no-op, never double-processed.
+ *
+ * BLOCK 2 (round-13 fix) — an apply-eligible row is ALSO excluded when it
+ * has no display identity (lwinDisplayName === null): the operator was
+ * never actually shown what this match claims to be (see
+ * MatchedLwinRowItem/its `linkingMatchedRows` filter below, which apply
+ * the identical condition so a no-identity row is never rendered as
+ * "linking" in the first place), so there is nothing here for them to have
+ * approved. Excluding it here is what makes that failure mode fail
+ * CLOSED: applyLwinApprovalVeto (batch-service.ts) treats any apply-
+ * eligible row absent from this payload exactly like an explicit
+ * rejection, so a match match_lwin_bulk itself returned with no name can
+ * never be auto-stamped — this residual should be all but impossible now
+ * that display_name comes straight off the same RPC row as lwinId/score
+ * (lwin-matching.ts), but the gate stays defensive rather than assuming
+ * that invariant forever. */
+export function buildApprovedLwinRows(matchedRows: MatchedLwinRowEntry[]): ApprovedLwinRows {
+  const approved: ApprovedLwinRows = {};
+  for (const row of matchedRows) {
+    if (row.lwinScore >= LWIN_APPLY_MIN_SCORE && row.lwinDisplayName !== null) approved[row.rowNumber] = row.lwinId;
+  }
+  return approved;
+}
+
+/** Builds the MatchedLwinRowEntry[] shape PreviewStep (and, via
+ * buildApprovedLwinRows, handleConfirm) both need, from the plain
+ * (non-chunked) preview's own rows — extracted so the two call sites can
+ * never drift on what counts as "matched" for the single-file path. The
+ * chunked path already gets this shape directly from planChunkedPreview
+ * (session-step.tsx's ChunkedPreviewState.matchedRows). */
+function matchedRowsFromPreviewRows(rows: PreviewRow[]): MatchedLwinRowEntry[] {
+  return rows
+    .filter((r): r is PreviewRow & { lwinId: string; lwinScore: number } => r.lwinStatus === "matched" && r.lwinId !== null)
+    .map((r) => ({
+      rowNumber: r.rowNumber,
+      lwinId: r.lwinId,
+      lwinDisplayName: r.lwinDisplayName,
+      lwinScore: r.lwinScore,
+    }));
+}
 
 /** rowNumber -> canonical field -> the operator's edited replacement
  * text. Sent to confirm as an explicit overrides payload — server-side
@@ -158,6 +297,10 @@ export type BatchRow = {
   validation_errors: { field: string; message: string }[];
   lwin_status: "matched" | "unmatched";
   lwin_id: string | null;
+  /** Item 2 (per-row LWIN match visibility): the server (GET /api/import/
+   * batches/[id]) already sends this — it was previously dropped here even
+   * though every persisted row carries it (import_batch_rows.lwin_score). */
+  lwin_score: number | null;
   cost_status: "present" | "missing";
   resolution: "auto" | "pending" | "include" | "exclude";
   manual_unit_cost: number | null;
@@ -178,6 +321,20 @@ const TEMPLATE_CSV = `${CANONICAL_HEADERS.join(",")}\nDomaine Example,Cuvee One,
 // MAX_SHOWN_ERROR_ROWS rows, repeatable until every error row is shown,
 // and the overflow warning disappears once nothing is left hidden.
 export const MAX_SHOWN_ERROR_ROWS = 100;
+
+// Item 2 (per-row LWIN match visibility): same incremental-disclosure
+// pattern as MAX_SHOWN_ERROR_ROWS above, for the "Matched wines" section —
+// at PR #133's measured 77% match rate, a file at the MAX_ROWS (5000)
+// ceiling can have thousands of matched rows, which would otherwise render
+// unbounded.
+export const MAX_SHOWN_MATCHED_ROWS = 100;
+
+// Stable empty defaults for PreviewStep's optional matchedRows/
+// rejectedLwinRows props — module-level so every render that omits them
+// (every pre-existing caller) reuses the SAME reference rather than
+// allocating a fresh empty array/Set every render.
+const EMPTY_MATCHED_ROWS: MatchedLwinRowEntry[] = [];
+const EMPTY_REJECTED_LWIN_ROWS: RejectedLwinRows = new Set();
 
 /** Round-5 audit finding 3: whether two override slices for the same chunk
  * are the SAME edit — an order-independent, deep value comparison used
@@ -203,6 +360,26 @@ function overridesSliceEqual(
           .sort(([fieldA], [fieldB]) => fieldA.localeCompare(fieldB)),
       ] as const)
       .filter(([, fields]) => fields.length > 0)
+      .sort(([rowA], [rowB]) => rowA - rowB);
+  return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
+}
+
+/** WARN 5 (Sol audit round 3) — the rejectedLwinRows counterpart to
+ * overridesSliceEqual above: an order-independent, dedup-aware comparison
+ * of two row-number slices, for the identical "did this genuinely change"
+ * retry gate. */
+function numberSliceEqual(a: number[], b: number[]): boolean {
+  const normalize = (rows: number[]) => Array.from(new Set(rows)).sort((x, y) => x - y);
+  return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
+}
+
+/** WARN 5 / BLOCK 2 (Sol audit round 3) — the approvedLwinRows counterpart
+ * to overridesSliceEqual above: an order-independent comparison of two
+ * (row number -> lwin_id) slices. */
+function approvedSliceEqual(a: ApprovedLwinRows, b: ApprovedLwinRows): boolean {
+  const normalize = (rec: ApprovedLwinRows) =>
+    Object.entries(rec)
+      .map(([rowNumber, lwinId]) => [Number(rowNumber), lwinId] as const)
       .sort(([rowA], [rowB]) => rowA - rowB);
   return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
 }
@@ -316,6 +493,18 @@ export function ImportClient() {
   // UI) for both the plain and chunked paths — handleConfirmChunked
   // translates it back to each chunk's own local row numbers.
   const [rowOverrides, setRowOverrides] = useState<RowOverrides>({});
+  // Item 2 (per-row LWIN match visibility/rejection): which matched rows
+  // (GLOBAL row numbers, same convention as rowOverrides above) the
+  // operator has rejected the LWIN match on.
+  const [rejectedLwinRows, setRejectedLwinRows] = useState<RejectedLwinRows>(() => new Set());
+  const onToggleLwinReject = useCallback((rowNumber: number) => {
+    setRejectedLwinRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowNumber)) next.delete(rowNumber);
+      else next.add(rowNumber);
+      return next;
+    });
+  }, []);
   const onRowFieldChange = useCallback((rowNumber: number, field: CanonicalHeader, value: string) => {
     setRowOverrides((prev) => ({ ...prev, [rowNumber]: { ...prev[rowNumber], [field]: value } }));
   }, []);
@@ -327,6 +516,57 @@ export function ImportClient() {
   const [chunkedPlan, setChunkedPlan] = useState<ChunkedPlanState | null>(null);
   const [chunkedPreview, setChunkedPreview] = useState<ChunkedPreviewState | null>(null);
   const [chunkUpload, setChunkUpload] = useState<ChunkUploadState[] | null>(null);
+  // BLOCK 1 (round-11 fix, was WARN 4 round-29 audit): the number of
+  // preview/confirm "units" this file needs — a chunk count for a file
+  // over MAX_ROWS, or 1 for a file that previews/confirms as a single
+  // unit. estimateChunkedPhaseWaitSeconds(previewUnits) turns this into the
+  // operator-facing wait estimate for ONE phase (preview OR confirm) of
+  // THIS file. Computed by the effect below as soon as a file is selected —
+  // BEFORE the operator ever clicks Preview, not merely before the network
+  // call inside it — so a plain (<= MAX_ROWS) file gets the same advance
+  // disclosure a chunked one already did, and neither path's warning
+  // depends on the operator having already committed to the wait.
+  //
+  // BLOCK 1 (round-13 fix) — previewUnits alone can't distinguish "not
+  // known yet for THIS file" from "known to be unavailable," and nothing
+  // used to stop the operator from clicking Preview during that gap, or
+  // from reading the PREVIOUS file's estimate while a new one was still
+  // resolving (see countPreviewUnits' own comment and PreviewUnitsStatus
+  // above). previewUnitsStatus tracks that explicitly.
+  //
+  // The stale value is cleared SYNCHRONOUSLY, DURING RENDER, the instant
+  // `file` changes — React's own "adjusting state when a prop changes"
+  // pattern (comparing against a ref-like previewUnitsFile state and
+  // calling setState in the render body, not inside an effect): this is
+  // what actually closes both races, since it happens before the browser
+  // ever paints the old value, not merely "before the next effect flush."
+  // Doing this inside a useEffect body instead (the more obvious spot)
+  // trips `react-hooks/set-state-in-effect` — an unconditional setState
+  // call in an effect causes an extra cascading render for no benefit
+  // when the render-phase pattern achieves the same synchronous clear.
+  // The actual async count still lives in its own effect below, which
+  // only ever calls setState from its `.then()` callback (not the effect
+  // body itself), which the same lint rule allows.
+  const [previewUnits, setPreviewUnits] = useState<number | null>(null);
+  const [previewUnitsStatus, setPreviewUnitsStatus] = useState<PreviewUnitsStatus>("idle");
+  const [previewUnitsFile, setPreviewUnitsFile] = useState<File | null>(file);
+  if (file !== previewUnitsFile) {
+    setPreviewUnitsFile(file);
+    setPreviewUnits(null);
+    setPreviewUnitsStatus(file ? "pending" : "idle");
+  }
+  useEffect(() => {
+    if (!file) return;
+    let cancelled = false;
+    void countPreviewUnits(file).then((units) => {
+      if (cancelled) return;
+      setPreviewUnits(units);
+      setPreviewUnitsStatus(units === null ? "unavailable" : "ready");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [file]);
   const [confirmingChunked, setConfirmingChunked] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionLabel, setSessionLabel] = useState<string>("cellar.csv");
@@ -447,6 +687,7 @@ export function ImportClient() {
     setPreviewing(true);
     setPreviewError(null);
     setRowOverrides({});
+    setRejectedLwinRows(new Set());
     try {
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
@@ -475,6 +716,9 @@ export function ImportClient() {
         return;
       }
 
+      // BLOCK 1 (round-11 fix): the operator's wait estimate (previewUnits,
+      // shown by UploadStep) was already computed by countPreviewUnits when
+      // this file was selected — nothing to (re)set here.
       const [headerRecord, ...dataRecords] = allRecords;
       if (dataRecords.length <= MAX_ROWS) {
         await runSingleFilePreview(file);
@@ -497,6 +741,27 @@ export function ImportClient() {
       if (Object.keys(rowOverrides).length > 0) {
         form.append("rowOverrides", JSON.stringify(rowOverrides));
       }
+      if (rejectedLwinRows.size > 0) {
+        form.append("rejectedLwinRows", JSON.stringify(Array.from(rejectedLwinRows)));
+      }
+      // BLOCK 2 (Sol audit round 3, finding 2): echo back the lwin_id
+      // shown for every currently-linking matched row, so confirm's own
+      // re-match can veto a disagreeing catalogue tie instead of silently
+      // persisting it — see buildApprovedLwinRows' own comment.
+      //
+      // BLOCK 1 (round 5 fix): ALWAYS send this field, even as `{}` for a
+      // file with zero linking matches — its mere PRESENCE tells confirm
+      // this client showed the operator its full linking picture, so
+      // applyLwinApprovalVeto (batch-service.ts) can fail closed on any
+      // row absent from it. Gating this on non-emptiness (the old
+      // behavior) made an all-non-linking file's confirm indistinguishable
+      // from an older client that never sends this at all — exactly the
+      // ambiguity that let a row re-scoring above the apply threshold
+      // between preview and confirm sail through unvetoed.
+      if (preview) {
+        const approvedLwinRows = buildApprovedLwinRows(matchedRowsFromPreviewRows(preview.rows));
+        form.append("approvedLwinRows", JSON.stringify(approvedLwinRows));
+      }
       const response = await fetch("/api/import/batches", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) {
@@ -518,7 +783,7 @@ export function ImportClient() {
     } finally {
       setConfirming(false);
     }
-  }, [file, rowOverrides, loadRecent]);
+  }, [file, preview, rowOverrides, rejectedLwinRows, loadRecent]);
 
   /** Skips any chunk `chunkUpload` already marks "confirmed" — the
    * retry-after-failure path reruns confirmChunkedSession (via
@@ -543,6 +808,12 @@ export function ImportClient() {
         fileLabel: file?.name ?? sessionLabel,
         timestampsRef: requestTimestampsRef,
         rowOverrides,
+        rejectedLwinRows,
+        // BLOCK 2 (Sol audit round 3, finding 2): same reasoning as
+        // handleConfirm's own approvedLwinRows — echo back the lwin_id
+        // shown for every currently-linking matched row across every
+        // chunk, from the aggregated chunked preview's own matchedRows.
+        approvedLwinRows: buildApprovedLwinRows(chunkedPreview?.matchedRows ?? []),
         onSessionId: (id) => {
           setSessionId(id);
           setSessionLabel(file?.name ?? sessionLabel);
@@ -561,7 +832,7 @@ export function ImportClient() {
     } finally {
       setConfirmingChunked(false);
     }
-  }, [chunkedPlan, chunkUpload, sessionId, file, sessionLabel, rowOverrides, loadRecent]);
+  }, [chunkedPlan, chunkUpload, sessionId, file, sessionLabel, rowOverrides, rejectedLwinRows, chunkedPreview, loadRecent]);
 
   const isRowLocked = useCallback(
     (rowNumber: number) => isRowInConfirmedChunk(rowNumber, chunkedPlan, chunkUpload),
@@ -637,6 +908,7 @@ export function ImportClient() {
     setSessionId(null);
     setSessionLabel("cellar.csv");
     setRowOverrides({});
+    setRejectedLwinRows(new Set());
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
@@ -656,6 +928,8 @@ export function ImportClient() {
           fileInputRef={fileInputRef}
           onPreview={handlePreview}
           previewing={previewing}
+          previewUnits={previewUnits}
+          previewUnitsStatus={previewUnitsStatus}
           error={previewError}
         />
       )}
@@ -670,6 +944,9 @@ export function ImportClient() {
               .filter((r) => r.rowState === "error")
               .map((r) => ({ rowNumber: r.rowNumber, errors: r.errors, rawText: r.rawText })) ?? [])
           }
+          matchedRows={chunkedPreview?.matchedRows ?? (preview ? matchedRowsFromPreviewRows(preview.rows) : [])}
+          rejectedLwinRows={rejectedLwinRows}
+          onToggleLwinReject={onToggleLwinReject}
           rowOverrides={rowOverrides}
           onRowFieldChange={onRowFieldChange}
           isRowLocked={isRowLocked}
@@ -722,12 +999,53 @@ async function loadBatchDetail(id: string, setBatch: (b: BatchDetail) => void) {
   setBatch(await response.json());
 }
 
+/** WARN 4 (round-29 audit) — plain-language rendering of an ESTIMATED
+ * seconds figure (estimateChunkedPhaseWaitSeconds, session-step.tsx) for
+ * the operator-facing cost messages below. Minutes past 90s, otherwise
+ * seconds — never false precision.
+ *
+ * NIT 4 (round-13 fix) — CORRECTED wording: this used to call the input "a
+ * worst-case bound." It isn't one — see estimateChunkedPhaseWaitSeconds'
+ * own comment (session-step.tsx) for why nothing actually enforces it as a
+ * cap. This is a measured duration ONLY in the sense that it's derived
+ * from a real (if inherited) benchmark, never a guarantee about any one
+ * run. */
+function formatRoughDuration(seconds: number): string {
+  if (seconds < 90) return `${seconds}s`;
+  const minutes = Math.ceil(seconds / 60);
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
+/** Round-11 fix (BLOCK 1) — wording for the operator-facing wait estimate.
+ * The old copy ("up to Xs in the worst case") stated more certainty than
+ * the numbers behind it actually have: LWIN_MATCH_PER_CALL_SECONDS
+ * (constants.ts) is an INHERITED estimate from a different measurement run,
+ * not a reproduced one, and matchLwinBulk (lwin-matching.ts) awaits its RPC
+ * calls with no elapsed-time deadline of its own, so nothing actually
+ * enforces this number as a cap. Worded here as the approximation it is.
+ *
+ * BLOCK 2 / NIT 4 (round-13 fix) — this used to also carve out "it doesn't
+ * include the brief catalog name lookup that runs afterward": preview used
+ * to make a SECOND network call (a separate lwin_catalog display-name
+ * lookup) after matching, uncounted by this estimate. That lookup is
+ * deleted outright — match_lwin_bulk already returns display_name, so
+ * matching is genuinely the only network call this estimate needs to
+ * cover, and the carve-out is gone with it. */
+function describeWaitEstimate(seconds: number): string {
+  return (
+    `approximately ${formatRoughDuration(seconds)} for wine-catalog matching — an estimate from measured ` +
+    `matching performance, not a guaranteed cap`
+  );
+}
+
 function UploadStep({
   file,
   setFile,
   fileInputRef,
   onPreview,
   previewing,
+  previewUnits,
+  previewUnitsStatus,
   error,
 }: {
   file: File | null;
@@ -735,6 +1053,20 @@ function UploadStep({
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onPreview: () => void;
   previewing: boolean;
+  /** BLOCK 1 (round-11 fix): the preview/confirm unit count
+   * (countPreviewUnits) for the currently-selected file — 1 for a plain
+   * file, a chunk count for one over MAX_ROWS, or null before it's known
+   * (no file selected yet, or the file couldn't even be decoded/split).
+   * Drives the wait estimate below on BOTH paths, shown as soon as it's
+   * known — before the operator ever clicks Preview, not only once
+   * "previewing" is already true. */
+  previewUnits: number | null;
+  /** BLOCK 1 (round-13 fix): whether previewUnits (above) reflects the
+   * CURRENTLY selected file yet — see PreviewUnitsStatus's own comment.
+   * Gates the Preview button below so a click can't land in the window
+   * before the estimate resolves, or while a stale previous-file estimate
+   * is still on screen mid-swap. */
+  previewUnitsStatus: PreviewUnitsStatus;
   error: string | null;
 }) {
   return (
@@ -769,9 +1101,31 @@ function UploadStep({
         </p>
       )}
 
+      {/* BLOCK 1 (round-11 fix, was WARN 4 round-29 audit): shown as soon as
+          previewUnits is known — BEFORE the operator clicks Preview, on
+          every file (single-unit or multi-chunk), not only a chunked one
+          and not only once "previewing" is already true. A multi-chunk
+          file is previewed one chunk at a time, so this is the total for
+          the whole (sequential) phase, not any one chunk's own budget. */}
+      {previewUnits !== null && (
+        <p className="mt-md text-[13px] text-grey">
+          {previewUnits > 1
+            ? `This file needs ${previewUnits} chunks, uploaded one at a time — previewing it is estimated to take `
+            : "Previewing this file is estimated to take "}
+          up to {describeWaitEstimate(estimateChunkedPhaseWaitSeconds(previewUnits))}.
+          {previewUnits > 1 ? " Confirming afterward repeats a similar, chunk-by-chunk process." : ""}
+        </p>
+      )}
+
       <button
         type="button"
-        disabled={!file || previewing}
+        // BLOCK 1 (round-13 fix): disabled while previewUnitsStatus is
+        // "pending" — the window where this file's own estimate hasn't
+        // resolved yet (either it was just selected, or a different file
+        // was just swapped in and this one's async count is still in
+        // flight). "unavailable" still allows a click: handlePreview's own
+        // real decode/split will surface the actual error.
+        disabled={!file || previewing || previewUnitsStatus === "pending"}
         onClick={onPreview}
         className="mt-lg flex min-h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
       >
@@ -800,6 +1154,9 @@ export function PreviewStep({
   filename,
   summary,
   errorRows,
+  matchedRows,
+  rejectedLwinRows,
+  onToggleLwinReject,
   rowOverrides,
   onRowFieldChange,
   isRowLocked,
@@ -818,6 +1175,14 @@ export function PreviewStep({
   filename: string;
   summary: PreviewSummary;
   errorRows: ErrorRowEntry[];
+  /** Item 2 (per-row LWIN match visibility): every matched row, so the
+   * operator can see WHAT matched (not just that it did) and reject a
+   * match they don't trust. Optional (defaults to none shown) so every
+   * pre-existing caller/test that doesn't know about this feature keeps
+   * working unchanged — mirrors isRowSkipped's own optionality above. */
+  matchedRows?: MatchedLwinRowEntry[];
+  rejectedLwinRows?: RejectedLwinRows;
+  onToggleLwinReject?: (rowNumber: number) => void;
   rowOverrides: RowOverrides;
   onRowFieldChange: (rowNumber: number, field: CanonicalHeader, value: string) => void;
   /** Sol round-2 audit finding 1: true for a row whose chunk is already
@@ -863,6 +1228,38 @@ export function PreviewStep({
   // list can ever replace this one, so there's no stale-count case to
   // reset for.
   const [shownCount, setShownCount] = useState(MAX_SHOWN_ERROR_ROWS);
+  // Item 2: same incremental-disclosure pattern, for matchedRows.
+  const effectiveMatchedRows = matchedRows ?? EMPTY_MATCHED_ROWS;
+  const effectiveRejectedLwinRows = rejectedLwinRows ?? EMPTY_REJECTED_LWIN_ROWS;
+  // BLOCK 3 (Sol audit round 3, finding 3): preview classifies a match at
+  // score >= LWIN_MATCH_THRESHOLD (0.3, constants.ts), but apply only
+  // stamps wines.lwin_id at score >= LWIN_APPLY_MIN_SCORE (0.6,
+  // 0108_apply_import_batch_chunk_v2.sql) — a row below that bar imports
+  // with no catalog link no matter what the operator does with it. Split
+  // here so "Matched wines" only ever claims rows that will actually
+  // link, and a sub-threshold candidate gets its own honestly-labeled band
+  // instead of a reject control that would do nothing.
+  //
+  // BLOCK 2 (round-13 fix) — an apply-eligible row (score >=
+  // LWIN_APPLY_MIN_SCORE) with no display identity (lwinDisplayName ===
+  // null) is EXCLUDED from linkingMatchedRows too, not just from
+  // buildApprovedLwinRows' own payload: the operator can't verify a match
+  // they're never shown, so it's treated as not-shown entirely — it never
+  // renders under "Matched wines" (would wrongly imply it links) and never
+  // renders under "Below match threshold" either (its score genuinely
+  // clears that bar, so that band's own copy — "will import with no
+  // catalog link" — would be a lie). Same condition buildApprovedLwinRows
+  // gates on, so a row that isn't shown here is never approved either.
+  const linkingMatchedRows = effectiveMatchedRows.filter(
+    (r) => r.lwinScore >= LWIN_APPLY_MIN_SCORE && r.lwinDisplayName !== null,
+  );
+  const belowThresholdMatchedRows = effectiveMatchedRows.filter((r) => r.lwinScore < LWIN_APPLY_MIN_SCORE);
+  const [shownMatchedCount, setShownMatchedCount] = useState(MAX_SHOWN_MATCHED_ROWS);
+  const shownMatchedRows = linkingMatchedRows.slice(0, shownMatchedCount);
+  const hiddenMatchedCount = linkingMatchedRows.length - shownMatchedRows.length;
+  const [shownBelowThresholdCount, setShownBelowThresholdCount] = useState(MAX_SHOWN_MATCHED_ROWS);
+  const shownBelowThresholdRows = belowThresholdMatchedRows.slice(0, shownBelowThresholdCount);
+  const hiddenBelowThresholdCount = belowThresholdMatchedRows.length - shownBelowThresholdRows.length;
   const shownErrorRows = errorRows.slice(0, shownCount);
   const hiddenCount = errorRows.length - shownErrorRows.length;
   // A row the operator has edited into passing validation counts toward
@@ -990,20 +1387,49 @@ export function PreviewStep({
   // errorRows). Rebuilt from chunkBreakdown's own [startRow, endRow] range
   // for this chunk instead — every override that actually belongs to this
   // chunk, whether or not its row happens to be an error row.
+  // WARN 5 (Sol audit round 3): the gate used to compare ONLY the override
+  // slice — so rejecting a match (or accepting a re-matched candidate,
+  // BLOCK 2) after a duplicate_chunk_content collision changed the v2/v3
+  // content_sha256 namespace server-side (confirmImportBatch's own
+  // digest-construction comment) while this gate kept Confirm/Retry
+  // hidden, since neither change was ever compared against anything. Now
+  // compares all THREE slices this chunk's content_sha256 actually folds
+  // in — a chunk only stays "unresolved" (Retry hidden) while EVERY ONE of
+  // them still exactly matches what was sent with the failed attempt.
   const unresolvedDuplicateChunkContentIndexes = new Set(
     (chunkUpload ?? [])
       .filter((c) => c.status === "failed" && c.code === "duplicate_chunk_content")
       .filter((c) => {
         const bounds = chunkBreakdown?.find((cb) => cb.index === c.index);
-        const currentSlice: RowOverrides = {};
+        const currentOverridesSlice: RowOverrides = {};
+        const currentRejectedSlice: number[] = [];
+        const currentApprovedSlice: ApprovedLwinRows = {};
         if (bounds) {
           for (const [key, fields] of Object.entries(rowOverrides)) {
             const rowNumber = Number(key);
             if (rowNumber < bounds.startRow || rowNumber > bounds.endRow) continue;
-            if (fields && Object.keys(fields).length > 0) currentSlice[rowNumber] = fields;
+            if (fields && Object.keys(fields).length > 0) currentOverridesSlice[rowNumber] = fields;
+          }
+          for (const rowNumber of effectiveRejectedLwinRows) {
+            if (rowNumber >= bounds.startRow && rowNumber <= bounds.endRow) currentRejectedSlice.push(rowNumber);
+          }
+          for (const row of effectiveMatchedRows) {
+            if (row.rowNumber < bounds.startRow || row.rowNumber > bounds.endRow) continue;
+            // BLOCK 2 (round-13 fix): same fail-closed condition as
+            // buildApprovedLwinRows — this slice must match what was
+            // actually SENT with the failed attempt (sentApprovedLwinRowsSnapshot),
+            // and buildApprovedLwinRows never sends an entry for a row with
+            // no display identity.
+            if (row.lwinScore >= LWIN_APPLY_MIN_SCORE && row.lwinDisplayName !== null) {
+              currentApprovedSlice[row.rowNumber] = row.lwinId;
+            }
           }
         }
-        return overridesSliceEqual(currentSlice, c.sentOverridesSnapshot ?? {});
+        return (
+          overridesSliceEqual(currentOverridesSlice, c.sentOverridesSnapshot ?? {}) &&
+          numberSliceEqual(currentRejectedSlice, c.sentRejectedLwinRowsSnapshot ?? []) &&
+          approvedSliceEqual(currentApprovedSlice, c.sentApprovedLwinRowsSnapshot ?? {})
+        );
       })
       .map((c) => c.index),
   );
@@ -1013,10 +1439,26 @@ export function PreviewStep({
   return (
     <div className="rounded-card card-surface p-lg">
       <h2 className="font-serif text-[20px] text-ink">Preview: {filename}</h2>
-      {chunkTotal !== undefined && (
+      {chunkTotal !== undefined ? (
         <p className="mt-2xs text-[13px] text-grey">
           This file will be split into {chunkTotal} chunk{chunkTotal === 1 ? "" : "s"} of up to{" "}
-          {CLIENT_CHUNK_TARGET_ROWS} rows, uploaded one at a time under a single import session.
+          {CLIENT_CHUNK_TARGET_ROWS} rows, uploaded one at a time under a single import session.{" "}
+          {/* BLOCK 1 (round-11 fix, was WARN 4 round-29 audit): each chunk
+              passing its own per-chunk time budget says nothing about the
+              total wait for a multi-chunk file — stated honestly here,
+              before the operator clicks Confirm and starts the (also
+              sequential, also per-chunk-bounded) confirm phase. */}
+          Confirming it is estimated to take up to{" "}
+          {describeWaitEstimate(estimateChunkedPhaseWaitSeconds(chunkTotal))}, the same as preview.
+        </p>
+      ) : (
+        // BLOCK 1 (round-11 fix): the plain (<= MAX_ROWS) path used to show
+        // no wait estimate at all before Confirm — it previews/confirms as
+        // a single unit, bounded by the exact same per-unit budget a
+        // chunked file's own first chunk is, so the same estimate applies
+        // here, stated before the operator clicks Confirm.
+        <p className="mt-2xs text-[13px] text-grey">
+          Confirming it is estimated to take up to {describeWaitEstimate(estimateChunkedPhaseWaitSeconds(1))}.
         </p>
       )}
 
@@ -1101,6 +1543,77 @@ export function PreviewStep({
                 Show {Math.min(hiddenCount, MAX_SHOWN_ERROR_ROWS)} more row(s) with errors
               </button>
             </>
+          )}
+        </div>
+      )}
+
+      {shownMatchedRows.length > 0 && (
+        <div className="mt-lg">
+          <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
+            Matched wines ({linkingMatchedRows.length})
+          </h3>
+          <p className="mt-2xs text-caption text-grey">
+            Each row below matched a wine in the catalog and will link it on import — reject a match you
+            don&rsquo;t trust and it imports with no catalog link, exactly like a row that never matched.
+          </p>
+          <ul className="mt-xs space-y-2xs">
+            {shownMatchedRows.map((row) => (
+              <MatchedLwinRowItem
+                key={row.rowNumber}
+                row={row}
+                rejected={effectiveRejectedLwinRows.has(row.rowNumber)}
+                onToggle={onToggleLwinReject ?? (() => {})}
+                // Same PERMANENT lock as RowFixItem's own `locked` — a row
+                // whose chunk is already confirmed can never be resent, so
+                // a reject click here would silently go nowhere (Sol
+                // round-2 audit finding 1's exact reasoning, applied to
+                // this new control).
+                locked={isRowLocked(row.rowNumber)}
+                skipped={isRowSkipped?.(row.rowNumber) ?? false}
+                frozen={confirming}
+              />
+            ))}
+          </ul>
+          {hiddenMatchedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShownMatchedCount((count) => count + MAX_SHOWN_MATCHED_ROWS)}
+              className="mt-xs min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+            >
+              Show {Math.min(hiddenMatchedCount, MAX_SHOWN_MATCHED_ROWS)} more matched row(s)
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* BLOCK 3 (Sol audit round 3, finding 3): a candidate scoring below
+          LWIN_APPLY_MIN_SCORE is never stamped by apply regardless of
+          operator action (0108's own lwin_score >= LWIN_APPLY_MIN_SCORE
+          gate) — shown honestly, in its own band, with NO reject control:
+          rejecting something that was never going to be applied is
+          meaningless (this brief's own wording). */}
+      {shownBelowThresholdRows.length > 0 && (
+        <div className="mt-lg">
+          <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
+            Below match threshold ({belowThresholdMatchedRows.length})
+          </h3>
+          <p className="mt-2xs text-caption text-grey">
+            These scored below the {LWIN_APPLY_MIN_SCORE.toFixed(2)} confidence bar apply requires to link a
+            catalog entry — they&rsquo;ll import with no wine-catalog link no matter what you do here.
+          </p>
+          <ul className="mt-xs space-y-2xs">
+            {shownBelowThresholdRows.map((row) => (
+              <BelowThresholdLwinRowItem key={row.rowNumber} row={row} />
+            ))}
+          </ul>
+          {hiddenBelowThresholdCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShownBelowThresholdCount((count) => count + MAX_SHOWN_MATCHED_ROWS)}
+              className="mt-xs min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+            >
+              Show {Math.min(hiddenBelowThresholdCount, MAX_SHOWN_MATCHED_ROWS)} more row(s)
+            </button>
           )}
         </div>
       )}
@@ -1260,6 +1773,92 @@ function RowFixItem({
           </label>
         ))}
       </div>
+    </li>
+  );
+}
+
+/** Item 2 (per-row LWIN match visibility) — one matched row: the catalog's
+ * own display name and match score, with a reject toggle. Rejecting is a
+ * simple client-side flag, round-tripped through the SAME reject/accept
+ * pair on every render (never a one-way action) — an operator can change
+ * their mind right up until confirm, exactly like an inline row-fix edit
+ * can. The label mirrors RowFixItem's own "Chunk N, data row M" vs
+ * "Row N" convention (see its own comment). */
+function MatchedLwinRowItem({
+  row,
+  rejected,
+  onToggle,
+  locked,
+  skipped,
+  frozen,
+}: {
+  row: MatchedLwinRowEntry;
+  rejected: boolean;
+  onToggle: (rowNumber: number) => void;
+  /** Sol round-2 audit finding 1's reasoning, applied to this new control:
+   * a row whose chunk is already CONFIRMED can never be resent, so a
+   * reject click here would silently go nowhere — disabled with the same
+   * explanatory copy RowFixItem uses. Always false on the plain
+   * (non-chunked) path. */
+  locked: boolean;
+  /** Round-6 audit finding 5's counterpart — a row belonging to a
+   * client-side skipped chunk, same reasoning as `locked`. */
+  skipped: boolean;
+  /** Same TEMPORARY in-flight freeze RowFixItem's own `frozen` prop
+   * applies — a reject/undo click while a confirm attempt is already
+   * dispatching this row's rejection state would otherwise be silently
+   * overwritten by that attempt's own snapshot. */
+  frozen: boolean;
+}) {
+  const disabled = locked || skipped || frozen;
+  const label = row.chunkIndex !== undefined && row.chunkRowNumber !== undefined
+    ? `Chunk ${row.chunkIndex}, data row ${row.chunkRowNumber}`
+    : `Row ${row.rowNumber}`;
+  return (
+    <li className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
+      <div className="flex flex-wrap items-center justify-between gap-sm">
+        <div>
+          <span>{label}</span>
+          <p className="mt-2xs text-caption text-grey">
+            {locked
+              ? "Row already imported with this chunk — revert the import to change it."
+              : skipped
+                ? "Row belongs to a skipped chunk."
+                : rejected
+                  ? "Match rejected — will import with no wine-catalog link, same as an unmatched row."
+                  : `${row.lwinDisplayName ?? "Catalog entry (name unavailable)"} — match score ${row.lwinScore.toFixed(2)}`}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onToggle(row.rowNumber)}
+          disabled={disabled}
+          className="min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {rejected ? "Undo reject" : "Reject match"}
+        </button>
+      </div>
+    </li>
+  );
+}
+
+/** BLOCK 3 (Sol audit round 3, finding 3) — one below-apply-threshold
+ * candidate: the catalog's own display name and match score, exactly like
+ * MatchedLwinRowItem's own display line, but deliberately with NO reject
+ * control — apply's own lwin_score >= LWIN_APPLY_MIN_SCORE gate (0108)
+ * already guarantees this row imports with no wine-catalog link, so a
+ * reject toggle here would be a control that changes nothing. */
+function BelowThresholdLwinRowItem({ row }: { row: MatchedLwinRowEntry }) {
+  const label = row.chunkIndex !== undefined && row.chunkRowNumber !== undefined
+    ? `Chunk ${row.chunkIndex}, data row ${row.chunkRowNumber}`
+    : `Row ${row.rowNumber}`;
+  return (
+    <li className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
+      <span>{label}</span>
+      <p className="mt-2xs text-caption text-grey">
+        {row.lwinDisplayName ?? "Catalog entry (name unavailable)"} — match score {row.lwinScore.toFixed(2)}, will
+        import with no catalog link.
+      </p>
     </li>
   );
 }
