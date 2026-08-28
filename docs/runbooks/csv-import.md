@@ -117,12 +117,67 @@ against a restaurant with pre-existing inventory for the same wine.
 
 **Single-batch reverts get two TypeScript-layer follow-up steps**
 (2026-08-27, `revertImportBatch` in `src/domains/import/batch-service.ts`),
-both best-effort (a failure is logged and never fails the revert):
-`cleanupOrphanWines` deletes wines this batch's apply provably created
-that nothing else references, and `clearBatchLwinStamps` clears
-`wines.lwin_id`/`lwin_match_score` stamps this batch's apply wrote onto
-surviving wines (conditional on exact stamp match and no other live
-batch justifying it). The route response reports both counts.
+both best-effort (a failure is logged and never fails the revert, and a
+per-wine failure never discards counts already earned by wines processed
+earlier in the same call): `cleanupOrphanWines` deletes wines this
+batch's apply *provably* created, and `clearBatchLwinStamps` clears
+`wines.lwin_id`/`lwin_match_score` stamps this batch's apply *provably*
+wrote onto surviving wines. The route response reports both counts.
+
+Both steps rest on one fact, verified against `apply_import_batch_chunk`
+(0108) and the `wines_set_updated_at` trigger (0002): one apply-chunk RPC
+*call* is one Postgres transaction, so every row it touches in that call
+— the wine it upserts AND the `import_batch_rows` row it marks applied —
+shares exactly one `now()`. `revertImportBatch` reads a snapshot of this
+batch's applied rows (id, `applied_wine_id`, `updated_at`, `lwin_id`,
+`lwin_score`) **before** calling `revert_import_batch`, because that RPC
+itself sets `updated_at = now()` on every row it reverts — reading after
+would destroy the evidence.
+
+- **`cleanupOrphanWines`** deletes a wine only when some snapshot row's
+  own `updated_at` exactly equals that wine's `created_at` — proof the
+  wine was created in that row's own apply-chunk transaction, not a
+  guess about a time window. (This replaces an earlier, incorrect
+  `wines.created_at >= batch.created_at` heuristic, whose write-up wrongly
+  claimed every product write path that creates a wine also creates a
+  referencing row in the same operation; real bare-wine paths exist —
+  `src/app/api/cellar/route.ts`, `src/app/api/inventory/save-scan/
+  route.ts`, and `src/app/api/wines/create-from-lwin/route.ts`, the last
+  of which gets a `wine_list_items` reference only from a later, separate
+  user action.) Reference checks (the 9-table sweep plus other batches'
+  `applied_wine_id` claims) run once in bulk and then again, single-wine,
+  immediately before each delete.
+- **`clearBatchLwinStamps`** clears a wine's stamp only when, for one of
+  this batch's own qualifying rows (score ≥ `LWIN_APPLY_MIN_SCORE`), BOTH
+  the wine's current `updated_at` equals that row's own `updated_at` AND
+  the wine's current `(lwin_id, lwin_match_score)` equals that row's own
+  values. (This replaces an earlier design that trusted a non-null
+  `lwin_match_score` to mean "written by a batch apply" — false: `wines`
+  RLS grants members unrestricted UPDATE, so any client can pre-write an
+  identical pair. The timestamp check closes that hole for a pre-write or
+  overwrite happening after this batch's apply and before this revert;
+  the exact-pair check is still needed alongside it, since any row that
+  merely dedup-matches an existing wine bumps that wine's `updated_at`
+  regardless of whether its own LWIN match actually won apply's
+  "prefers higher score" upsert logic.)
+
+**Residuals that remain, honestly, rather than being claimed away:**
+(a) two distinct apply-chunk transactions landing on the exact same
+microsecond timestamp would be indistinguishable — negligible, accepted;
+(b) the reference re-check and the DELETE are still separate requests, so
+`stock_adjustments` (`src/app/api/stock-adjustments/route.ts`) or
+`availability_events` (`src/app/api/wines/[id]/availability/route.ts`) —
+neither of which requires live inventory to write a cascade-linked row —
+can insert in that gap and get destroyed by the `ON DELETE CASCADE` on
+`wine_id`; `inventory_items.wine_id` is `ON DELETE RESTRICT`, so a
+concurrent inventory insert in that same gap makes the DELETE fail
+outright instead, caught per-wine and skipped, never silently pretended
+to have succeeded; (c) for the LWIN unstamp, a third party writing the
+exact `(lwin_id, lwin_match_score)` pair a row's own LWIN match would
+independently compute, before apply ran, on a wine that row also
+dedup-matches, passes both checks by coincidence — this requires guessing
+a specific trigram-similarity float to exact precision ahead of time,
+the same order of residual as (a).
 
 **Known gap — session-level reverts get NEITHER step:**
 `revert_import_session` (0110) loops batches entirely inside Postgres,
