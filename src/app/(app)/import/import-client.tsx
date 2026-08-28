@@ -96,6 +96,35 @@ export function isRowInSkippedChunk(
   });
 }
 
+/** Round-5 audit finding 4: marks a chunk stuck on duplicate_chunk_content
+ * "skipped" — client-side only (see ChunkUploadState's own comment).
+ * confirmChunkedSession never re-attempts a "skipped" chunk, and it no
+ * longer counts toward PreviewStep's blocksConfirmButton, so the operator
+ * can proceed with every OTHER chunk instead of being stuck forever on one
+ * they've decided not to import.
+ *
+ * Round-6 audit finding 5: error/code are no longer nulled out on skip —
+ * both are only ever read while a chunk's status is "failed" (the
+ * unresolvedDuplicateChunkContentIndexes gate, and ChunkUploadProgress's
+ * own error-line rendering), so keeping them costs nothing and is what
+ * lets undoSkipChunk below restore the exact failed state, without
+ * reconstructing anything. Exported as a pure function (round-7 audit
+ * finding 6) so the real skip transition can be pinned directly, through
+ * actual rendered state, rather than a hand-authored fixture. */
+export function skipChunk(upload: ChunkUploadState[], index: number): ChunkUploadState[] {
+  return upload.map((c) => (c.index === index ? { ...c, status: "skipped" } : c));
+}
+
+/** Round-6 audit finding 5: the inverse of skipChunk — restores a skipped
+ * chunk to its prior failed/duplicate_chunk_content state, with both
+ * "Import anyway" and "Skip this chunk" available again. Skip is purely
+ * client-side state (see ChunkUploadState's own comment), so undoing it is
+ * too: nothing server-side was ever touched. Exported as a pure function
+ * for the same reason as skipChunk above. */
+export function undoSkipChunk(upload: ChunkUploadState[], index: number): ChunkUploadState[] {
+  return upload.map((c) => (c.index === index && c.status === "skipped" ? { ...c, status: "failed" } : c));
+}
+
 const FIELD_LABELS: Record<CanonicalHeader, string> = {
   producer: "Producer",
   name: "Name",
@@ -178,27 +207,102 @@ function overridesSliceEqual(
   return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
 }
 
-/** Round-6 audit finding 3: the pure logic behind "Import anyway" — builds
- * a canonical no-op override from a chunk's own first data row (global row
- * number = chunk.startRow) using the FIRST CANONICAL_HEADERS field and its
- * existing, already-parsed value (never a fabricated one). Deterministic
- * by construction: the same chunk + preview always produces the identical
- * override, regardless of anything the operator has separately edited —
- * which is what lets a subsequent "Import anyway" click always resolve
- * the same way, and is exactly what makes it work even for a chunk with
- * ZERO error rows (a fully valid duplicate chunk has no other row data to
- * build an override from at all). Returns null only when there's no first
- * row to build from — not expected in practice, since every real chunk has
- * at least one data row (see ChunkPreviewEntry.firstRowRawText's own
- * comment in session-step.tsx). Exported so this determinism can be pinned
- * directly, without exercising the full ImportClient component tree. */
+/** One row this chunk has full parsed text for — the chunk's own first
+ * data row, or one of its error rows (see buildImportAnywayOverride's own
+ * comment for why these are the only rows available without a heavier,
+ * whole-chunk data-retention change). */
+export type ImportAnywayGridRow = { rowNumber: number; rawText: Record<CanonicalHeader, string> };
+
+export type ImportAnywayOutcome =
+  | { ok: true; overridePatch: RowOverrides }
+  /** Round-7 audit finding 2: the deterministic scheme's variation space
+   * for THIS chunk is exhausted — gridSize non-empty cells were not
+   * enough to give chunkIndex its own distinct subset. `gridSize` is
+   * surfaced so the caller's guidance can be concrete. */
+  | { ok: false; reason: "exhausted"; gridSize: number };
+
+/** Round-6 audit finding 3, made distinct-per-chunk by round-7 audit
+ * finding 2: the pure logic behind "Import anyway" — builds a canonical
+ * no-op override from this chunk's own known rows (never a fabricated
+ * value; every cell is a row's existing, already-parsed text).
+ *
+ * Round-6's version always picked the SAME single cell (chunk.startRow,
+ * CANONICAL_HEADERS[0]) regardless of chunkIndex — so two identical
+ * sibling chunks produced the IDENTICAL no-op override, which hashes to
+ * the IDENTICAL namespaced content_sha256, which 23505s again exactly like
+ * the original collision: clicking "Import anyway" a second time on the
+ * second sibling was a dead end (Retry stays hidden — the regenerated
+ * override slice equals sentOverridesSnapshot).
+ *
+ * The fix: enumerate every (row, non-blank-field) cell across this chunk's
+ * KNOWN rows — its first data row (global row number = firstRow.rowNumber,
+ * captured even for a fully-valid duplicate chunk with zero error rows —
+ * see ChunkPreviewEntry.firstRowRawText's own comment in session-step.tsx)
+ * plus every one of its OWN error rows (chunkedPreview.errorRows already
+ * carries full rawText for these at no extra retention cost — this
+ * deliberately does NOT require capturing every row of a
+ * CLIENT_CHUNK_TARGET_ROWS-sized chunk, which would multiply this
+ * feature's memory footprint by chunk size for no benefit: a fully valid
+ * duplicate chunk's grid is necessarily just its first row's non-blank
+ * fields, which is already enough headroom that exhausting it requires
+ * more identical siblings than CANONICAL_HEADERS has fields — "absurd in
+ * practice" is a deliberate, accepted bound, not an oversight). Rows are
+ * deduped by rowNumber first (the first row CAN also be an error row), in
+ * a fixed order — first row, then error rows in their given order — and
+ * each row's fields are enumerated in CANONICAL_HEADERS order, skipping
+ * any blank one (nothing to meaningfully "override" there).
+ *
+ * The resulting flat cell list has length `gridSize`. chunkIndex (always
+ * >= 1, unique per chunk within a session) selects a subset by TAKING THE
+ * FIRST chunkIndex CELLS — a trivially injective map from chunkIndex to a
+ * distinct subset SIZE for every chunkIndex in [1, gridSize]: two
+ * different chunkIndex values can never produce the same cell COUNT, and
+ * canonicalizeRowOverrides (batch-service.ts) sorts its output by row then
+ * field, so a different cell count is always a different canonicalized
+ * JSON array length — never the same digest. Every value in the resulting
+ * override is the row's OWN existing text (a content no-op, exactly as
+ * before). When chunkIndex EXCEEDS gridSize, the scheme has run out of
+ * distinct subsets for this chunk (chunkIndex would wrap onto a size
+ * already used by some other chunk in [1, gridSize]) — reported as
+ * `{ ok: false, reason: "exhausted" }` rather than silently generating an
+ * override already known to collide again, exactly the round-6 dead end
+ * this fix exists to close. Exported so the scheme can be pinned directly,
+ * without exercising the full ImportClient component tree. */
 export function buildImportAnywayOverride(
-  chunk: { startRow: number },
-  firstRowRawText: Record<CanonicalHeader, string> | null,
-): { rowNumber: number; field: CanonicalHeader; value: string } | null {
-  if (!firstRowRawText) return null;
-  const field = CANONICAL_HEADERS[0];
-  return { rowNumber: chunk.startRow, field, value: firstRowRawText[field] };
+  chunkIndex: number,
+  firstRow: ImportAnywayGridRow | null,
+  errorRowsInChunk: ImportAnywayGridRow[],
+): ImportAnywayOutcome | null {
+  if (!firstRow) return null;
+
+  const seenRows = new Set<number>();
+  const gridRows: ImportAnywayGridRow[] = [];
+  for (const row of [firstRow, ...errorRowsInChunk]) {
+    if (seenRows.has(row.rowNumber)) continue;
+    seenRows.add(row.rowNumber);
+    gridRows.push(row);
+  }
+
+  const cells: { rowNumber: number; field: CanonicalHeader }[] = [];
+  for (const row of gridRows) {
+    for (const field of CANONICAL_HEADERS) {
+      if (row.rawText[field]) cells.push({ rowNumber: row.rowNumber, field });
+    }
+  }
+
+  const gridSize = cells.length;
+  if (gridSize === 0 || chunkIndex > gridSize) {
+    return { ok: false, reason: "exhausted", gridSize };
+  }
+
+  const subset = cells.slice(0, chunkIndex);
+  const overridePatch: RowOverrides = {};
+  for (const cell of subset) {
+    const row = gridRows.find((r) => r.rowNumber === cell.rowNumber)!;
+    overridePatch[cell.rowNumber] = { ...overridePatch[cell.rowNumber], [cell.field]: row.rawText[cell.field] };
+  }
+
+  return { ok: true, overridePatch };
 }
 
 export function ImportClient() {
@@ -463,53 +567,55 @@ export function ImportClient() {
     [chunkedPlan, chunkUpload],
   );
 
-  /** Round-5 audit finding 4: marks a chunk stuck on duplicate_chunk_content
-   * "skipped" — client-side only (see ChunkUploadState's own comment).
-   * confirmChunkedSession never re-attempts a "skipped" chunk, and it no
-   * longer counts toward PreviewStep's blocksConfirmButton, so the
-   * operator can proceed with every OTHER chunk instead of being stuck
-   * forever on one they've decided not to import.
-   *
-   * Round-6 audit finding 5: error/code are no longer nulled out on skip —
-   * both are only ever read while a chunk's status is "failed" (the
-   * unresolvedDuplicateChunkContentIndexes gate, and ChunkUploadProgress's
-   * own error-line rendering), so keeping them costs nothing and is what
-   * lets handleUndoSkip below restore the exact failed state below,
-   * without reconstructing anything. */
   const handleSkipChunk = useCallback((index: number) => {
-    setChunkUpload((prev) =>
-      (prev ?? []).map((c) => (c.index === index ? { ...c, status: "skipped" } : c)),
-    );
+    setChunkUpload((prev) => skipChunk(prev ?? [], index));
   }, []);
 
-  /** Round-6 audit finding 5: the inverse of handleSkipChunk — restores a
-   * skipped chunk to its prior failed/duplicate_chunk_content state, with
-   * both "Import anyway" and "Skip this chunk" available again. Skip is
-   * purely client-side state (see ChunkUploadState's own comment), so
-   * undoing it is too: nothing server-side was ever touched. */
   const handleUndoSkip = useCallback((index: number) => {
-    setChunkUpload((prev) =>
-      (prev ?? []).map((c) => (c.index === index && c.status === "skipped" ? { ...c, status: "failed" } : c)),
-    );
+    setChunkUpload((prev) => undoSkipChunk(prev ?? [], index));
   }, []);
 
-  /** Round-6 audit finding 3: "Import anyway" for a chunk stuck on
-   * duplicate_chunk_content — deterministically generates a canonical
-   * no-op override from this chunk's own first data row so the confirm's
-   * content_sha256 is namespaced away from the sibling it collided with.
-   * Uses buildImportAnywayOverride (below) for the actual, testable logic. */
+  /** Round-6 audit finding 3, made distinct-per-chunk by round-7 audit
+   * finding 2: "Import anyway" for a chunk stuck on duplicate_chunk_content
+   * — deterministically generates a canonical no-op override, DISTINCT per
+   * chunkIndex, so the confirm's content_sha256 is namespaced away from
+   * the sibling it collided with (round-6's version always picked the
+   * SAME cell regardless of chunkIndex, so a SECOND identical sibling's
+   * "Import anyway" click regenerated the identical, still-colliding
+   * override — a dead end this now avoids). Uses buildImportAnywayOverride
+   * (below) for the actual, testable logic; when its variation space for
+   * this chunk is exhausted (round-7 finding 2 — more identical siblings
+   * than this chunk has distinct non-blank cells, "absurd in practice"),
+   * surfaces guidance toward Skip or a single-file import instead of
+   * silently generating an override already known to collide again. */
   const handleImportAnyway = useCallback(
     (chunkIndex: number) => {
-      const chunk = chunkedPlan?.chunks.find((c) => c.index === chunkIndex);
-      const firstRowRawText = chunkedPreview?.perChunk.find((c) => c.index === chunkIndex)?.firstRowRawText ?? null;
-      const built = chunk ? buildImportAnywayOverride(chunk, firstRowRawText) : null;
-      if (!built) return;
-      setRowOverrides((prev) => ({
-        ...prev,
-        [built.rowNumber]: { ...prev[built.rowNumber], [built.field]: built.value },
-      }));
+      const chunkEntry = chunkedPreview?.perChunk.find((c) => c.index === chunkIndex);
+      const firstRow =
+        chunkEntry && chunkEntry.firstRowRawText
+          ? { rowNumber: chunkEntry.startRow, rawText: chunkEntry.firstRowRawText }
+          : null;
+      const errorRowsInChunk = (chunkedPreview?.errorRows ?? [])
+        .filter((row) => row.chunkIndex === chunkIndex)
+        .map((row) => ({ rowNumber: row.rowNumber, rawText: row.rawText }));
+      const outcome = buildImportAnywayOverride(chunkIndex, firstRow, errorRowsInChunk);
+      if (!outcome) return;
+      if (!outcome.ok) {
+        setPreviewError(
+          `Chunk ${chunkIndex} has run out of distinct "Import anyway" variations for this file — use ` +
+            '"Skip this chunk" instead, or import this segment as its own single-file upload.',
+        );
+        return;
+      }
+      setRowOverrides((prev) => {
+        const next = { ...prev };
+        for (const [key, fields] of Object.entries(outcome.overridePatch)) {
+          next[Number(key)] = { ...next[Number(key)], ...fields };
+        }
+        return next;
+      });
     },
-    [chunkedPlan, chunkedPreview],
+    [chunkedPreview],
   );
 
   const reset = useCallback(() => {
@@ -800,7 +906,25 @@ export function PreviewStep({
   // from summary.validRows (every schema-valid row, matching the label's
   // actual claim) plus locally-fixed rows — "Needs resolution" stays its
   // own separate line below, unaffected.
-  const effectivePassingValidationRows = summary.validRows + fixedCount;
+  //
+  // Round-7 audit finding 5: summary.validRows is the aggregate across the
+  // WHOLE file, computed once at preview time — it has no way to know a
+  // chunk was later client-side skipped. A skipped chunk's rows are never
+  // sent (isRowInSkippedChunk's own comment) and never will be, so its
+  // originally-valid rows must be subtracted out here too, exactly like a
+  // skipped chunk's rows are already excluded from fixedRowNumbers above —
+  // otherwise "Passing validation" overstates what actually imports by
+  // exactly the size of every skipped chunk. chunkBreakdown carries each
+  // chunk's own PER-CHUNK PreviewSummary (validRows included) from the
+  // same aggregation summary itself was built from, so this is the SAME
+  // per-chunk source, not a re-derivation. Undo skip needs no separate
+  // handling: this is a live re-derivation from the CURRENT chunkUpload
+  // state on every render, so a chunk leaving "skipped" (handleUndoSkip)
+  // simply drops out of this sum on the next render, restoring the count.
+  const skippedValidRowCount = (chunkUpload ?? [])
+    .filter((c) => c.status === "skipped")
+    .reduce((sum, c) => sum + (chunkBreakdown?.find((cb) => cb.index === c.index)?.summary.validRows ?? 0), 0);
+  const effectivePassingValidationRows = summary.validRows + fixedCount - skippedValidRowCount;
   const effectiveErrorRows = summary.errorRows - fixedCount;
   const hasFailedChunk = chunkUpload?.some((c) => c.status === "failed") ?? false;
   // Sol round-2 audit finding 3: chunk_content_mismatch is TERMINAL —
@@ -964,6 +1088,12 @@ export function PreviewStep({
           onSkipChunk={onSkipChunk}
           onImportAnyway={onImportAnyway}
           onUndoSkip={onUndoSkip}
+          // Round-7 audit finding 4: the same in-flight freeze RowFixItem's
+          // own `frozen` prop already applies to row-edit inputs above —
+          // Skip/Undo-skip/Import-anyway are chunk actions with the exact
+          // same race (a click here would be silently overwritten by the
+          // driver's next progress write), so they freeze together.
+          frozen={confirming}
         />
       )}
 

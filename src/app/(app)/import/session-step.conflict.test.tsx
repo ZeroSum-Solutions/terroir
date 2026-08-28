@@ -241,8 +241,8 @@ describe("confirmChunkedSession — Retry only reaches create when the override 
       bin: "",
       section: "",
     };
-    const built = buildImportAnywayOverride({ startRow: PLAN.chunks[0].startRow }, firstRowRawText);
-    expect(built).toEqual({ rowNumber: 1, field: "producer", value: "A" });
+    const built = buildImportAnywayOverride(1, { rowNumber: PLAN.chunks[0].startRow, rawText: firstRowRawText }, []);
+    expect(built).toEqual({ ok: true, overridePatch: { 1: { producer: "A" } } });
 
     const result = await confirmChunkedSession({
       plan: PLAN,
@@ -250,7 +250,7 @@ describe("confirmChunkedSession — Retry only reaches create when the override 
       existingSessionId: "session-new",
       fileLabel: "cellar.csv",
       timestampsRef: { current: [] },
-      rowOverrides: { [built!.rowNumber]: { [built!.field]: built!.value } },
+      rowOverrides: built?.ok ? built.overridePatch : {},
       onSessionId: () => {},
       onProgress: () => {},
     });
@@ -261,5 +261,62 @@ describe("confirmChunkedSession — Retry only reaches create when the override 
     // overrides regardless of whether they change anything textually.
     expect(seenOverridesJson).toEqual([JSON.stringify({ "1": { producer: "A" } })]);
     expect(seenOverridesJson[0]).not.toEqual(SIBLING_OVERRIDES_JSON);
+  });
+
+  // Round-7 audit finding 2: round-6's "Import anyway" always picked the
+  // SAME cell (first row, first canonical field) regardless of chunkIndex
+  // — two IDENTICAL sibling chunks (same underlying rows, same grid) each
+  // clicking "Import anyway" produced the IDENTICAL override, the
+  // IDENTICAL namespaced digest, and the IDENTICAL 23505 collision all
+  // over again. buildImportAnywayOverride is now indexed by chunkIndex, so
+  // two siblings with different chunkIndex values land on DIFFERENT
+  // subset sizes — distinct overrides, distinct digests — and BOTH reach
+  // create, never just the first one.
+  it("two identical sibling chunks' own 'Import anyway' overrides are DISTINCT — both reach create, not just the first", async () => {
+    const firstRowRawText: Record<CanonicalHeader, string> = {
+      producer: "A",
+      name: "B",
+      vintage: "",
+      varietal: "",
+      region: "",
+      country: "",
+      size_ml: "",
+      format: "",
+      currency: "",
+      quantity: "1",
+      unit_cost: "",
+      bin: "",
+      section: "",
+    };
+    const chunkOneOverride = buildImportAnywayOverride(1, { rowNumber: 1, rawText: firstRowRawText }, []);
+    const chunkTwoOverride = buildImportAnywayOverride(2, { rowNumber: 1, rawText: firstRowRawText }, []);
+    expect(chunkOneOverride).toMatchObject({ ok: true });
+    expect(chunkTwoOverride).toMatchObject({ ok: true });
+    // Distinct overrides for the IDENTICAL underlying row — chunkIndex 1
+    // takes 1 cell (producer only); chunkIndex 2 takes 2 cells (producer +
+    // the next non-blank field, name).
+    expect(chunkOneOverride).not.toEqual(chunkTwoOverride);
+    expect(chunkOneOverride).toMatchObject({ overridePatch: { 1: { producer: "A" } } });
+    expect(chunkTwoOverride).toMatchObject({ overridePatch: { 1: { producer: "A", name: "B" } } });
+
+    // Both, sent independently as this-chunk's own confirm, reach create —
+    // neither collides with the OTHER sibling's own SIBLING_OVERRIDES_JSON
+    // collision baseline, and (more importantly) they don't collide with
+    // EACH OTHER either, since their own canonical JSON differs.
+    for (const built of [chunkOneOverride, chunkTwoOverride]) {
+      const seenOverridesJson: string[] = [];
+      vi.stubGlobal("fetch", digestAwareFetch(seenOverridesJson));
+      const result = await confirmChunkedSession({
+        plan: PLAN,
+        initialUpload: [{ index: 1, status: "failed", batchId: null, error: "conflict", code: "duplicate_chunk_content" }],
+        existingSessionId: "session-new",
+        fileLabel: "cellar.csv",
+        timestampsRef: { current: [] },
+        rowOverrides: built?.ok ? built.overridePatch : {},
+        onSessionId: () => {},
+        onProgress: () => {},
+      });
+      expect(result).toMatchObject({ ok: true });
+    }
   });
 });

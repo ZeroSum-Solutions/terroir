@@ -88,9 +88,37 @@ type FakeBatchRow = {
  *     findLiveBatchByUnderlyingFile now reads.
  * `injectError`, when set, makes the LIST path resolve `{data: null,
  * error}` instead — simulating a genuine lookup failure so the fail-closed
- * behavior (finding 4) can be pinned directly. */
-function fakeImportBatchesTable(rows: FakeBatchRow[], options: { injectError?: { code: string; message: string } } = {}) {
+ * behavior (finding 4) can be pinned directly.
+ *
+ * Round-7 audit finding 1: `appliedBatchIds`, when set, backs the
+ * `import_batch_rows` table too — reconcileLiveBatchesForFile's own
+ * `.select("batch_id").eq(...).in("batch_id", ids).eq("apply_status",
+ * "applied")` query resolves one synthetic `{ batch_id }` row per id that
+ * is BOTH in the query's own `.in()` list AND in this set. Only reached
+ * when a test's `rows` produces more than one live candidate for the same
+ * underlying file — every pre-existing single-candidate test never touches
+ * this table at all. */
+function fakeImportBatchesTable(
+  rows: FakeBatchRow[],
+  options: { injectError?: { code: string; message: string }; appliedBatchIds?: string[] } = {},
+) {
   return vi.fn((table: string) => {
+    if (table === "import_batch_rows") {
+      let inIds: string[] = [];
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        in: (_col: string, ids: string[]) => {
+          inIds = ids;
+          return builder;
+        },
+        then: (resolve: (value: { data: unknown; error: unknown }) => void) => {
+          const applied = new Set(options.appliedBatchIds ?? []);
+          resolve({ data: inIds.filter((id) => applied.has(id)).map((id) => ({ batch_id: id })), error: null });
+        },
+      };
+      return builder;
+    }
     if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
     let predicate: (row: FakeBatchRow) => boolean = () => true;
     const orderCols: { col: keyof FakeBatchRow; ascending: boolean }[] = [];
@@ -316,6 +344,75 @@ describe("confirmImportBatch", () => {
     // duplicate that belongs to a DIFFERENT session is never silently
     // adopted (see session-step.tsx's confirmChunkedSession).
     expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: BATCH_ID, status: "completed", sessionId: "session-x" });
+  });
+
+  // Round-7 audit finding 1: the 23505 fallback used to hand back its own
+  // exact-hash match directly, silently ignoring any OTHER live batch for
+  // the same underlying file (e.g. an orphan left by an earlier
+  // revert-failure). It now routes through the SAME reconciliation logic
+  // the pre-check uses — this pins that an orphan sitting alongside the
+  // batch the 23505 actually collided with gets swept up and reverted too,
+  // not left behind for a future resume to stumble onto.
+  it("routes the 23505 fallback through reconciliation — an orphan sitting alongside the exact-hash match is also cleaned up", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const bareHash = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [];
+    const revertedBatchIds: string[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: () => {
+          // Simulates a genuine TOCTOU race landing exactly between the
+          // pre-check (which found nothing) and this insert: BOTH an
+          // unrelated pre-existing orphan (a different content_sha256
+          // FORMAT for the same underlying file, no applied rows) and the
+          // batch that actually collided via the exact-hash unique index
+          // become visible at this exact instant.
+          rows.push({
+            id: "orphan",
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: `overrides-v1:${"e".repeat(64)}:${bareHash}`,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2020-01-01T00:00:00.000Z",
+          });
+          rows.push({
+            id: "matched-batch",
+            status: "applying",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: bareHash,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2021-01-01T00:00:00.000Z",
+          });
+          return {
+            data: null,
+            error: { code: "23505", message: 'duplicate key value violates unique constraint "import_batches_content_sha256_idx"' },
+          };
+        },
+        count_import_batch_rows: () => ({
+          data: [{ total: 5, applied: 3, excluded: 0, pending: 0, eligible_not_applied: 2 }],
+          error: null,
+        }),
+        revert_import_batch: (args) => {
+          const targetId = (args as { p_batch_id: string }).p_batch_id;
+          revertedBatchIds.push(targetId);
+          const row = rows.find((r) => r.id === targetId);
+          if (row) row.status = "reverted";
+          return { data: 0, error: null };
+        },
+      }),
+      // The exact-hash match ("matched-batch") has applied progress; the
+      // orphan does not — reconciliation targets the applied one exactly
+      // like byHash alone would have, but ALSO reverts the orphan.
+      from: fakeImportBatchesTable(rows, { appliedBatchIds: ["matched-batch"] }),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "matched-batch" });
+    expect(revertedBatchIds).toEqual(["orphan"]);
   });
 
   it("rejects an empty CSV without ever calling create_import_batch", async () => {
@@ -1003,19 +1100,20 @@ describe("confirmImportBatch — self-revert retry-once (round-6 audit finding 1
     expect(result).toMatchObject({ ok: false, error: { code: "duplicate_race_retry" } });
   });
 
-  // Documents the resume-oldest behavior a revert-failure orphan actually
-  // relies on for safety (see selfRevertAndRetry's own proof, point 3): any
-  // future confirm for the SAME underlying file resumes the OLDEST live
-  // batch, so an orphan left behind by a failed self-revert sits dormant —
-  // ordinary resumes keep landing on its older, surviving rival — rather
-  // than ever being handed out to a client on its own.
-  it("documents resume-oldest: a subsequent confirm for the same file resumes the OLDER of two live batches, never the newer one", async () => {
+  // Round-7 audit finding 1: reconcile-on-resume. Both scenarios below
+  // start from the SAME setup as the old "resume-oldest" test (a
+  // revert-failure orphan left live alongside its surviving rival), but the
+  // fix no longer trusts oldest-first blindly — it prefers whichever
+  // candidate already has an APPLIED row, and best-effort reverts every
+  // other live candidate as part of resolving the resume pointer.
+  it("both candidates unapplied: resumes the OLDER of two live batches and best-effort reverts the younger one", async () => {
     const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
     const fileHex = createHash("sha256").update(file).digest("hex");
     // Simulates the orphan left behind by a double revert-failure: TWO
     // live batches for the same underlying file, the rival (older,
     // survived the original race) and the orphan (newer, our own batch
-    // whose self-revert never succeeded).
+    // whose self-revert never succeeded) — NEITHER has any applied rows
+    // yet, so reconciliation falls back to the ordinary oldest-first pick.
     const rows: FakeBatchRow[] = [
       {
         id: "rival-older",
@@ -1037,6 +1135,7 @@ describe("confirmImportBatch — self-revert retry-once (round-6 audit finding 1
       },
     ];
     const createCalls: unknown[] = [];
+    const revertedBatchIds: string[] = [];
     const supabase = {
       rpc: makeRpc({
         match_lwin_bulk: () => ({ data: [], error: null }),
@@ -1048,14 +1147,98 @@ describe("confirmImportBatch — self-revert retry-once (round-6 audit finding 1
           data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
           error: null,
         }),
+        revert_import_batch: (args) => {
+          const targetId = (args as { p_batch_id: string }).p_batch_id;
+          revertedBatchIds.push(targetId);
+          const row = rows.find((r) => r.id === targetId);
+          if (row) row.status = "reverted";
+          return { data: 0, error: null };
+        },
       }),
-      from: fakeImportBatchesTable(rows),
+      from: fakeImportBatchesTable(rows, { appliedBatchIds: [] }),
     };
 
     const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
 
     expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "rival-older" });
     expect(createCalls).toHaveLength(0);
+    // The reconciled-away orphan is best-effort reverted, never left
+    // untouched — it's an unapplied duplicate for the same file now that
+    // reconciliation has run.
+    expect(revertedBatchIds).toEqual(["orphan-newer"]);
+  });
+
+  // The scenario finding 1 actually names: the orphan (failed self-revert)
+  // can be OLDER than the batch that genuinely won the race and is being
+  // applied by its own original client — created_at is insert-START time,
+  // not commit order, so "oldest" and "actual survivor" are NOT the same
+  // thing once one candidate has applied progress. Reconciliation must
+  // target the APPLIED one regardless of age, and revert the orphan.
+  it("orphan older than the applied survivor: resumes the batch with applied progress, not the older orphan, and reverts the orphan", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const rows: FakeBatchRow[] = [
+      {
+        // The orphan: started FIRST (older created_at) but lost the
+        // SEER-YIELDS race and failed both self-revert attempts — stays
+        // live, unapplied, and (per round-4's own timing argument) can
+        // easily be the OLDER of the two.
+        id: "orphan-older",
+        status: "created",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: fileHex,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2020-01-01T00:00:00.000Z",
+      },
+      {
+        // The true survivor: started later, committed first, won its own
+        // post-check, and its client is now actively applying it — proven
+        // here by an APPLIED row, not by age.
+        id: "survivor-newer",
+        status: "applying",
+        session_id: null,
+        chunk_index: null,
+        content_sha256: `overrides-v1:${"d".repeat(64)}:${fileHex}`,
+        restaurant_id: RESTAURANT_ID,
+        created_at: "2021-01-01T00:00:00.000Z",
+      },
+    ];
+    const createCalls: unknown[] = [];
+    const revertedBatchIds: string[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [], error: null }),
+        create_import_batch: (args) => {
+          createCalls.push(args);
+          return { data: { batchId: "should-not-be-created" }, error: null };
+        },
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 1, excluded: 0, pending: 0, eligible_not_applied: 0 }],
+          error: null,
+        }),
+        revert_import_batch: (args) => {
+          const targetId = (args as { p_batch_id: string }).p_batch_id;
+          revertedBatchIds.push(targetId);
+          const row = rows.find((r) => r.id === targetId);
+          if (row) row.status = "reverted";
+          return { data: 0, error: null };
+        },
+      }),
+      // Only the survivor has an applied row — this is the signal
+      // reconciliation uses instead of created_at.
+      from: fakeImportBatchesTable(rows, { appliedBatchIds: ["survivor-newer"] }),
+    };
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    // A NEW client resuming this file lands on the actual survivor, never
+    // the older orphan — exactly the case that used to produce a duplicate
+    // (this new client applying the orphan while the survivor's original
+    // client applies the survivor).
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "survivor-newer" });
+    expect(createCalls).toHaveLength(0);
+    expect(revertedBatchIds).toEqual(["orphan-older"]);
   });
 });
 
@@ -1247,6 +1430,7 @@ describe("confirmImportBatch — underlying-file lookup failure semantics (Sol r
       },
     ];
     const createCalls: unknown[] = [];
+    const revertedBatchIds: string[] = [];
     const supabase = {
       rpc: makeRpc({
         match_lwin_bulk: () => ({ data: [], error: null }),
@@ -1258,8 +1442,18 @@ describe("confirmImportBatch — underlying-file lookup failure semantics (Sol r
           data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
           error: null,
         }),
+        // Round-7 audit finding 1: both candidates are unapplied, so
+        // reconciliation falls back to oldest-first — but it now ALSO
+        // best-effort reverts the one it doesn't pick.
+        revert_import_batch: (args) => {
+          const targetId = (args as { p_batch_id: string }).p_batch_id;
+          revertedBatchIds.push(targetId);
+          const row = rows.find((r) => r.id === targetId);
+          if (row) row.status = "reverted";
+          return { data: 0, error: null };
+        },
       }),
-      from: fakeImportBatchesTable(rows),
+      from: fakeImportBatchesTable(rows, { appliedBatchIds: [] }),
     };
 
     const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
@@ -1268,6 +1462,7 @@ describe("confirmImportBatch — underlying-file lookup failure semantics (Sol r
 
     expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: "variant-older" });
     expect(createCalls).toHaveLength(0);
+    expect(revertedBatchIds).toEqual(["variant-newer"]);
   });
 
   // Sol round-3 audit finding 6: the LIKE pattern can also match a

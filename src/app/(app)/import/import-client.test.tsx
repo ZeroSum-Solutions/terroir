@@ -9,7 +9,7 @@
 //     cutoff: "Show N more" reveals the next page, repeatable.
 //   finding 5 — a chunked error row's label is "Chunk N, data row M" (an
 //     honest, chunk-scoped claim), never "Row {pseudo-global number}".
-import { act, type ComponentProps, type ReactElement } from "react";
+import { act, useState, type ComponentProps, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -18,6 +18,8 @@ import {
   isRowInConfirmedChunk,
   isRowInSkippedChunk,
   buildImportAnywayOverride,
+  skipChunk,
+  undoSkipChunk,
   MAX_SHOWN_ERROR_ROWS,
   type ErrorRowEntry,
   type BatchDetail,
@@ -154,25 +156,65 @@ describe("isRowInSkippedChunk (round-6 audit finding 5)", () => {
   });
 });
 
-// Round-6 audit finding 3: the deterministic, pure logic behind "Import
-// anyway" — building the canonical no-op override from a chunk's own
-// first data row.
-describe("buildImportAnywayOverride (round-6 audit finding 3)", () => {
-  const RAW_TEXT: Record<CanonicalHeader, string> = { ...EMPTY_RAW_TEXT, producer: "Domaine Example", name: "Cuvee One" };
+// Round-6 audit finding 3, made distinct-per-chunk by round-7 audit finding
+// 2: the deterministic, pure logic behind "Import anyway" — building a
+// canonical no-op override from this chunk's known rows, DISTINCT per
+// chunkIndex so two identical sibling chunks never regenerate the same
+// digest.
+describe("buildImportAnywayOverride (round-6 audit finding 3, round-7 audit finding 2)", () => {
+  const RAW_TEXT: Record<CanonicalHeader, string> = {
+    ...EMPTY_RAW_TEXT,
+    producer: "Domaine Example",
+    name: "Cuvee One",
+    vintage: "2020",
+  };
+  const FIRST_ROW = { rowNumber: 5, rawText: RAW_TEXT };
 
-  it("builds an override on the chunk's first data row, using the FIRST canonical field's existing value", () => {
-    const built = buildImportAnywayOverride({ startRow: 5 }, RAW_TEXT);
-    expect(built).toEqual({ rowNumber: 5, field: "producer", value: "Domaine Example" });
+  it("builds an override using the first data row's existing values, for chunkIndex 1", () => {
+    const built = buildImportAnywayOverride(1, FIRST_ROW, []);
+    expect(built).toEqual({ ok: true, overridePatch: { 5: { producer: "Domaine Example" } } });
   });
 
   it("is deterministic — the same chunk + preview always produces the identical override", () => {
-    const a = buildImportAnywayOverride({ startRow: 5 }, RAW_TEXT);
-    const b = buildImportAnywayOverride({ startRow: 5 }, RAW_TEXT);
+    const a = buildImportAnywayOverride(2, FIRST_ROW, []);
+    const b = buildImportAnywayOverride(2, FIRST_ROW, []);
     expect(a).toEqual(b);
   });
 
   it("returns null when there is no first-row data to build from", () => {
-    expect(buildImportAnywayOverride({ startRow: 1 }, null)).toBeNull();
+    expect(buildImportAnywayOverride(1, null, [])).toBeNull();
+  });
+
+  // Round-7 audit finding 2: two identical siblings (same underlying
+  // rows, hence the same grid) must land on DIFFERENT chunkIndex values —
+  // and therefore distinct override sizes, hence distinct canonicalized
+  // digests, hence both reach create instead of the second one dead-ending
+  // on the same collision.
+  it("produces a DIFFERENT override for a different chunkIndex against the identical underlying rows", () => {
+    const a = buildImportAnywayOverride(1, FIRST_ROW, []);
+    const b = buildImportAnywayOverride(2, FIRST_ROW, []);
+    expect(a).toMatchObject({ ok: true });
+    expect(b).toMatchObject({ ok: true });
+    expect(a).not.toEqual(b);
+  });
+
+  it("grows the grid using this chunk's own error rows once the first row's non-blank fields are exhausted", () => {
+    // FIRST_ROW has 3 non-blank fields (producer, name, vintage) — gridSize
+    // 3 from the first row alone. chunkIndex 4 needs a 4th cell, pulled
+    // from an error row belonging to the same chunk.
+    const errorRow = { rowNumber: 6, rawText: { ...EMPTY_RAW_TEXT, region: "Burgundy" } };
+    const built = buildImportAnywayOverride(4, FIRST_ROW, [errorRow]);
+    expect(built).toMatchObject({ ok: true });
+    if (built?.ok) {
+      expect(built.overridePatch[6]).toEqual({ region: "Burgundy" });
+    }
+  });
+
+  // Round-7 audit finding 2: the exhaustion path — more identical siblings
+  // than this chunk has distinct non-blank cells to offer.
+  it("reports exhaustion, never a doomed-to-collide override, once chunkIndex exceeds this chunk's grid size", () => {
+    const outcome = buildImportAnywayOverride(4, FIRST_ROW, []); // grid size 3, chunkIndex 4
+    expect(outcome).toEqual({ ok: false, reason: "exhausted", gridSize: 3 });
   });
 });
 
@@ -412,6 +454,92 @@ describe("PreviewStep — revalidated summary counts (Sol round-3 audit finding 
     expect(stats.get("Passing validation")).toBe("0");
     expect(stats.get("Errors (excluded)")).toBe("1");
     expect(container.textContent).not.toContain("row(s) fixed above");
+  });
+
+  // Round-7 audit finding 5: the round-6 fix above only ever subtracted a
+  // FIXED row belonging to a skipped chunk. A chunk's rows that were
+  // already VALID before any fix — the common case for a fully-valid
+  // duplicate_chunk_content chunk, which is exactly the kind of chunk an
+  // operator skips — kept counting toward the aggregate "Passing
+  // validation" even after the whole chunk was skipped, since
+  // summary.validRows is a whole-file aggregate computed once at preview
+  // time with no way to know about a LATER client-side skip.
+  it("excludes a fully-valid SKIPPED chunk's originally-valid rows from Passing validation", async () => {
+    const chunkBreakdown = [
+      { index: 1, startRow: 1, endRow: 3, summary: { ...ZERO_SUMMARY, totalRows: 3, validRows: 3 } },
+      { index: 2, startRow: 4, endRow: 5, summary: { ...ZERO_SUMMARY, totalRows: 2, validRows: 2 } },
+    ];
+    const chunkUpload: ChunkUploadState[] = [
+      { index: 1, status: "confirmed", batchId: "b1", error: null, code: null },
+      { index: 2, status: "skipped", batchId: null, error: null, code: null, duplicateOfChunkIndex: 1 },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          summary: { ...ZERO_SUMMARY, totalRows: 5, validRows: 5 },
+          errorRows: [],
+          chunkBreakdown,
+          chunkTotal: 2,
+          chunkUpload,
+        })}
+      />,
+    );
+
+    const stats = new Map(
+      [...container.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]),
+    );
+    // 5 aggregate valid rows minus chunk 2's own 2 (now skipped) = 3.
+    expect(stats.get("Passing validation")).toBe("3");
+  });
+
+  // Round-7 audit finding 5: Undo skip needs no separate handling — the
+  // count is a live re-derivation from the CURRENT chunkUpload on every
+  // render, so a chunk leaving "skipped" simply restores its own valid
+  // rows to the aggregate on the next render.
+  it("restores the count once Undo skip takes the chunk out of 'skipped'", async () => {
+    const chunkBreakdown = [
+      { index: 1, startRow: 1, endRow: 3, summary: { ...ZERO_SUMMARY, totalRows: 3, validRows: 3 } },
+      { index: 2, startRow: 4, endRow: 5, summary: { ...ZERO_SUMMARY, totalRows: 2, validRows: 2 } },
+    ];
+    const baseSummaryProps = {
+      summary: { ...ZERO_SUMMARY, totalRows: 5, validRows: 5 },
+      errorRows: [],
+      chunkBreakdown,
+      chunkTotal: 2,
+    };
+
+    const skipped = await mount(
+      <PreviewStep
+        {...baseProps({
+          ...baseSummaryProps,
+          chunkUpload: [
+            { index: 1, status: "confirmed", batchId: "b1", error: null, code: null },
+            { index: 2, status: "skipped", batchId: null, error: null, code: null, duplicateOfChunkIndex: 1 },
+          ],
+        })}
+      />,
+    );
+    const skippedStats = new Map(
+      [...skipped.container.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]),
+    );
+    expect(skippedStats.get("Passing validation")).toBe("3");
+
+    const undone = await mount(
+      <PreviewStep
+        {...baseProps({
+          ...baseSummaryProps,
+          chunkUpload: [
+            { index: 1, status: "confirmed", batchId: "b1", error: null, code: null },
+            { index: 2, status: "failed", batchId: null, error: "conflict", code: "duplicate_chunk_content", duplicateOfChunkIndex: 1 },
+          ],
+        })}
+      />,
+    );
+    const undoneStats = new Map(
+      [...undone.container.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]),
+    );
+    expect(undoneStats.get("Passing validation")).toBe("5");
   });
 
   async function mount(element: ReactElement) {
@@ -802,30 +930,88 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
 
   // Round-6 audit finding 5: "Undo skip" — skip is trivially reversible
   // client-side state, restoring the failed state with both actions back.
-  describe("Undo skip (round-6 audit finding 5)", () => {
-    it("offers an Undo skip control on a skipped chunk and reports the right index when clicked", async () => {
-      const chunkUpload: ChunkUploadState[] = [
-        { index: 1, status: "skipped", batchId: null, error: null, code: null, duplicateOfChunkIndex: 2 },
-      ];
-      let undoneIndex: number | null = null;
+  //
+  // Round-7 audit finding 6: the original version of this test was canned
+  // — its fixture set `code: null` on the skipped chunk, which contradicts
+  // the actual preserved-error/code behavior (skipChunk never clears
+  // code — a skipped chunk that came from duplicate_chunk_content keeps
+  // that code, exactly so undoSkipChunk can restore the real failed state
+  // without reconstructing anything), and it only ever asserted that a
+  // callback fired with the right index — never that the UI actually
+  // transitions. Replaced with a REAL skip -> undo round trip: a small
+  // stateful harness wires PreviewStep's onSkipChunk/onUndoSkip to the
+  // real skipChunk/undoSkipChunk pure functions (import-client.tsx) and
+  // re-renders on each click, so this pins the actual rendered transition
+  // — both actions AND the "Passing validation" count returning to their
+  // pre-skip state — not a hand-authored intermediate fixture.
+  describe("Skip -> Undo skip round trip through rendered state (round-7 audit finding 6)", () => {
+    const CHUNK_BREAKDOWN = [
+      { index: 1, startRow: 1, endRow: 2, summary: { ...ZERO_SUMMARY, totalRows: 2, validRows: 2 } },
+      { index: 2, startRow: 3, endRow: 4, summary: { ...ZERO_SUMMARY, totalRows: 2, validRows: 2 } },
+    ];
+    const INITIAL_UPLOAD: ChunkUploadState[] = [
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error: "Chunk 1's content is identical to chunk 2, already imported in this session.",
+        code: "duplicate_chunk_content",
+        duplicateOfChunkIndex: 2,
+      },
+      { index: 2, status: "confirmed", batchId: "b2", error: null, code: null },
+    ];
 
-      const { container } = await mount(
+    function Harness() {
+      const [chunkUpload, setChunkUpload] = useState<ChunkUploadState[]>(INITIAL_UPLOAD);
+      return (
         <PreviewStep
           {...baseProps({
+            summary: { ...ZERO_SUMMARY, totalRows: 4, validRows: 4 },
+            errorRows: [], // fully valid duplicate chunk — no inline editor at all
+            chunkBreakdown: CHUNK_BREAKDOWN,
+            chunkTotal: 2,
             chunkUpload,
-            chunkTotal: 1,
-            errorRows: [],
-            onUndoSkip: (index) => {
-              undoneIndex = index;
-            },
+            onSkipChunk: (index) => setChunkUpload((prev) => skipChunk(prev, index)),
+            onUndoSkip: (index) => setChunkUpload((prev) => undoSkipChunk(prev, index)),
+            onImportAnyway: () => {},
           })}
-        />,
+        />
       );
+    }
 
-      const undoButton = findButton(container, "Undo skip");
-      expect(undoButton).toBeTruthy();
-      await click(undoButton!);
-      expect(undoneIndex).toBe(1);
+    it("transitions failed -> skipped -> failed through real clicks, restoring both the actions and the Passing validation count", async () => {
+      const { container } = await mount(<Harness />);
+      const stats = () =>
+        new Map([...container.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]));
+
+      // Starting state: chunk 1 failed on duplicate_chunk_content, both
+      // escape hatches offered, full aggregate counted.
+      expect(findButton(container, "Skip this chunk")).toBeTruthy();
+      expect(findButton(container, "Import anyway")).toBeTruthy();
+      expect(findButton(container, "Undo skip")).toBeFalsy();
+      expect(stats().get("Passing validation")).toBe("4");
+
+      await click(findButton(container, "Skip this chunk")!);
+
+      // After skip: chunk 1's own 2 valid rows drop out of the aggregate,
+      // Skip/Import-anyway are replaced by Undo skip, and the honest
+      // "identical to chunk 2" summary renders.
+      expect(container.textContent).toContain("Skipped — identical to chunk 2, already imported");
+      expect(findButton(container, "Skip this chunk")).toBeFalsy();
+      expect(findButton(container, "Import anyway")).toBeFalsy();
+      expect(findButton(container, "Undo skip")).toBeTruthy();
+      expect(stats().get("Passing validation")).toBe("2");
+
+      await click(findButton(container, "Undo skip")!);
+
+      // After undo: back to the EXACT original failed state — both
+      // actions return, the error text is preserved, and the count is
+      // restored to the full aggregate.
+      expect(findButton(container, "Skip this chunk")).toBeTruthy();
+      expect(findButton(container, "Import anyway")).toBeTruthy();
+      expect(findButton(container, "Undo skip")).toBeFalsy();
+      expect(container.textContent).toContain("Chunk 1's content is identical to chunk 2, already imported in this session.");
+      expect(stats().get("Passing validation")).toBe("4");
     });
 
     it("never renders Undo skip for a chunk that isn't skipped", async () => {
@@ -846,6 +1032,63 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
       );
 
       expect(findButton(container, "Undo skip")).toBeFalsy();
+    });
+  });
+
+  // Round-7 audit finding 4: a mid-retry click on Skip/Undo-skip/Import-
+  // anyway is overwritten by the driver's next progress write — the same
+  // race RowFixItem's own `frozen` prop already closes for row-edit
+  // inputs. All three chunk actions freeze too, for the same reason,
+  // whenever `confirming` is true.
+  describe("chunk actions freeze while a confirm attempt is in flight (round-7 audit finding 4)", () => {
+    it("disables Skip, Undo skip, and Import anyway while confirming is true", async () => {
+      const chunkUpload: ChunkUploadState[] = [
+        { index: 1, status: "failed", batchId: null, error: "conflict", code: "duplicate_chunk_content" },
+        { index: 2, status: "skipped", batchId: null, error: null, code: null },
+      ];
+
+      const { container } = await mount(
+        <PreviewStep
+          {...baseProps({
+            chunkUpload,
+            chunkTotal: 2,
+            errorRows: [],
+            confirming: true,
+            onSkipChunk: () => {},
+            onImportAnyway: () => {},
+            onUndoSkip: () => {},
+          })}
+        />,
+      );
+
+      expect(findButton(container, "Skip this chunk")?.disabled).toBe(true);
+      expect(findButton(container, "Import anyway")?.disabled).toBe(true);
+      expect(findButton(container, "Undo skip")?.disabled).toBe(true);
+    });
+
+    it("leaves Skip, Undo skip, and Import anyway enabled once confirming is false", async () => {
+      const chunkUpload: ChunkUploadState[] = [
+        { index: 1, status: "failed", batchId: null, error: "conflict", code: "duplicate_chunk_content" },
+        { index: 2, status: "skipped", batchId: null, error: null, code: null },
+      ];
+
+      const { container } = await mount(
+        <PreviewStep
+          {...baseProps({
+            chunkUpload,
+            chunkTotal: 2,
+            errorRows: [],
+            confirming: false,
+            onSkipChunk: () => {},
+            onImportAnyway: () => {},
+            onUndoSkip: () => {},
+          })}
+        />,
+      );
+
+      expect(findButton(container, "Skip this chunk")?.disabled).toBe(false);
+      expect(findButton(container, "Import anyway")?.disabled).toBe(false);
+      expect(findButton(container, "Undo skip")?.disabled).toBe(false);
     });
   });
 

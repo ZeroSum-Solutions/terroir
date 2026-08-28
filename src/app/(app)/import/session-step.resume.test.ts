@@ -162,6 +162,99 @@ describe("confirmChunkedSessionWithResume — adopt-and-continue (round-6 audit 
     }
   });
 
+  // Round-7 audit finding 3: the gap the round-6 fix above didn't close —
+  // a chunk CONFIRMED under the fresh session BEFORE a LATER chunk reveals
+  // the pre-existing session was never reconciled into the adopted
+  // session. Without the fix, this scenario would report `{ ok: true }`
+  // with chunk 1's rows split off under the abandoned "session-fresh"
+  // (never shown again — ImportClient's SessionStep only ever renders the
+  // adopted session id) while chunk 2 lands under "session-old" — one file
+  // silently split across two sessions.
+  it("reconciles a chunk that was CONFIRMED under the fresh session before a later chunk reveals the pre-existing session — never a split-session success", async () => {
+    const revertedBatchIds: string[] = [];
+    const batchCalls: Array<{ sessionId: string; chunkIndex: string }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/import/sessions")) {
+          return jsonResponse(201, { sessionId: "session-fresh" });
+        }
+        if (url === "/api/import/sessions/session-old") {
+          return jsonResponse(200, { status: "in_progress", sourceSha256: SOURCE_SHA });
+        }
+        if (url.endsWith("/revert") && init?.method === "POST") {
+          // e.g. "/api/import/batches/b-fresh-1/revert"
+          const batchId = url.split("/").at(-2)!;
+          revertedBatchIds.push(batchId);
+          return jsonResponse(200, { revertedCount: 0 });
+        }
+        if (url.endsWith("/api/import/batches")) {
+          const form = init?.body as FormData;
+          const sessionId = form.get("sessionId") as string;
+          const chunkIndex = form.get("chunkIndex") as string;
+          batchCalls.push({ sessionId, chunkIndex });
+
+          if (chunkIndex === "1" && sessionId === "session-fresh") {
+            // Chunk 1 confirms CLEANLY under the fresh session — no
+            // conflict yet. This is the batch that must be reconciled once
+            // chunk 2 (below) reveals the pre-existing session.
+            return jsonResponse(201, { alreadyExists: false, batchId: "b-fresh-1" });
+          }
+          if (chunkIndex === "2" && sessionId === "session-fresh") {
+            // Chunk 2's content already belongs to session-old, chunk
+            // slot 2 — the adoption trigger.
+            return jsonResponse(200, { alreadyExists: true, sessionId: "session-old", chunkIndex: 2, batchId: "b-old-2" });
+          }
+          // Re-drive under the adopted session: BOTH chunks, including the
+          // one that already succeeded under the abandoned session.
+          if (chunkIndex === "1" && sessionId === "session-old") {
+            return jsonResponse(201, { alreadyExists: false, batchId: "b-old-1" });
+          }
+          if (chunkIndex === "2" && sessionId === "session-old") {
+            return jsonResponse(200, { alreadyExists: true, sessionId: "session-old", chunkIndex: 2, batchId: "b-old-2" });
+          }
+          throw new Error(`unexpected batch call: session=${sessionId} chunk=${chunkIndex}`);
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+
+    const progressStates: ChunkUploadState[][] = [];
+    const sessionIds: string[] = [];
+    const result = await confirmChunkedSessionWithResume({
+      plan: PLAN,
+      initialUpload: PLAN.chunks.map((c) => ({ index: c.index, status: "pending" as const, batchId: null, error: null, code: null })),
+      existingSessionId: null,
+      fileLabel: "cellar.csv",
+      timestampsRef: { current: [] },
+      onSessionId: (id) => sessionIds.push(id),
+      onProgress: (upload) => progressStates.push(upload),
+    });
+
+    // Never a split-session success: the wrapper only reports ok once
+    // EVERY chunk (including the one confirmed under the abandoned
+    // session) is confirmed under the SAME, adopted session.
+    expect(result).toEqual({ ok: true });
+    expect(sessionIds.at(-1)).toBe("session-old");
+
+    const finalUpload = progressStates.at(-1)!;
+    // Chunk 1 no longer points at its abandoned-session batch — it was
+    // re-driven and now points at the adopted session's own batch.
+    expect(finalUpload.find((c) => c.index === 1)).toMatchObject({ status: "confirmed", batchId: "b-old-1" });
+    expect(finalUpload.find((c) => c.index === 2)).toMatchObject({ status: "confirmed", batchId: "b-old-2" });
+
+    // The abandoned session's batch was best-effort reverted, never left
+    // as an untouched, unreachable orphan.
+    expect(revertedBatchIds).toEqual(["b-fresh-1"]);
+
+    // Chunk 1 was attempted under BOTH sessions (fresh, then adopted after
+    // reconciliation) — proving it was genuinely re-driven, not merely
+    // left alone because it "already succeeded."
+    expect(batchCalls.filter((c) => c.chunkIndex === "1")).toHaveLength(2);
+    expect(batchCalls.filter((c) => c.chunkIndex === "1" && c.sessionId === "session-old")).toHaveLength(1);
+  });
+
   it("passes through an ordinary (non-conflict) failure unchanged", async () => {
     vi.stubGlobal(
       "fetch",

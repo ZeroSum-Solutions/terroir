@@ -226,7 +226,13 @@ export async function confirmImportBatch(
   // exactly as before: excluded here by the same session exclusion, then
   // decided by the create RPC's own unique index + findDuplicateBatch's
   // 23505 fallback below (idempotent resume, or chunk_content_mismatch).
-  const preCheck = await findLiveBatchByUnderlyingFile(supabase, restaurantId, fileDigestHex, {
+  //
+  // Round-7 audit finding 1: this is an about-to-hand-out-a-resume-pointer
+  // site, so it goes through reconcileLiveBatchesForFile rather than the
+  // bare oldest-first lookup — see that function's own comment for why
+  // "oldest" alone can hand a new client an unapplied orphan while the
+  // actual survivor is being applied elsewhere.
+  const preCheck = await reconcileLiveBatchesForFile(supabase, restaurantId, fileDigestHex, {
     excludeSessionId: options.sessionId,
   });
   if (!preCheck.ok) {
@@ -432,18 +438,18 @@ export async function confirmImportBatch(
  * does, never the old, distinct duplicate_check_failed code — see the
  * proof below for why that convergence is correct, not merely convenient.
  *
- * FAILURE-ATOMICITY, corrected (round-6 finding 1): an earlier version of
- * this comment (and confirmImportBatch's own) claimed the invariant this
- * file maintains is "at most one live batch [for a given underlying file]
- * at any time." That claim is FALSE once a revert can itself fail — a
- * double revert-failure here leaves BOTH our own just-created batch (B)
- * and the rival it lost to (A) live simultaneously, and there is no
- * further retry budget past the one above to close that gap. The TRUE
- * invariant this file actually guarantees — the only one that ever
- * mattered — is narrower: at most one live batch is ever APPLIED per
- * underlying file. A revert-failure can orphan an unapplied live batch,
- * but that orphan is inert garbage, not a correctness hazard, and it is
- * resumable only after its survivor is reverted. Proof:
+ * FAILURE-ATOMICITY, corrected (round-6 finding 1, then round-7 finding 1):
+ * an earlier version of this comment (and confirmImportBatch's own) claimed
+ * the invariant this file maintains is "at most one live batch [for a given
+ * underlying file] at any time." That claim is FALSE once a revert can
+ * itself fail — a double revert-failure here leaves BOTH our own
+ * just-created batch (B) and the rival it lost to (A) live simultaneously,
+ * and there is no further retry budget past the one above to close that
+ * gap. The TRUE invariant this file actually guarantees — the only one
+ * that ever mattered — is narrower: at most one live batch is ever APPLIED
+ * per underlying file. A revert-failure can orphan an unapplied live
+ * batch, but that orphan is inert garbage, not a correctness hazard, and
+ * it is resumable only after its survivor is reverted. Proof:
  *   1. Applying a batch requires a CLIENT holding that batch's own id (the
  *      apply endpoint is called with a specific batchId) — apply is never
  *      driven by a server-side scan that could stumble onto B on its own.
@@ -452,28 +458,57 @@ export async function confirmImportBatch(
  *      `{ ok: true, batchId: B }`), so no client anywhere holds a pointer
  *      to B. B can only ever be reached later via a DIFFERENT confirm's
  *      own pre-check (point 3, below) — never by the request that created it.
- *   3. Any future upload of the SAME underlying file resumes the OLDEST
- *      live batch for it (findLiveBatchByUnderlyingFile's own ordering),
- *      never "whichever batch a client happens to name." With both A and
- *      B live, A — already committed by the time B's post-check ran and
- *      lost — is essentially always the older of the two, so an ordinary
- *      resume keeps landing on A; B stays untouched and dormant.
- *   4. The only way B is EVER resumed is if A is reverted first (from A's
- *      own batch view) — at which point A's rows are gone (revert_import_
- *      batch's own deletion scope), so a client that subsequently resumes
- *      and applies B is importing data that exists nowhere else. That is
- *      B's own, never-previously-applied rows landing exactly once, after
- *      their only competitor was explicitly withdrawn — not a duplicate.
- * A revert-failure orphan can therefore, at worst, sit inert until its
- * survivor is reverted; it can never cause the same underlying content to
- * be APPLIED twice. That is what makes "retry once, then report the same
- * retryable outcome either way" the correct fix rather than a compromise:
- * unlike the old duplicate_check_failed branch (which existed only because
- * a live-but-unverified batch felt unsafe to treat like an ordinary
- * duplicate), there is no unsafe state left to signal separately — a
- * failed revert produces exactly the same class of outcome (an inert,
- * resumable orphan) as a successful one, so the caller gets exactly the
- * same instruction either way: retry the upload. */
+ *   3. CORRECTED (round-7 finding 1): an earlier version of this point
+ *      claimed any future upload of the SAME underlying file "resumes the
+ *      OLDEST live batch for it... A — already committed by the time B's
+ *      post-check ran and lost — is essentially always the older of the
+ *      two, so an ordinary resume keeps landing on A." That is FALSE:
+ *      created_at is INSERT-transaction-START time, not commit order (the
+ *      same round-4 finding that motivated SEER-YIELDS in the first
+ *      place), so the batch that actually LOST the race (and orphaned
+ *      itself here) can easily have an OLDER created_at than the rival it
+ *      lost to — a plain oldest-first resume would then hand a brand-new
+ *      client the orphan while the rival's own original client, holding
+ *      the rival's batchId directly from its own successful confirm
+ *      response, independently applies it: two applied batches for one
+ *      file. Any future upload of the SAME underlying file now instead
+ *      RECONCILES among every live candidate (reconcileLiveBatchesForFile)
+ *      rather than blindly resuming the oldest: it targets whichever
+ *      candidate already has an applied row — direct evidence a client is,
+ *      or was, actively applying it, i.e. the real survivor — and only
+ *      falls back to oldest-first when NOTHING has been applied to any
+ *      candidate yet (the ordinary case this point originally described,
+ *      where oldest-vs-newest is moot since neither has an original client
+ *      mid-apply). Every other live candidate is best-effort self-reverted
+ *      as part of that same reconciliation pass.
+ *   4. CORRECTED (round-7 finding 1): B is therefore reached not only when
+ *      A is later reverted directly, but whenever ANY future resume for
+ *      this file runs reconciliation — which best-effort reverts every
+ *      live candidate except its chosen target. If A (unapplied) is the
+ *      one reconciliation targets, B gets reverted by that same pass and
+ *      stays gone. If B ends up targeted instead (e.g. A had no applied
+ *      rows and lost the oldest-first tiebreak), A gets reverted by that
+ *      pass, and a client that subsequently applies B is importing data
+ *      that exists nowhere else — B's own, never-previously-applied rows
+ *      landing exactly once, after their only live competitor was
+ *      explicitly withdrawn by the SAME reconciliation call that chose B —
+ *      never a duplicate, and never split across two separate operator
+ *      actions the way the old "wait for someone to revert A by hand"
+ *      story required.
+ * A revert-failure orphan can therefore, at worst, sit inert until the next
+ * resume's own reconciliation pass reaches it; it can never cause the same
+ * underlying content to be APPLIED twice, because reconciliation only ever
+ * leaves ONE live candidate standing before handing out a resume pointer
+ * (see reconcileLiveBatchesForFile's own comment for the narrow, honestly-
+ * stated residual: two candidates BOTH reaching genuinely-applied status
+ * before any reconcile pass ever runs). That is what makes "retry once,
+ * then report the same retryable outcome either way" the correct fix
+ * rather than a compromise: unlike the old duplicate_check_failed branch
+ * (which existed only because a live-but-unverified batch felt unsafe to
+ * treat like an ordinary duplicate), there is no unsafe state left to
+ * signal separately — a failed revert produces exactly the same class of
+ * outcome (an inert, resumable orphan) as a successful one, so the caller
+ * gets exactly the same instruction either way: retry the upload. */
 async function selfRevertAndRetry(
   supabase: SupabaseClient<Database>,
   batchId: string,
@@ -551,7 +586,19 @@ async function readBatchLiveState(
  * (session_id, chunk_index) slot but a different content_sha256 — exactly
  * when a chunk was confirmed once, then re-submitted with different
  * overrides before ever being reverted. That is reported as a distinct,
- * typed error rather than treated as a resume. */
+ * typed error rather than treated as a resume.
+ *
+ * Round-7 audit finding 1: the byHash exact match used to be handed back
+ * directly — correct proof that SOME live batch has this exact
+ * content_sha256, but silent about whether a DIFFERENT-format sibling
+ * (bare vs. overrides-v1-namespaced) for the SAME underlying file also
+ * exists live, e.g. an orphan left by a failed self-revert (round-6's own
+ * FAILURE-ATOMICITY comment). A same-session sibling match is left exactly
+ * as before — a legitimate duplicate SEGMENT within the caller's OWN
+ * upload, resolved by the operator (Skip / Import anyway), never silently
+ * reconciled away. Anything else (a different session, or no session at
+ * all) is routed through the same reconcile-on-resume logic the pre-check
+ * uses, exactly like an ordinary resume would. */
 async function findDuplicateBatch(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
@@ -567,6 +614,25 @@ async function findDuplicateBatch(
     .maybeSingle();
 
   let match = byHash as { id: string; status: string; session_id: string | null; chunk_index: number | null } | null;
+
+  const isOwnSessionSibling = match !== null && options.sessionId != null && match.session_id === options.sessionId;
+  if (match && !isOwnSessionSibling) {
+    const fileDigestHex = extractFileDigestHex(contentSha256);
+    if (fileDigestHex) {
+      const reconciled = await reconcileLiveBatchesForFile(supabase, restaurantId, fileDigestHex, {
+        excludeSessionId: options.sessionId,
+      });
+      if (!reconciled.ok) {
+        return { ok: false, error: reconciled.error };
+      }
+      // `match` (the exact byHash row) is itself always among the
+      // candidates reconcileLiveBatchesForFile just considered (its own
+      // content_sha256 satisfies the underlying-file query by
+      // construction), so this can only ever REPLACE match with the
+      // reconciled target — never drop it to null.
+      match = reconciled.match;
+    }
+  }
 
   if (!match && options.sessionId && options.chunkIndex !== undefined) {
     const { data: byChunk } = await supabase
@@ -690,6 +756,23 @@ function isWellFormedDigestForFile(contentSha256: string | null, fileDigestHex: 
   return new RegExp(`^${OVERRIDES_DIGEST_PREFIX}[0-9a-f]{64}:${fileDigestHex}$`).test(contentSha256);
 }
 
+/** Round-7 audit finding 1: the trailing bare-file digest out of either a
+ * bare content_sha256 (itself already the file digest) or a well-formed
+ * overrides-v1-namespaced one — the same two shapes isWellFormedDigestForFile
+ * recognizes, in reverse. Used by findDuplicateBatch's 23505 fallback to
+ * recover the fileDigestHex needed to route through the same
+ * reconcileLiveBatchesForFile logic the pre-check uses, from a
+ * content_sha256 whose format isn't known upfront (unlike confirmImportBatch,
+ * which always has fileDigestHex on hand directly from the raw file buffer).
+ * Returns null only for a malformed value this product never actually
+ * writes — the caller falls back to the pre-existing exact-match behavior
+ * in that case, never throws. */
+function extractFileDigestHex(contentSha256: string): string | null {
+  if (/^[0-9a-f]{64}$/.test(contentSha256)) return contentSha256;
+  const match = new RegExp(`^${OVERRIDES_DIGEST_PREFIX}[0-9a-f]{64}:([0-9a-f]{64})$`).exec(contentSha256);
+  return match ? match[1] : null;
+}
+
 /** Sol round-2/3 audit (2026-08-27) findings 2/3/4/6: finds the OLDEST live
  * (non-reverted) batch for this restaurant whose content_sha256 refers to
  * the SAME underlying file as fileDigestHex — either the bare digest
@@ -735,12 +818,23 @@ function isWellFormedDigestForFile(contentSha256: string | null, fileDigestHex: 
  * any role in surviving a race (see confirmImportBatch's own comment on
  * the round-4 SEER-YIELDS fix for why timestamp-based survivor election
  * was wrong). */
-async function findLiveBatchByUnderlyingFile(
+type FindLiveBatchesResult =
+  | { ok: true; matches: LiveBatchMatch[] }
+  | { ok: false; error: { code: string; message: string } };
+
+/** Round-7 audit finding 1: the plural form — every well-formed live
+ * candidate for the file, oldest-first, not just the first one. Split out
+ * of the old findLiveBatchByUnderlyingFile (below, now a thin wrapper over
+ * this) so reconcileLiveBatchesForFile can see and act on EVERY live
+ * candidate, not merely the one a naive "pick a match" caller would have
+ * used — see that function's own comment for why more than one can exist
+ * and what happens when it does. */
+async function findLiveBatchesByUnderlyingFile(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
   fileDigestHex: string,
   options: { excludeSessionId?: string; excludeBatchId?: string } = {},
-): Promise<FindLiveBatchResult> {
+): Promise<FindLiveBatchesResult> {
   // Round-4 audit finding 5 (defense-in-depth): fileDigestHex is provably
   // server-computed hex today (createHash("sha256").update(...).digest
   // ("hex") a few lines up in confirmImportBatch), so the .or() filter
@@ -791,7 +885,7 @@ async function findLiveBatchByUnderlyingFile(
   }
 
   const rows = (data ?? []) as LiveBatchMatch[];
-  const match = rows.find((row) => isWellFormedDigestForFile(row.content_sha256 ?? null, fileDigestHex)) ?? null;
+  const matches = rows.filter((row) => isWellFormedDigestForFile(row.content_sha256 ?? null, fileDigestHex));
 
   // Round-5 audit finding 6: LIVE_BATCH_LOOKUP_LIMIT is heuristic, not a
   // proof — if the query returns EXACTLY the limit and NONE of those rows
@@ -803,7 +897,7 @@ async function findLiveBatchByUnderlyingFile(
   // silently reporting "no live batch" and letting the caller proceed to
   // create — a spurious duplicate live batch is a worse failure mode than
   // asking the operator to retry.
-  if (match === null && rows.length === LIVE_BATCH_LOOKUP_LIMIT) {
+  if (matches.length === 0 && rows.length === LIVE_BATCH_LOOKUP_LIMIT) {
     return {
       ok: false,
       error: {
@@ -813,7 +907,187 @@ async function findLiveBatchByUnderlyingFile(
     };
   }
 
-  return { ok: true, match };
+  return { ok: true, matches };
+}
+
+/** Sol round-2/3 audit (2026-08-27) findings 2/3/4/6: finds the OLDEST live
+ * (non-reverted) batch for this restaurant whose content_sha256 refers to
+ * the SAME underlying file as fileDigestHex — either the bare digest
+ * itself, or ANY overrides-v1 namespaced digest ending in it (the
+ * namespaced format always embeds the bare file digest as its trailing
+ * segment). Hex digests contain no LIKE metacharacters, so the pattern is
+ * safe to build directly from fileDigestHex.
+ *
+ * `excludeSessionId`, when given, excludes EVERY batch belonging to that
+ * whole session (finding 3) — not just one chunk slot. Two sibling chunks
+ * of the SAME session carrying identical bytes are a legitimate duplicate
+ * segment (e.g. a duplicated export range), never each other's
+ * confirmation; the exact-slot retry case (same chunk re-submitted) is
+ * still handled by the create RPC's own unique index + findDuplicateBatch's
+ * 23505 fallback, unaffected by this exclusion. `excludeBatchId`, when
+ * given, excludes one specific batch id — used by the finding-2 POST-write
+ * check to exclude the confirm's own just-created row, which obviously
+ * matches its own content_sha256.
+ *
+ * Finding 4 (round-3): this used to be `.maybeSingle()`, which THROWS a
+ * PostgREST error (not "no match") when more than one row satisfies the
+ * filter — the old code discarded that error (destructured only `data`)
+ * and fell through to creating a THIRD live variant. Replaced with a
+ * deterministic ordered LIST read (oldest created_at, then oldest id,
+ * first) — errors are now propagated as a typed, retryable confirm error
+ * (fail CLOSED, never silently proceed to create on a lookup failure)
+ * rather than discarded.
+ *
+ * Round-4 audit finding 4: `.limit(2)` read the two OLDEST rows matching
+ * the LIKE pattern BEFORE the finding-6 exact-format re-check below ran —
+ * so two malformed (never-written-by-this-product) content_sha256 values
+ * that merely happen to sort before a genuine match can fill both slots
+ * and evict it, leaving `rows.find(isWellFormedDigestForFile)` with
+ * nothing to find even though a real match exists further down the
+ * result set. A malformed value can only exist from a direct DB write —
+ * this product only ever writes the two well-formed shapes
+ * (isWellFormedDigestForFile's own comment) — so any realistic amount of
+ * contamination is vanishingly unlikely to reach double digits; raised to
+ * limit(20), which is far beyond that, then format-filtered in TS below.
+ * The ordering (oldest created_at, then oldest id) is kept for
+ * deterministic MATCH SELECTION among multiple well-formed rows (a list
+ * read ordering which row is picked first is fine) — it no longer has
+ * any role in surviving a race (see confirmImportBatch's own comment on
+ * the round-4 SEER-YIELDS fix for why timestamp-based survivor election
+ * was wrong).
+ *
+ * Round-7 audit finding 1: this "just take the first one" wrapper is now
+ * used ONLY by the POST-create SEER-YIELDS check (confirmImportBatch),
+ * which only ever needs "does ANY rival exist" — never by a caller about
+ * to hand out an already-exists RESUME pointer. Every resume-pointer path
+ * goes through reconcileLiveBatchesForFile instead (below), which sees
+ * every live candidate rather than just the oldest — see its own comment
+ * for why "oldest" alone is unsafe there. */
+async function findLiveBatchByUnderlyingFile(
+  supabase: SupabaseClient<Database>,
+  restaurantId: string,
+  fileDigestHex: string,
+  options: { excludeSessionId?: string; excludeBatchId?: string } = {},
+): Promise<FindLiveBatchResult> {
+  const result = await findLiveBatchesByUnderlyingFile(supabase, restaurantId, fileDigestHex, options);
+  if (!result.ok) return result;
+  return { ok: true, match: result.matches[0] ?? null };
+}
+
+/** Round-7 audit finding 1: reconcile-on-resume. Whenever an "already
+ * exists" pointer is about to be handed to a caller, more than one live
+ * batch can exist for the same underlying file — SEER-YIELDS (confirmImportBatch's
+ * own comment) guarantees at most one confirm's OWN post-check survives
+ * without self-reverting, never that a FAILED self-revert can't leave an
+ * orphan live too (selfRevertAndRetry's own FAILURE-ATOMICITY comment). The
+ * oldest-first pick findLiveBatchByUnderlyingFile makes is safe when
+ * nothing has been touched yet, but wrong once one candidate already has
+ * applied rows: created_at is INSERT-transaction-START time, not commit
+ * order (round-4 finding 1), so the batch that actually WON the race — and
+ * whose own client already holds its batchId and may be independently
+ * applying it right now — can easily be YOUNGER than an orphan that failed
+ * both self-revert attempts. Blindly handing a brand-new client the oldest
+ * candidate would then let TWO batches for the same file both get applied
+ * — the orphan via this new resume, the true survivor via its own original
+ * client — a real duplicate.
+ *
+ * Fetches every live candidate for the file (the same format-validated
+ * list findLiveBatchesByUnderlyingFile itself produces). Fewer than two
+ * candidates: nothing to reconcile, behaves exactly like the old
+ * single-match lookup. Two or more: queries which candidate(s) already
+ * have an APPLIED row (the strongest signal available that a client is, or
+ * was, actively applying it — i.e. the real survivor) and targets the
+ * first applied one in the existing oldest-first order (the documented
+ * tiebreak if, somehow, more than one candidate already has applied rows —
+ * that itself means a duplicate has already landed; picking the oldest as
+ * canonical here is a deliberate choice about which one to keep pointing
+ * at, not a fix for the already-happened duplicate, which needs manual
+ * data repair). With nothing applied anywhere yet, falls back to the
+ * oldest candidate — the ordinary, nothing-touched-yet case, unchanged
+ * from before. Every OTHER live candidate is then best-effort
+ * self-reverted, independently try/caught per candidate so one failure
+ * never blocks reverting the rest — a failure there leaves that one
+ * candidate a zombie exactly like selfRevertAndRetry's own residual,
+ * resolved by the NEXT resume running this same reconciliation again.
+ *
+ * Interleaving walk:
+ *  - A live but UNAPPLIED batch that gets reconciled away here (because
+ *    some OTHER candidate had applied rows, or lost the oldest-first
+ *    tiebreak) simply no-ops on its OWN client's later apply call — revert
+ *    deletes/settles its rows, apply only ever selects apply_status=
+ *    'not_applied' rows, and 0108 already no-ops outright on a reverted
+ *    batch. That client sees the round-6 reverted-banner (BatchStep,
+ *    import-client.tsx) — an honest "this was withdrawn" outcome, never
+ *    silent data loss.
+ *  - A candidate that gets its FIRST applied row in the gap between this
+ *    function's own read and its revert call: the revert simply finds
+ *    fewer not_applied rows to revert (revert_import_batch's own deletion
+ *    scope still removes exactly whatever inventory it already created).
+ *    The NEXT resume's own reconciliation pass then sees THIS batch as the
+ *    applied one and targets it — reconciliation always re-reads live+
+ *    applied state fresh on every call, never caches a decision.
+ *  - Two candidates BOTH reaching genuinely-applied status before ANY
+ *    reconcile pass ever runs is the only way this can still produce a
+ *    duplicate — it requires both clients' applies to race into the window
+ *    between the last reconcile read and both applies completing, with no
+ *    resume (which would have caught it) landing in between. This is
+ *    narrow — apply only ever starts after an operator's own explicit
+ *    click reaches a batch/session step, never automatically — and, unlike
+ *    a silent duplicate, is repairable after the fact via an ordinary
+ *    revert of the extra batch. Stated here honestly as the residual, not
+ *    hidden as "proven impossible." */
+async function reconcileLiveBatchesForFile(
+  supabase: SupabaseClient<Database>,
+  restaurantId: string,
+  fileDigestHex: string,
+  options: { excludeSessionId?: string; excludeBatchId?: string } = {},
+): Promise<FindLiveBatchResult> {
+  const listed = await findLiveBatchesByUnderlyingFile(supabase, restaurantId, fileDigestHex, options);
+  if (!listed.ok) return listed;
+  const candidates = listed.matches;
+  if (candidates.length <= 1) {
+    return { ok: true, match: candidates[0] ?? null };
+  }
+
+  const { data: appliedRows, error: appliedError } = await supabase
+    .from("import_batch_rows")
+    .select("batch_id")
+    .eq("restaurant_id", restaurantId)
+    .in(
+      "batch_id",
+      candidates.map((c) => c.id),
+    )
+    .eq("apply_status", "applied");
+  if (appliedError) {
+    return {
+      ok: false,
+      error: {
+        code: "duplicate_check_failed",
+        message: "Could not verify this file wasn't already imported — please try confirming again.",
+      },
+    };
+  }
+  const appliedBatchIds = new Set(((appliedRows ?? []) as { batch_id: string }[]).map((r) => r.batch_id));
+
+  // `candidates` is already ordered oldest created_at, then oldest id
+  // (findLiveBatchesByUnderlyingFile's own ordering) — the first applied
+  // one in that order is the documented tiebreak above; falling through to
+  // candidates[0] is the ordinary nothing-applied-yet case.
+  const target = candidates.find((c) => appliedBatchIds.has(c.id)) ?? candidates[0];
+
+  await Promise.all(
+    candidates
+      .filter((c) => c.id !== target.id)
+      .map(async (orphan) => {
+        try {
+          await revertImportBatch(supabase, orphan.id);
+        } catch {
+          // Best-effort — see this function's own comment above.
+        }
+      }),
+  );
+
+  return { ok: true, match: target };
 }
 
 export type BatchCounts = {

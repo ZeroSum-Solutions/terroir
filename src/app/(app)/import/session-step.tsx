@@ -76,8 +76,20 @@ export type ChunkUploadState = {
   /** Sol round-2 audit (2026-08-27) finding 3: the server's error CODE for a
    * "failed" chunk, when there is one — e.g. "chunk_content_mismatch",
    * which is TERMINAL (retrying re-sends the exact same content and will
-   * fail again the same way). null for every non-error state, and for a
-   * failure with no typed code (network error, generic upload failure). */
+   * fail again the same way). null for a failure with no typed code
+   * (network error, generic upload failure), and for every state that
+   * never carried one in the first place ("pending", "waiting",
+   * "uploading", "confirmed").
+   *
+   * Round-6 audit finding 5, corrected by round-7 audit finding 6: this
+   * comment used to also claim "null for every non-error state" — false
+   * once a chunk reaches "skipped": handleSkipChunk (import-client.tsx)
+   * deliberately PRESERVES code (and error) from the prior "failed" state
+   * rather than clearing them, specifically so handleUndoSkip can restore
+   * the exact failed state without reconstructing anything. "skipped" is
+   * not an error state, but it CAN carry a non-null code — the only
+   * accurate claim is "null for a codeless failure or a state that never
+   * had one." */
   code: string | null;
   /** Round-5 audit finding 3: the operator's override slice for THIS
    * chunk's rows (GLOBAL row numbers, same keying as RowOverrides).
@@ -605,7 +617,65 @@ export type ConfirmChunkedSessionWithResumeResult = { ok: true } | { ok: false; 
  * the operator being bounced into an incomplete SessionStep with no way to
  * act on it. `depth` is a defensive bound (MAX_SESSION_ADOPTION_HOPS)
  * against unbounded recursion; ordinary usage never needs more than one
- * hop. */
+ * hop.
+ *
+ * Round-7 audit finding 3: retrying the REMAINING chunks under the adopted
+ * session, as described above, left a gap — any chunk that was already
+ * CONFIRMED under the fresh (now-abandoned) session BEFORE this conflict
+ * surfaced stayed exactly where it was, under the fresh session, and was
+ * never re-driven. The wrapper would then report `{ ok: true }` with the
+ * file's rows split across TWO sessions: the early chunk(s) live under the
+ * fresh session (which the operator never sees again — ImportClient jumps
+ * to SessionStep for the ADOPTED session id only), and the rest under the
+ * adopted one. Any FURTHER hop compounds this the same way.
+ *
+ * Verified before fixing (per this finding's own instruction): does apply
+ * ever start mid-session, before every chunk is confirmed? No. Apply is
+ * only ever triggered by an explicit operator click on BatchStep's "Apply"
+ * button or SessionStep's "Apply N row(s)" button (import-client.tsx,
+ * this file) — both require first landing on a batch/session STEP, which
+ * only happens after this whole confirm loop returns. Nothing in
+ * confirmChunkedSession or this wrapper ever calls /apply. So every chunk
+ * this function itself confirmed under the fresh session, moments earlier
+ * in this SAME call (or an earlier hop of it), is provably still
+ * apply_status='not_applied' — reverting it is always safe, exactly like
+ * confirmImportBatch's own selfRevertAndRetry reasons about its own
+ * just-created batch.
+ *
+ * The fix: before adopting a conflicting session, best-effort revert every
+ * chunk `latestUpload` currently marks "confirmed" (POST /api/import/
+ * batches/{batchId}/revert — the same endpoint BatchStep's own revert
+ * button uses; revert_import_batch_v2 (0109) already allows reverting a
+ * batch that's merely 'created', not only 'completed') — these are
+ * unapplied confirm-stage artifacts under the session about to be
+ * abandoned. Per-chunk try/catch: one revert failing never blocks
+ * reverting the others, and a failure here is tolerated (not fatal) — see
+ * the residual note below. Then reset each of THOSE chunks back to
+ * "pending" (clearing batchId/error/code) so confirmChunkedSession's own
+ * skip condition (`status === "confirmed" || "skipped"`) no longer treats
+ * them as done, and re-drive EVERY chunk — the previously-confirmed ones
+ * now included — under the adopted session. Skipped chunks and the
+ * operator's rowOverrides (untouched, part of `params`) are preserved
+ * exactly as-is: skip is a purely client-side terminal state with nothing
+ * server-side to reconcile (ChunkUploadState's own comment).
+ *
+ * Every "confirmed" entry in `latestUpload` at this point belongs to the
+ * SAME single session — whatever this call (or the immediately preceding
+ * hop) was actively driving — by induction: a fresh call starts with none
+ * confirmed yet, and every earlier hop already ran this same
+ * reconciliation before re-driving, so no confirmed entry can be left over
+ * from a session two-or-more hops back. That's what makes "revert every
+ * currently-confirmed entry" correct at every hop, not just the first one.
+ *
+ * Residual: a revert call above can itself fail (network error, etc.) —
+ * tolerated here exactly like selfRevertAndRetry's own FAILURE-ATOMICITY
+ * residual (batch-service.ts): the chunk stays live under the abandoned
+ * session, unapplied, and re-driving it under the adopted session below
+ * routes through confirmImportBatch's own reconcile-on-resume logic
+ * (round-7 audit finding 1) — which will find BOTH the orphan and the
+ * fresh confirm as live candidates for the same underlying chunk content
+ * and resolve them itself (at worst, one more bounded adoption hop, never
+ * a duplicate). */
 export async function confirmChunkedSessionWithResume(
   params: ConfirmChunkedSessionParams,
   depth = 0,
@@ -632,20 +702,44 @@ export async function confirmChunkedSessionWithResume(
         progress.sourceSha256 != null &&
         progress.sourceSha256 === params.plan.sourceSha256
       ) {
+        // Round-7 audit finding 3: reconcile-before-adopt. Best-effort
+        // revert every chunk confirmed under the session about to be
+        // abandoned — see this function's own comment above for the
+        // apply-timing verification that makes this always safe.
+        const confirmedUnderAbandonedSession = latestUpload.filter(
+          (c) => c.status === "confirmed" && c.batchId,
+        );
+        await Promise.all(
+          confirmedUnderAbandonedSession.map(async (c) => {
+            try {
+              await fetch(`/api/import/batches/${c.batchId}/revert`, { method: "POST" });
+            } catch {
+              // Best-effort — see this function's own comment above.
+            }
+          }),
+        );
+
         writeStoredSession({
           sessionId: result.conflictingSessionId,
           sourceSha256: params.plan.sourceSha256,
           label: params.fileLabel,
         });
         params.onSessionId(result.conflictingSessionId);
-        // Retry the REMAINING chunks under the now-verified session —
-        // latestUpload already marks the conflicting chunk "failed"
-        // (confirmChunkedSession's own onProgress ran before it returned),
-        // so the retry re-attempts exactly that chunk (and everything
-        // after it) under the adopted session id, never the ones already
-        // "confirmed"/"skipped".
+
+        // Re-drive EVERY chunk that was confirmed under the abandoned
+        // session — reset to "pending" so confirmChunkedSession's own skip
+        // condition doesn't treat it as done. Everything else (already
+        // "skipped", or never confirmed at all) is carried forward as-is.
+        const reconciledUpload: ChunkUploadState[] = latestUpload.map((c) =>
+          c.status === "confirmed"
+            ? { index: c.index, status: "pending", batchId: null, error: null, code: null }
+            : c,
+        );
+
+        // Retry every reconciled chunk under the now-verified session —
+        // never just the "remaining" ones (round-7 finding 3's own fix).
         return confirmChunkedSessionWithResume(
-          { ...params, initialUpload: latestUpload, existingSessionId: result.conflictingSessionId },
+          { ...params, initialUpload: reconciledUpload, existingSessionId: result.conflictingSessionId },
           depth + 1,
         );
       }
@@ -702,19 +796,32 @@ function chunkUploadStatusLabel(status: ChunkUploadStatus): string {
  * on a chunk already marked "skipped" — restores it to its prior failed
  * duplicate_chunk_content state, with both Import anyway and Skip
  * available again. Skip is purely client state (import-client.tsx's own
- * comment), so undoing it touches nothing server-side either. */
+ * comment), so undoing it touches nothing server-side either.
+ *
+ * Round-7 audit finding 4: `frozen`, when true, disables all three
+ * buttons — the same TEMPORARY freeze RowFixItem's own `frozen` prop
+ * already applies to row-edit inputs while a confirm attempt is in flight
+ * (import-client.tsx's PreviewStep). A mid-retry Skip/Undo-skip/Import-
+ * anyway click, while confirmChunkedSession's own driver loop is actively
+ * re-writing chunkUpload via onProgress, would otherwise be immediately
+ * overwritten by the driver's next progress write — a click that visibly
+ * "worked" for a moment and then silently reverted. Disabling the buttons
+ * for the duration removes that race entirely, exactly like the row-input
+ * freeze. */
 export function ChunkUploadProgress({
   chunks,
   chunkTotal,
   onSkipChunk,
   onImportAnyway,
   onUndoSkip,
+  frozen,
 }: {
   chunks: ChunkUploadState[];
   chunkTotal: number;
   onSkipChunk?: (index: number) => void;
   onImportAnyway?: (index: number) => void;
   onUndoSkip?: (index: number) => void;
+  frozen?: boolean;
 }) {
   const confirmedCount = chunks.filter((c) => c.status === "confirmed" || c.status === "skipped").length;
   return (
@@ -741,8 +848,9 @@ export function ChunkUploadProgress({
                 <button
                   type="button"
                   onClick={() => onImportAnyway(c.index)}
+                  disabled={frozen}
                   title="Imports this chunk's identical rows as a separate tracked upload."
-                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Import anyway
                 </button>
@@ -751,7 +859,8 @@ export function ChunkUploadProgress({
                 <button
                   type="button"
                   onClick={() => onSkipChunk(c.index)}
-                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  disabled={frozen}
+                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Skip this chunk
                 </button>
@@ -764,7 +873,8 @@ export function ChunkUploadProgress({
                 <button
                   type="button"
                   onClick={() => onUndoSkip(c.index)}
-                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  disabled={frozen}
+                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Undo skip
                 </button>
