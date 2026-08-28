@@ -212,6 +212,26 @@ export function Scanner({
   const scanTimeoutRef = useRef<number | null>(null);
   const timedOutRef = useRef(false);
 
+  // Arriving via /scan?mode=bottle skips the persisted-invoice restore (the
+  // mount effect below), which leaves an unfinished invoice draft hidden in
+  // localStorage — completing a NEW invoice scan from that state would
+  // silently overwrite it (Sol audit 2026-08-27 round 4, finding 4). Toggling
+  // back to Invoice therefore re-runs the restore the bottle entry skipped,
+  // so the user lands on their draft exactly as a plain /scan visit would.
+  const handleModeChange = useCallback(
+    (next: ScanMode) => {
+      setMode(next);
+      if (next === "invoice" && initialMode === "bottle" && scan === null) {
+        const saved = loadScan();
+        if (saved) {
+          setScan(saved);
+          setStatus("results");
+        }
+      }
+    },
+    [initialMode, scan],
+  );
+
   const setBottlePreview = useCallback((file: File | null) => {
     if (bottlePreviewUrlRef.current) URL.revokeObjectURL(bottlePreviewUrlRef.current);
     const url = file ? URL.createObjectURL(file) : null;
@@ -778,11 +798,11 @@ export function Scanner({
 
   const hasRetryableFile = mode === "bottle" ? !!lastFile : lastFiles.length > 0;
 
-  if (!hydrated) return <ReadyView onStart={handleStart} mode={mode} onModeChange={setMode} recentScans={recentScans} savedResult={null} onDismissSaved={() => {}} />;
+  if (!hydrated) return <ReadyView onStart={handleStart} mode={mode} onModeChange={handleModeChange} recentScans={recentScans} savedResult={null} onDismissSaved={() => {}} />;
 
   return (
     <>
-      {status === "ready" && <ReadyView onStart={handleStart} mode={mode} onModeChange={setMode} recentScans={recentScans} savedResult={savedResult} onDismissSaved={() => setSavedResult(null)} />}
+      {status === "ready" && <ReadyView onStart={handleStart} mode={mode} onModeChange={handleModeChange} recentScans={recentScans} savedResult={savedResult} onDismissSaved={() => setSavedResult(null)} />}
       {status === "processing" && (
         <ProcessingView
           progress={progress}

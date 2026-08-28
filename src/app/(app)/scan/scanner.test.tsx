@@ -450,6 +450,26 @@ describe("Scanner initialMode", () => {
     expect(localStorage.getItem("terroir:current-scan")).not.toBeNull();
   });
 
+  it("toggling back to Invoice from a bottle-mode entry restores the persisted draft", async () => {
+    // Sol audit 2026-08-27 round 4, finding 4: bottle-mode entry skips the
+    // persisted-invoice restore, but switching the toggle back to Invoice
+    // used to only flip the mode — the hidden draft stayed invisible and a
+    // newly completed invoice scan would then overwrite it in localStorage.
+    // The toggle now re-runs the restore the bottle entry skipped.
+    const { rawText: _rawText, ...persistable } = invoiceResult;
+    localStorage.setItem(
+      "terroir:current-scan",
+      JSON.stringify({ version: 2, data: persistable }),
+    );
+    act(() => root?.unmount());
+    root = createRoot(container);
+    await act(async () => root?.render(<Scanner initialMode="bottle" />));
+    expect(container.textContent).toContain("Scan a bottle label");
+
+    await clickButton("Invoice");
+    expect(container.textContent).toContain("Invoice scan results");
+  });
+
   it("still restores a persisted invoice result on a plain mount", async () => {
     const { rawText: _rawText, ...persistable } = invoiceResult;
     localStorage.setItem(
