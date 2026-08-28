@@ -39,18 +39,28 @@ export const ConfirmBatchSessionFieldsSchema = z.object({
   sourceSha256: z.string().regex(/^[0-9a-f]{64}$/i).optional(),
 });
 
+// Sol audit (2026-08-27) finding 4: this is a BACKSTOP only, deliberately
+// far above MAX_FIELD_LENGTH — the real boundary for an over-length
+// override is validateFields (row-validator.ts), shared by both the
+// client's live re-validation and the server's own confirm path, which
+// turns it into a normal per-row field error instead of failing the whole
+// request. Capping this schema AT MAX_FIELD_LENGTH would defeat that: any
+// realistic over-length paste would 400 the entire request here, before
+// validateFields ever got a chance to reject just that one row. This only
+// exists to reject a truly pathological single value (megabytes in one
+// field) outright.
+const OVERRIDE_FIELD_HARD_CAP = MAX_FIELD_LENGTH * 10;
+
 // Inline row-fix overrides (confirm-time only — see ConfirmBatchOptions.
 // rowOverrides in batch-service.ts). One row's worth of field overrides:
 // keys are restricted to the exact CANONICAL_HEADERS whitelist via
 // .strict() (any other key fails validation, not silently dropped), and
-// every value is length-bounded the same as a real CSV cell
-// (MAX_FIELD_LENGTH, csv-parser.ts's own per-cell cap) so an override
-// can't smuggle in a pathologically large value a real upload never
-// could.
+// every value is bounded by OVERRIDE_FIELD_HARD_CAP above — the real
+// MAX_FIELD_LENGTH boundary lives in validateFields, see its comment.
 const RowOverrideFieldsSchema = z
   .object(
     Object.fromEntries(
-      CANONICAL_HEADERS.map((field) => [field, z.string().max(MAX_FIELD_LENGTH)]),
+      CANONICAL_HEADERS.map((field) => [field, z.string().max(OVERRIDE_FIELD_HARD_CAP)]),
     ) as Record<CanonicalHeader, z.ZodString>,
   )
   .partial()
@@ -62,8 +72,16 @@ const RowOverrideFieldsSchema = z
 // exact "does this row exist in THIS upload" check is necessarily dynamic
 // (parsed row count isn't known until the file is read) and happens in
 // buildImportPreview itself.
+//
+// Sol audit (2026-08-27) finding 3: the key pattern is the CANONICAL
+// positive-integer form only — no leading zeros ("01", "0") — because
+// preview-service.ts/batch-service.ts key their own lookups by
+// String(rowNumber) (e.g. String(1) === "1", never "01"), so a
+// leading-zero key would silently never match any real row instead of
+// erroring. "0" itself is excluded the same way (row numbers are
+// 1-indexed).
 export const RowOverridesSchema = z
-  .record(z.string().regex(/^\d+$/, "Row index must be a whole number."), RowOverrideFieldsSchema)
+  .record(z.string().regex(/^[1-9][0-9]*$/, "Row index must be a canonical positive whole number (no leading zeros)."), RowOverrideFieldsSchema)
   .superRefine((obj, ctx) => {
     const keys = Object.keys(obj);
     if (keys.length > MAX_ROWS) {
@@ -91,11 +109,24 @@ export const RowOverridesFieldSchema = z
   .optional()
   .transform((val, ctx) => {
     if (val === undefined) return undefined;
+    let parsed: unknown;
     try {
-      return JSON.parse(val) as unknown;
+      parsed = JSON.parse(val);
     } catch {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "rowOverrides must be valid JSON." });
       return z.NEVER;
     }
+    // Sol audit (2026-08-27) finding 3: a "__proto__" key parses to a
+    // genuine OWN data property here (JSON.parse never triggers the
+    // prototype-setter — this isn't prototype pollution), but zod's own
+    // z.record() silently drops it rather than rejecting it, so
+    // `{"__proto__": {...}}` would otherwise reduce to `{}` with no error
+    // at all — an operator's edit vanishing with no signal. Checked here,
+    // before RowOverridesSchema ever sees it, so it fails loudly instead.
+    if (parsed !== null && typeof parsed === "object" && Object.prototype.hasOwnProperty.call(parsed, "__proto__")) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Row index "__proto__" is not a valid row index.' });
+      return z.NEVER;
+    }
+    return parsed;
   })
   .pipe(RowOverridesSchema.optional());

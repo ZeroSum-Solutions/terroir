@@ -8,6 +8,7 @@ import {
   HEADER_SYNONYMS,
   INTEGER_LITERAL,
   MAX_BOTTLE_SIZE_ML,
+  MAX_FIELD_LENGTH,
   MAX_QUANTITY,
   MAX_UNIT_COST,
   REQUIRED_HEADERS,
@@ -186,6 +187,23 @@ export function validateFields(fields: FieldsInput): ValidatedRow {
   ) as Record<CanonicalHeader, string>;
   const get = (field: CanonicalHeader) => rawText[field];
   const errors: FieldError[] = [];
+
+  // Sol audit (2026-08-27) finding 4: this is the ONE length gate every
+  // caller shares (a real CSV cell via validateRow, and an inline row-fix
+  // override via the UI/confirm path) — csv-parser.ts's own MAX_FIELD_
+  // LENGTH cell check runs only on the original file's cells, never on an
+  // override's replacement text, so without this an over-length override
+  // sailed through preview looking "Fixed" and only failed at the Zod
+  // request-schema boundary in request-schemas.ts — a whole-request 400,
+  // not this one row's own error. request-schemas.ts's schema cap is a
+  // generous backstop above MAX_FIELD_LENGTH now, specifically so a
+  // realistic over-length paste lands here as a normal per-row error
+  // instead.
+  for (const field of CANONICAL_HEADERS) {
+    if (rawText[field].length > MAX_FIELD_LENGTH) {
+      errors.push({ field, message: `This field cannot exceed ${MAX_FIELD_LENGTH} characters.` });
+    }
+  }
 
   // Producer is optional (2026-08-27): real-world exports embed it in the
   // wine name. It stays a string ("" when absent) all the way into

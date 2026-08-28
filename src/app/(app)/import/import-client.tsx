@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { ActionDialog } from "@/components/action-dialog";
 import { cn } from "@/lib/utils";
-import { CANONICAL_HEADERS, CLIENT_CHUNK_TARGET_ROWS, MAX_ROWS, type CanonicalHeader } from "@/domains/import/constants";
+import { CANONICAL_HEADERS, CLIENT_CHUNK_TARGET_ROWS, MAX_FIELD_LENGTH, MAX_ROWS, type CanonicalHeader } from "@/domains/import/constants";
 import { validateFields } from "@/domains/import/row-validator";
 import {
   AmbiguousRecordSplitError,
@@ -92,6 +92,14 @@ type BatchDetail = { batch: BatchSummary; rows: BatchRow[] };
 type Step = "upload" | "preview" | "batch" | "session";
 
 const TEMPLATE_CSV = `${CANONICAL_HEADERS.join(",")}\nDomaine Example,Cuvee One,2020,Pinot Noir,Burgundy,France,750,,USD,6,24.50,,\n`;
+
+// Sol audit (2026-08-27) finding 5: only the first N error rows are ever
+// shown and editable — any beyond this cap are excluded on confirm with
+// no inline-fix chance. 100 (raised from 20) covers the overwhelming
+// majority of real-world error counts; anything past it still gets an
+// explicit warning below (never a silent drop) rather than virtualizing
+// the whole list.
+const MAX_SHOWN_ERROR_ROWS = 100;
 
 export function ImportClient() {
   const [step, setStep] = useState<Step>("upload");
@@ -538,7 +546,7 @@ function PreviewStep({
   onBack: () => void;
   error: string | null;
 }) {
-  const shownErrorRows = errorRows.slice(0, 20);
+  const shownErrorRows = errorRows.slice(0, MAX_SHOWN_ERROR_ROWS);
   // A row the operator has edited into passing validation counts toward
   // "ready to confirm" too, even though summary (computed server-side
   // from the ORIGINAL file) has no way to know about it yet — confirm
@@ -602,8 +610,10 @@ function PreviewStep({
             ))}
           </ul>
           {summary.errorRows > shownErrorRows.length && (
-            <p className="mt-2xs text-caption text-grey">
-              +{summary.errorRows - shownErrorRows.length} more error row(s) not shown.
+            <p role="alert" className="mt-2xs flex items-start gap-xs text-caption text-accent">
+              <AlertTriangle className="mt-[2px] h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {summary.errorRows - shownErrorRows.length} more row(s) with errors are not shown — they will be
+              excluded unless fixed in the source file and re-uploaded.
             </p>
           )}
         </div>
@@ -685,6 +695,7 @@ function RowFixItem({
               type="text"
               value={effective[field] ?? ""}
               onChange={(e) => onFieldChange(row.rowNumber, field, e.target.value)}
+              maxLength={MAX_FIELD_LENGTH}
               className="min-h-11 w-32 rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
             />
           </label>

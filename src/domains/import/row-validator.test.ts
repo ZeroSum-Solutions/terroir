@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mapHeader, validateFields, validateRow } from "./row-validator";
-import { MAX_QUANTITY, MAX_UNIT_COST } from "./constants";
+import { MAX_FIELD_LENGTH, MAX_QUANTITY, MAX_UNIT_COST } from "./constants";
 
 const HEADER = ["Producer", "Wine", "Vintage", "Qty", "Unit Cost"];
 const FULL_HEADER = [
@@ -233,6 +233,23 @@ describe("validateFields — the shared core an inline-edit UI re-validates thro
     expect(result.state).toBe("error");
     if (result.state !== "error") return;
     expect(result.errors.some((e) => e.field === "quantity")).toBe(true);
+  });
+
+  // Sol audit (2026-08-27) finding 4: an over-length value must be a
+  // normal per-row field error here — the SHARED gate both the CSV path
+  // and an inline row-fix override go through — never left to only the
+  // Zod request-schema boundary (which would 400 the whole request
+  // instead of just this row).
+  it("rejects a field longer than MAX_FIELD_LENGTH with a per-row field error", () => {
+    const result = validateFields({ producer: "P", name: "x".repeat(MAX_FIELD_LENGTH + 1), quantity: "1", unit_cost: "10" });
+    expect(result.state).toBe("error");
+    if (result.state !== "error") return;
+    expect(result.errors.some((e) => e.field === "name")).toBe(true);
+  });
+
+  it("accepts a field exactly at MAX_FIELD_LENGTH", () => {
+    const result = validateFields({ producer: "P", name: "x".repeat(MAX_FIELD_LENGTH), quantity: "1", unit_cost: "10" });
+    expect(result.state).toBe("valid");
   });
 });
 

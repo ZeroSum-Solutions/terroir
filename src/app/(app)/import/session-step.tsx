@@ -190,9 +190,21 @@ export async function planChunkedPreview(
     perChunk.push({ index: chunkEntry.index, startRow: chunkEntry.startRow, endRow: chunkEntry.endRow, summary: chunkSummary });
     for (const key of Object.keys(summary) as (keyof PreviewSummary)[]) summary[key] += chunkSummary[key];
     for (const row of chunkRows) {
-      // rowNumber is local to this chunk's own submitted file (1 = this
-      // chunk's first data row) — convert to the row number a human would
-      // see in the ORIGINAL file.
+      // Sol audit (2026-08-27) finding 6: row.rowNumber is this chunk's
+      // own DENSE data-row count exactly as the server (buildImportPreview)
+      // assigns it — 1 = this chunk's first NON-BLANK data row, because
+      // parseCsv silently drops blank lines before numbering anything.
+      // chunkEntry.startRow, by contrast, counts every record INCLUDING
+      // blanks (buildChunkPlan / csv-splitter.ts) — so `startRow - 1 +
+      // row.rowNumber` is NOT guaranteed to equal this row's true physical
+      // line number in the original file whenever a blank record precedes
+      // it within this same chunk. Read the result as "row N of this
+      // chunk's own data rows," never as an exact original-file line
+      // count. What it MUST stay exact for is round-tripping through
+      // localizeRowOverrides back to this same dense local row number
+      // (`globalRowNumber - chunk.startRow + 1 === row.rowNumber`, which
+      // holds regardless of blanks) — that's the only property an inline
+      // fix actually depends on to land on the right row.
       if (row.rowState === "error") {
         errorRows.push({ rowNumber: chunkEntry.startRow - 1 + row.rowNumber, errors: row.errors, rawText: row.rawText });
       }

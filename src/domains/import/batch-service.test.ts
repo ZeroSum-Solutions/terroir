@@ -305,6 +305,44 @@ describe("confirmImportBatch", () => {
       expect(new Set(captured).size).toBe(3);
     });
 
+    // Sol audit (2026-08-27) finding 2: an earlier version hashed
+    // SHA256(fileBuffer || tag || overridesJson) — one hash over a
+    // concatenation, which a crafted bare file's bytes could be made to
+    // equal, colliding with a real overridden batch's digest. The fix
+    // hashes the file and the canonical overrides JSON SEPARATELY and
+    // joins them with a namespaced, colon-bearing prefix that no bare hex
+    // digest can ever equal — this pins the resulting FORMAT, not just
+    // digest inequality (already covered by the test above).
+    it("formats an overrides-bearing digest so it can never equal ANY bare-file digest, by construction", async () => {
+      const captured: string[] = [];
+      const supabase = {
+        rpc: makeRpc({
+          match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+          create_import_batch: (args) => {
+            captured.push((args as { p_content_sha256: string }).p_content_sha256);
+            return { data: { batchId: BATCH_ID }, error: null };
+          },
+        }),
+      };
+      const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+
+      await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+        rowOverrides: { "1": { quantity: "12" } },
+      });
+
+      const overridesDigest = captured[0];
+      // A bare (no-overrides) digest is ALWAYS exactly 64 lowercase hex
+      // characters — this format can never match that shape, so no bare
+      // file's bytes, however crafted, can ever produce the same digest
+      // as an overridden batch's.
+      expect(overridesDigest).toMatch(/^overrides-v1:[0-9a-f]{64}:[0-9a-f]{64}$/);
+      expect(/^[0-9a-f]{64}$/.test(overridesDigest)).toBe(false);
+      // The trailing 64 hex chars are exactly the bare file's own digest
+      // — a human/tool can still recover "which file" from the string.
+      const fileHex = createHash("sha256").update(file).digest("hex");
+      expect(overridesDigest.endsWith(`:${fileHex}`)).toBe(true);
+    });
+
     it("hashes identically for the same overrides regardless of client-side key order (resume still works)", async () => {
       const captured: string[] = [];
       const supabase = {
@@ -329,6 +367,102 @@ describe("confirmImportBatch", () => {
 
       expect(captured[0]).toBe(captured[1]);
     });
+  });
+});
+
+// Sol audit (2026-08-27) finding 1: the (session_id, chunk_index)
+// conflict fallback used to resume whatever batch already held that
+// chunk slot without ever checking its stored content_sha256 — so a
+// retry that also carries EDITED overrides (a different effective
+// content) would silently confirm the OLD batch with the OLD values.
+describe("confirmImportBatch — session-chunk conflict path (Sol audit finding 1)", () => {
+  const SESSION_ID = "session-conflict";
+
+  /** Simulates create_import_batch raising 23505 on the (session_id,
+   * chunk_index) unique index (never on content_sha256 — the byHash
+   * lookup below always misses first, exactly like a real retry with
+   * DIFFERENT overrides, whose digest is necessarily new). The first
+   * `.from("import_batches")` call is findDuplicateBatch's byHash lookup
+   * (always empty here); the second is its (session_id, chunk_index)
+   * fallback, which returns the batch already sitting in that slot with
+   * `storedContentSha256`. */
+  function conflictSupabase(storedContentSha256: string) {
+    let call = 0;
+    const from = vi.fn((table: string) => {
+      if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
+      call += 1;
+      const thisCall = call;
+      return {
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              neq: () => ({
+                maybeSingle: async () =>
+                  thisCall === 1
+                    ? { data: null, error: null }
+                    : {
+                        data: { id: BATCH_ID, status: "created", session_id: SESSION_ID, content_sha256: storedContentSha256 },
+                        error: null,
+                      },
+              }),
+            }),
+          }),
+        }),
+      };
+    });
+    return {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+        create_import_batch: () => ({
+          data: null,
+          error: { code: "23505", message: 'duplicate key value violates unique constraint "import_batches_session_chunk_idx"' },
+        }),
+        count_import_batch_rows: () => ({
+          data: [{ total: 1, applied: 0, excluded: 0, pending: 0, eligible_not_applied: 1 }],
+          error: null,
+        }),
+      }),
+      from,
+    };
+  }
+
+  it("returns a typed chunk_content_mismatch error — never a silent resume — when the same (session, chunkIndex) already holds DIFFERENT content", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,0.9,24.50\n");
+    // Whatever this chunk slot was confirmed with before — deliberately
+    // NOT this confirm's own digest, simulating a retry with edited
+    // overrides (a real content change).
+    const staleContentSha256 = "f".repeat(64);
+    const supabase = conflictSupabase(staleContentSha256);
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.part1.csv", file, {
+      sessionId: SESSION_ID,
+      chunkIndex: 1,
+      rowOverrides: { "1": { quantity: "6" } },
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "chunk_content_mismatch" } });
+  });
+
+  it("still resumes normally when the same (session, chunkIndex) holds the SAME content (an idempotent retry, not an edit)", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,0.9,24.50\n");
+    const rowOverrides = { "1": { quantity: "6" } };
+    const canonicalJson = canonicalizeRowOverrides(rowOverrides);
+    if (canonicalJson === null) throw new Error("expected a non-null canonical overrides JSON");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const overridesHex = createHash("sha256").update(canonicalJson).digest("hex");
+    // Mirrors batch-service.ts's own digest format exactly — the same
+    // digest confirmImportBatch computes internally for this file + these
+    // exact overrides.
+    const expectedContentSha256 = `overrides-v1:${overridesHex}:${fileHex}`;
+    const supabase = conflictSupabase(expectedContentSha256);
+
+    const result = await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.part1.csv", file, {
+      sessionId: SESSION_ID,
+      chunkIndex: 1,
+      rowOverrides,
+    });
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: true, batchId: BATCH_ID, status: "created", sessionId: SESSION_ID });
   });
 });
 

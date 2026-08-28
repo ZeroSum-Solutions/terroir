@@ -197,4 +197,72 @@ describe("POST /api/import/batches", () => {
     expect(response.status).toBe(400);
     expect(mockConfirmImportBatch).not.toHaveBeenCalled();
   });
+
+  // Sol audit (2026-08-27) finding 3: row-key validation used to fail
+  // OPEN — "01"/"0" were accepted by the schema then silently mismatched
+  // preview's own String(rowNumber) lookup ("1", never "01"), and
+  // "__proto__" reduced to {} with no error at all (zod's z.record()
+  // silently drops it rather than rejecting it). Every one of these must
+  // now 400 instead.
+  it.each([["0"], ["01"], ["007"], ["__proto__"]])(
+    "rejects the non-canonical rowOverrides row index %j with a 400, not a silent drop",
+    async (key) => {
+      allow();
+      const response = await POST(
+        multipartRequest(new File(["producer,name,quantity\nA,B,1"], "cellar.csv", { type: "text/csv" }), {
+          rowOverrides: JSON.stringify({ [key]: { quantity: "1" } }),
+        }),
+      );
+      expect(response.status).toBe(400);
+      expect(mockConfirmImportBatch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts a canonical positive-integer rowOverrides row index", async () => {
+    allow();
+    mockConfirmImportBatch.mockResolvedValue({
+      ok: true,
+      alreadyExists: false,
+      batchId: "batch-1",
+      totalRows: 1,
+      summary: { totalRows: 1 },
+    });
+    const response = await POST(
+      multipartRequest(new File(["producer,name,quantity\nA,B,0.9"], "cellar.csv", { type: "text/csv" }), {
+        rowOverrides: JSON.stringify({ "10": { quantity: "1" } }),
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(mockConfirmImportBatch).toHaveBeenCalledWith(
+      expect.anything(),
+      "restaurant-a",
+      "user-a",
+      "cellar.csv",
+      expect.any(Buffer),
+      expect.objectContaining({ rowOverrides: { "10": { quantity: "1" } } }),
+    );
+  });
+
+  // Sol audit (2026-08-27) finding 4: an over-length override value must
+  // never 400 the whole request — validateFields (shared client/server
+  // logic) turns it into a normal per-row field error instead, so confirm
+  // still creates the batch (with that one row as an error row, exactly
+  // like any other invalid override).
+  it("does not reject the whole request for an over-MAX_FIELD_LENGTH override value", async () => {
+    allow();
+    mockConfirmImportBatch.mockResolvedValue({
+      ok: true,
+      alreadyExists: false,
+      batchId: "batch-1",
+      totalRows: 1,
+      summary: { totalRows: 1 },
+    });
+    const response = await POST(
+      multipartRequest(new File(["producer,name,quantity\nA,B,1"], "cellar.csv", { type: "text/csv" }), {
+        rowOverrides: JSON.stringify({ "1": { name: "x".repeat(2001) } }),
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(mockConfirmImportBatch).toHaveBeenCalled();
+  });
 });

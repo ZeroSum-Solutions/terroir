@@ -21,12 +21,13 @@ import {
   type CanonicalHeader,
 } from "./constants";
 
-// A fixed, non-file-derived separator between the raw file bytes and the
-// canonical overrides JSON folded into content_sha256 (see
-// confirmImportBatch's own comment) — no real CSV upload's bytes could
-// ever end with this exact literal, so an overrides hash can never
-// collide with a plain file hash by coincidence of content.
-const OVERRIDES_HASH_TAG = "terroir-import-row-overrides-v1:";
+// Namespace prefix for an overrides-bearing content_sha256 (see
+// confirmImportBatch's own comment for the full format and why). Contains
+// characters (":" ) that never appear in a bare hex sha256 digest, so a
+// namespaced digest can never be confused with — or collide with — a
+// bare-file digest by construction, not by hoping no file's bytes happen
+// to look like one.
+const OVERRIDES_DIGEST_PREFIX = "overrides-v1:";
 
 /** Stable-key-order JSON of a rowOverrides payload, or null when there is
  * nothing to fold into content_sha256 — undefined, or every row's
@@ -159,18 +160,34 @@ export async function confirmImportBatch(
   // before this feature existed, and the overwhelming common case going
   // forward) must hash to EXACTLY the bare-file digest, unchanged, so
   // every content_sha256 already in the database keeps resolving.
+  //
+  // Sol audit (2026-08-27) finding 2: an EARLIER version of this hashed
+  // SHA256(fileBuffer || tag || overridesJson) — one hash over the
+  // CONCATENATION of file bytes and the overrides blob. That is
+  // ambiguous: a crafted bare file (no overrides at all) whose own bytes
+  // happen to equal `<some other file's bytes><tag><that file's overrides
+  // JSON>` hashes to the exact same digest as that other, legitimately
+  // overridden batch — a real collision, not merely a theoretical one
+  // (the auditor constructed one). Concatenating into one hash INPUT can
+  // never be made safe by picking a "safer" separator; the fix is to
+  // never let a bare-file digest and an overrides-bearing digest share
+  // the same STRING FORMAT at all. So: hash the file and the canonical
+  // overrides JSON SEPARATELY, then join them with OVERRIDES_DIGEST_PREFIX
+  // (contains ":", which never appears in a bare hex digest) into a
+  // string that cannot equal any bare 64-char-hex digest by construction
+  // — not by hoping no file's bytes happen to collide. content_sha256 is
+  // `text` in the DB (supabase/schema.snapshot.sql), not a fixed-length
+  // column, so there is no length constraint forcing this into 64 hex
+  // characters; the readable, unambiguous form is used instead.
   // canonicalizeRowOverrides fixes key order (numeric row order, then
   // CANONICAL_HEADERS field order) so one override SET always hashes
-  // identically regardless of client-side object key order, and the
-  // separator tag is a fixed, non-file-derived string so a pathological
-  // file whose own trailing bytes happen to resemble an overrides blob
-  // can never collide with a real override hash.
+  // identically regardless of client-side object key order.
   const overridesCanonicalJson = canonicalizeRowOverrides(options.rowOverrides);
-  const hasher = createHash("sha256").update(fileBuffer);
-  if (overridesCanonicalJson !== null) {
-    hasher.update(OVERRIDES_HASH_TAG + overridesCanonicalJson);
-  }
-  const contentSha256 = hasher.digest("hex");
+  const fileDigestHex = createHash("sha256").update(fileBuffer).digest("hex");
+  const contentSha256 =
+    overridesCanonicalJson === null
+      ? fileDigestHex
+      : `${OVERRIDES_DIGEST_PREFIX}${createHash("sha256").update(overridesCanonicalJson).digest("hex")}:${fileDigestHex}`;
 
   const rowsPayload: RowPayload[] = preview.rows.map((row) => ({
     row_number: row.rowNumber,
@@ -231,7 +248,19 @@ export async function confirmImportBatch(
  * must be referring to — either a content_sha256 match (works with or
  * without a session) or, failing that, a (session_id, chunk_index) match.
  * Returns null only if neither lookup finds anything, which the caller
- * treats as "fail loudly" rather than silently swallowing the conflict. */
+ * treats as "fail loudly" rather than silently swallowing the conflict.
+ *
+ * Sol audit (2026-08-27) finding 1: the (session_id, chunk_index) fallback
+ * used to resume whatever batch already held that chunk slot WITHOUT ever
+ * checking whether its stored content_sha256 matches this confirm's own
+ * digest — so a retry that ALSO carries edited row overrides (a different
+ * effective content, thus a different digest) would silently resume the
+ * OLD batch with the OLD values, discarding the operator's fix with no
+ * signal at all. The two lookups can now disagree — the same
+ * (session_id, chunk_index) slot but a different content_sha256 — exactly
+ * when a chunk was confirmed once, then re-submitted with different
+ * overrides before ever being reverted. That is reported as a distinct,
+ * typed error rather than treated as a resume. */
 async function findDuplicateBatch(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
@@ -251,12 +280,27 @@ async function findDuplicateBatch(
   if (!match && options.sessionId && options.chunkIndex !== undefined) {
     const { data: byChunk } = await supabase
       .from("import_batches")
-      .select("id, status, session_id")
+      .select("id, status, session_id, content_sha256")
       .eq("session_id", options.sessionId)
       .eq("chunk_index", options.chunkIndex)
       .neq("status", "reverted")
       .maybeSingle();
-    match = byChunk as { id: string; status: string; session_id: string | null } | null;
+    const chunkMatch = byChunk as
+      | { id: string; status: string; session_id: string | null; content_sha256: string | null }
+      | null;
+
+    if (chunkMatch && chunkMatch.content_sha256 !== contentSha256) {
+      return {
+        ok: false,
+        error: {
+          code: "chunk_content_mismatch",
+          message:
+            `Chunk ${options.chunkIndex} of this import session was already confirmed with different content ` +
+            "or row fixes. Revert that import before re-uploading a corrected version of this chunk.",
+        },
+      };
+    }
+    match = chunkMatch;
   }
 
   if (!match) return null;
