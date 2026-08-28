@@ -36,6 +36,14 @@ export type PreviewRow = {
   lwinStatus: "matched" | "unmatched";
   lwinId: string | null;
   lwinScore: number | null;
+  /** Item 2 (per-row LWIN match visibility): the catalog's own display_name
+   * for lwinId, so the operator can SEE what a match actually claims this
+   * wine is, not just an opaque id + a score — the gap a Sol audit BLOCKed
+   * PR #133 (variant matching) over: at a 77% match rate, a silent wrong
+   * match is the bigger risk than a low match rate ever was. null for an
+   * unmatched row, or a matched row whose lwin_catalog row has since
+   * disappeared (see the lookup below — degrades, never fails preview). */
+  lwinDisplayName: string | null;
   costStatus: "present" | "missing";
   resolution: "auto" | "pending" | "include" | "exclude";
   /** P3 §1.5 tier 1: row numbers of other rows in this same upload that
@@ -138,6 +146,26 @@ export async function buildImportPreview(
     if (!current || match.score > current.score) matches.set(rowIdx, match);
   }
 
+  // Item 2 (per-row LWIN match visibility): one lookup for every distinct
+  // matched lwin_id, rather than one per row — lwin_catalog is RLS-readable
+  // by any authenticated user (schema.snapshot.sql), and this is the FIRST
+  // time application code queries it outside match_lwin_bulk's own SQL. A
+  // catalog row that has since disappeared (or the lookup itself failing)
+  // degrades that row's display name to null — the raw lwinId/lwinScore
+  // this product actually writes are unaffected either way, so a lookup
+  // failure never fails the whole preview.
+  const distinctLwinIds = Array.from(new Set(Array.from(matches.values(), (m) => m.lwinId)));
+  const displayNames = new Map<string, string>();
+  if (distinctLwinIds.length > 0) {
+    const { data: catalogRows } = await supabase
+      .from("lwin_catalog")
+      .select("lwin_id, display_name")
+      .in("lwin_id", distinctLwinIds);
+    for (const row of (catalogRows ?? []) as { lwin_id: string; display_name: string }[]) {
+      displayNames.set(row.lwin_id, row.display_name);
+    }
+  }
+
   const rows: PreviewRow[] = validated.map((row, idx) => {
     const rowNumber = idx + 1;
 
@@ -151,6 +179,7 @@ export async function buildImportPreview(
         lwinStatus: "unmatched",
         lwinId: null,
         lwinScore: null,
+        lwinDisplayName: null,
         costStatus: "present",
         resolution: "exclude",
         mergedFromRowNumbers: [],
@@ -172,6 +201,7 @@ export async function buildImportPreview(
       lwinStatus,
       lwinId: match?.lwinId ?? null,
       lwinScore: match?.score ?? null,
+      lwinDisplayName: match ? (displayNames.get(match.lwinId) ?? null) : null,
       costStatus,
       resolution: needsResolution ? "pending" : "auto",
       mergedFromRowNumbers: [],

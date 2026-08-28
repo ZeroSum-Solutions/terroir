@@ -27,13 +27,30 @@ import {
 // check for what happens if contamination ever actually fills this.
 const LIVE_BATCH_LOOKUP_LIMIT = 20;
 
-// Namespace prefix for an overrides-bearing content_sha256 (see
+// Namespace STEM for an overrides/rejections-bearing content_sha256 (see
 // confirmImportBatch's own comment for the full format and why). Contains
 // characters (":" ) that never appear in a bare hex sha256 digest, so a
 // namespaced digest can never be confused with — or collide with — a
 // bare-file digest by construction, not by hoping no file's bytes happen
 // to look like one.
-const OVERRIDES_DIGEST_PREFIX = "overrides-v1:";
+//
+// Item 2 (per-row LWIN match visibility/rejection): this used to be the
+// full literal prefix "overrides-v1:". Generalized to the STEM ("overrides-v",
+// no version digit) with the version number appended at each construction
+// site instead, so a second namespace (v2, for a confirm that carries
+// rejectedLwinRows — see the digest-construction comment below) can be
+// recognized everywhere a v1 digest already is, without silently missing
+// it. Every place that used to hardcode the v1 literal now goes through
+// this same stem:
+//   - isWellFormedDigestForFile / extractFileDigestHex: their regexes now
+//     match ANY version digit after the stem, not just "1".
+//   - findLiveBatchesByUnderlyingFile's and findSiblingWithAppliedRows'
+//     own `.or() ... .like.` patterns: unchanged in SHAPE
+//     (`${STEM}%:${fileDigestHex}`) — the "%" wildcard already had to
+//     absorb the sha256 hex blob, so it transparently absorbs "1:<hex>" or
+//     "2:<hex>" too. No call-site change was needed there, only this
+//     constant's value.
+const OVERRIDES_DIGEST_STEM = "overrides-v";
 
 /** Stable-key-order JSON of a rowOverrides payload, or null when there is
  * nothing to fold into content_sha256 — undefined, or every row's
@@ -62,6 +79,40 @@ export function canonicalizeRowOverrides(overrides: RowOverrides | undefined): s
   return JSON.stringify(canonical);
 }
 
+/** Item 2 — the rejectedLwinRows counterpart to canonicalizeRowOverrides
+ * above: stable-order JSON of the rejected-match row-number SET, or null
+ * when there is nothing to fold into content_sha256 (undefined, or empty
+ * after dedup) — mirroring canonicalizeRowOverrides' own "a no-op collapses
+ * to null" contract, so a no-op rejection list never changes a batch's
+ * identity either. Exported so batch-service.test.ts can pin its exact
+ * output independent of the hash itself. */
+export function canonicalizeRejectedLwinRows(rejectedLwinRows: string[] | undefined): string | null {
+  if (!rejectedLwinRows) return null;
+  const rowNumbers = Array.from(new Set(rejectedLwinRows.map(Number)))
+    .filter((n) => Number.isSafeInteger(n) && n >= 1)
+    .sort((a, b) => a - b);
+  if (rowNumbers.length === 0) return null;
+  return JSON.stringify(rowNumbers);
+}
+
+/** Item 2 — folds BOTH canonicalized extras (row-fix overrides, possibly
+ * absent, and the rejected-LWIN row set) into ONE deterministic JSON blob
+ * for the v2 (rejections-bearing) content_sha256 namespace. Key order is
+ * fixed by this object literal's own source order (never client-
+ * controlled), so this hashes identically regardless of which extra
+ * arrived first over the wire. Exported so batch-service.test.ts can pin
+ * its exact output independent of the hash itself. */
+export function canonicalizeConfirmExtras(
+  overridesCanonicalJson: string | null,
+  rejectedLwinRowsCanonicalJson: string | null,
+): string {
+  return JSON.stringify({
+    overrides: overridesCanonicalJson === null ? null : (JSON.parse(overridesCanonicalJson) as unknown),
+    rejectedLwinRows:
+      rejectedLwinRowsCanonicalJson === null ? null : (JSON.parse(rejectedLwinRowsCanonicalJson) as unknown),
+  });
+}
+
 function summarize(rows: PreviewRow[]) {
   return {
     totalRows: rows.length,
@@ -73,6 +124,79 @@ function summarize(rows: PreviewRow[]) {
     readyToApplyRows: rows.filter((r) => r.resolution === "auto").length,
     pendingResolutionRows: rows.filter((r) => r.resolution === "pending").length,
   };
+}
+
+/** Item 2 (per-row LWIN match visibility/rejection) — a rejected match
+ * behaves EXACTLY like a row that never matched at all: lwinStatus/lwinId/
+ * lwinScore/lwinDisplayName null out, and resolution recomputes through
+ * the SAME rule buildImportPreview itself uses (an unmatched row always
+ * needs resolution) so the row goes through the ordinary "Include anyway"/
+ * "Exclude" gate every unmatched row already goes through — never a
+ * separate auto-apply path. No SQL change is needed for this: apply_
+ * import_batch_chunk (0108) independently re-gates on `lwin_score is not
+ * null and lwin_score >= 0.6`, so a nulled lwin_score alone already makes
+ * this row un-appliable via the LWIN path.
+ *
+ * A row not currently 'matched' (never matched, or already excluded as an
+ * error row) is a no-op — rejecting a match that isn't there has nothing
+ * to undo. This also makes a REJECTION of a row an operator's override
+ * happened to change into something else at confirm time (a different
+ * effective producer/name re-matching, or matching nothing) harmless
+ * rather than an error: rejection is about the row's CURRENT match, not a
+ * promise the same match still exists.
+ *
+ * Pure — returns a NEW array, never mutates its input (this codebase's
+ * immutability convention), and returns the SAME array reference when
+ * there is nothing to reject so an empty rejection set costs nothing.
+ * Exported so batch-service.test.ts can pin this transformation directly. */
+export function applyLwinRejections(rows: PreviewRow[], rejectedRowNumbers: Set<number>): PreviewRow[] {
+  if (rejectedRowNumbers.size === 0) return rows;
+  return rows.map((row) => {
+    if (row.lwinStatus !== "matched" || !rejectedRowNumbers.has(row.rowNumber)) return row;
+    return {
+      ...row,
+      lwinStatus: "unmatched",
+      lwinId: null,
+      lwinScore: null,
+      lwinDisplayName: null,
+      resolution: "pending",
+    };
+  });
+}
+
+type RejectedLwinRowsCheck =
+  | { ok: true; rowNumbers: Set<number> }
+  | { ok: false; error: { code: string; message: string } };
+
+/** Item 2's dynamic bounds check — the rejectedLwinRows counterpart to
+ * buildImportPreview's own rowOverrides bounds check (preview-service.ts).
+ * Deliberately checked against the rowNumbers actually PRESENT in `rows`
+ * (post intra-batch-duplicate-merge — see mergeIntraBatchDuplicates,
+ * dedup-key.ts) rather than a static row-count ceiling: a merge-absorbed
+ * row's number never appears standalone in the preview the operator saw
+ * (it only ever shows survivor rows), so any well-formed operator
+ * submission can only ever name a survivor's own rowNumber — an index
+ * that no longer exists post-merge is either a stale/mismatched client
+ * reference or a hand-crafted request, and either way is never silently
+ * ignored (matching buildImportPreview's own rowOverrides discipline). */
+function checkRejectedLwinRows(rejectedLwinRows: string[] | undefined, rows: PreviewRow[]): RejectedLwinRowsCheck {
+  if (!rejectedLwinRows || rejectedLwinRows.length === 0) return { ok: true, rowNumbers: new Set() };
+  const validRowNumbers = new Set(rows.map((r) => r.rowNumber));
+  const rowNumbers = new Set<number>();
+  for (const key of rejectedLwinRows) {
+    const rowNumber = Number(key);
+    if (!Number.isInteger(rowNumber) || !validRowNumbers.has(rowNumber)) {
+      return {
+        ok: false,
+        error: {
+          code: "invalid_rejected_lwin_row",
+          message: `Row ${key} does not exist in this file's preview (it has ${rows.length} row(s) after merging duplicates).`,
+        },
+      };
+    }
+    rowNumbers.add(rowNumber);
+  }
+  return { ok: true, rowNumbers };
 }
 
 export type ConfirmBatchOptions = {
@@ -98,6 +222,16 @@ export type ConfirmBatchOptions = {
    * folded into content_sha256 below — see the hash computation's own
    * comment for why. */
   rowOverrides?: RowOverrides;
+  /** Item 2 (per-row LWIN match visibility/rejection) — row numbers (this
+   * SAME file's own preview numbering, post intra-batch-duplicate-merge —
+   * see checkRejectedLwinRows' own comment) the operator rejected a LWIN
+   * match on. Applied once to the re-derived preview's own rows, via
+   * applyLwinRejections, before BOTH the persisted rowsPayload and the
+   * returned summary are built — a rejected row imports with no LWIN link
+   * at all, exactly like a row that never matched (see applyLwinRejections'
+   * own comment). Also folded into content_sha256 below, in its own v2
+   * namespace — see the digest-construction comment for why. */
+  rejectedLwinRows?: string[];
   /** Merge-integration note (item 5, PR #135): revertImportBatch now takes
    * a service-role client to run its orphan-wine/LWIN cleanup, and
    * confirmImportBatch's own selfRevertAndRetry (below) calls
@@ -196,6 +330,18 @@ export async function confirmImportBatch(
     return { ok: false, error: { code: "empty_file", message: "CSV has no data rows." } };
   }
 
+  // Item 2 (per-row LWIN match visibility/rejection): bounds-check, then
+  // apply, the operator's rejected-match set ONCE here — before BOTH the
+  // persisted rowsPayload and the returned summary are built below, so the
+  // two can never disagree about which rows carry a LWIN link (decision 5,
+  // item-2 brief). `rows` (not `preview.rows`) is used for everything past
+  // this point.
+  const rejectedCheck = checkRejectedLwinRows(options.rejectedLwinRows, preview.rows);
+  if (!rejectedCheck.ok) {
+    return { ok: false, error: rejectedCheck.error };
+  }
+  const rows = applyLwinRejections(preview.rows, rejectedCheck.rowNumbers);
+
   // content_sha256 identity, extended for inline row-fix overrides: an
   // override changes the EFFECTIVE content of this confirm, so two
   // requests for byte-identical file content but different overrides
@@ -218,7 +364,7 @@ export async function confirmImportBatch(
   // never be made safe by picking a "safer" separator; the fix is to
   // never let a bare-file digest and an overrides-bearing digest share
   // the same STRING FORMAT at all. So: hash the file and the canonical
-  // overrides JSON SEPARATELY, then join them with OVERRIDES_DIGEST_PREFIX
+  // overrides JSON SEPARATELY, then join them with the OVERRIDES_DIGEST_STEM
   // (contains ":", which never appears in a bare hex digest) into a
   // string that cannot equal any bare 64-char-hex digest by construction
   // — not by hoping no file's bytes happen to collide. content_sha256 is
@@ -228,12 +374,42 @@ export async function confirmImportBatch(
   // canonicalizeRowOverrides fixes key order (numeric row order, then
   // CANONICAL_HEADERS field order) so one override SET always hashes
   // identically regardless of client-side object key order.
+  //
+  // Item 2 (per-row LWIN match visibility/rejection): rejectedLwinRows is a
+  // SECOND, independent thing that changes this confirm's effective
+  // content — two requests for the same file and the same (or no)
+  // overrides but DIFFERENT rejected matches must not collide as "the same
+  // upload" either, for the identical reason overrides don't (§2.2's
+  // resume/dedup logic would otherwise silently resume the wrong set of
+  // rejections). Three cases, by whether either extra is present:
+  //   - neither present  -> the bare fileDigestHex, byte-for-byte UNCHANGED
+  //     from before this feature existed.
+  //   - overrides only   -> `overrides-v1:<sha256(overridesJson)>:<fileDigestHex>`,
+  //     byte-for-byte UNCHANGED from before this feature existed — real
+  //     batches already exist in exactly this shape.
+  //   - rejections present (with or without overrides too) -> a NEW,
+  //     previously-unwritten `overrides-v2:<sha256(combinedJson)>:<fileDigestHex>`
+  //     namespace, folding both extras into one canonical blob
+  //     (canonicalizeConfirmExtras) so a confirm that changes EITHER one
+  //     hashes differently. Namespacing rejections onto v1 instead (rather
+  //     than minting v2) would make an overrides-only confirm and a
+  //     rejections-only confirm of the same file indistinguishable from
+  //     each other whenever their combined JSON happened to canonicalize
+  //     the same length — v2 avoids that ambiguity by construction, at the
+  //     cost of one more namespace every downstream reader must recognize
+  //     (see OVERRIDES_DIGEST_STEM's own comment for where).
   const overridesCanonicalJson = canonicalizeRowOverrides(options.rowOverrides);
+  const rejectedLwinRowsCanonicalJson = canonicalizeRejectedLwinRows(options.rejectedLwinRows);
   const fileDigestHex = createHash("sha256").update(fileBuffer).digest("hex");
-  const contentSha256 =
-    overridesCanonicalJson === null
-      ? fileDigestHex
-      : `${OVERRIDES_DIGEST_PREFIX}${createHash("sha256").update(overridesCanonicalJson).digest("hex")}:${fileDigestHex}`;
+  let contentSha256: string;
+  if (overridesCanonicalJson === null && rejectedLwinRowsCanonicalJson === null) {
+    contentSha256 = fileDigestHex;
+  } else if (rejectedLwinRowsCanonicalJson === null) {
+    contentSha256 = `${OVERRIDES_DIGEST_STEM}1:${createHash("sha256").update(overridesCanonicalJson!).digest("hex")}:${fileDigestHex}`;
+  } else {
+    const combinedCanonicalJson = canonicalizeConfirmExtras(overridesCanonicalJson, rejectedLwinRowsCanonicalJson);
+    contentSha256 = `${OVERRIDES_DIGEST_STEM}2:${createHash("sha256").update(combinedCanonicalJson).digest("hex")}:${fileDigestHex}`;
+  }
 
   // Sol round-2 audit (2026-08-27) finding 2: overrides (or the lack of them)
   // namespace a confirm's content_sha256, so the DB's own (restaurant_id,
@@ -278,7 +454,7 @@ export async function confirmImportBatch(
     return toAlreadyExistsResult(supabase, preCheck.match);
   }
 
-  const rowsPayload: RowPayload[] = preview.rows.map((row) => ({
+  const rowsPayload: RowPayload[] = rows.map((row) => ({
     row_number: row.rowNumber,
     raw: row.raw as unknown as Json,
     row_state: row.rowState,
@@ -295,7 +471,7 @@ export async function confirmImportBatch(
     p_restaurant_id: restaurantId,
     p_created_by: userId,
     p_filename: filename,
-    p_total_rows: preview.rows.length,
+    p_total_rows: rows.length,
     p_rows: rowsPayload,
     p_session_id: options.sessionId ?? null,
     p_chunk_index: options.chunkIndex ?? null,
@@ -437,8 +613,8 @@ export async function confirmImportBatch(
     ok: true,
     alreadyExists: false,
     batchId,
-    totalRows: preview.rows.length,
-    summary: summarize(preview.rows),
+    totalRows: rows.length,
+    summary: summarize(rows),
   };
 }
 
@@ -813,18 +989,25 @@ type FindLiveBatchResult =
  * express "contains fileDigestHex as a LIKE match," which also matches a
  * malformed, multi-colon content_sha256 value engineered to contain the
  * file's own digest as a trailing substring in the right position. Every
- * candidate row is re-checked here against the two EXACT formats
+ * candidate row is re-checked here against the EXACT formats
  * content_sha256 can ever legitimately hold (see confirmImportBatch's own
- * digest-construction comment) before being treated as a real match. */
+ * digest-construction comment) before being treated as a real match.
+ *
+ * Item 2: the regex's version segment (`[0-9]+`) recognizes ANY namespace
+ * version after OVERRIDES_DIGEST_STEM, not just "1" — a hardcoded "1:"
+ * here would silently stop recognizing a v2 (rejections-bearing) digest as
+ * well-formed, which would fall through isWellFormedDigestForFile's own
+ * callers to "not this file," making a rejection-bearing confirm invisible
+ * to duplicate/race reconciliation entirely. */
 function isWellFormedDigestForFile(contentSha256: string | null, fileDigestHex: string): boolean {
   if (!contentSha256) return false;
   if (contentSha256 === fileDigestHex) return true;
-  return new RegExp(`^${OVERRIDES_DIGEST_PREFIX}[0-9a-f]{64}:${fileDigestHex}$`).test(contentSha256);
+  return new RegExp(`^${OVERRIDES_DIGEST_STEM}[0-9]+:[0-9a-f]{64}:${fileDigestHex}$`).test(contentSha256);
 }
 
 /** Round-7 audit finding 1: the trailing bare-file digest out of either a
  * bare content_sha256 (itself already the file digest) or a well-formed
- * overrides-v1-namespaced one — the same two shapes isWellFormedDigestForFile
+ * overrides/rejections-namespaced one — the same shapes isWellFormedDigestForFile
  * recognizes, in reverse. Used by findDuplicateBatch's 23505 fallback to
  * recover the fileDigestHex needed to route through the same
  * reconcileLiveBatchesForFile logic the pre-check uses, from a
@@ -832,10 +1015,13 @@ function isWellFormedDigestForFile(contentSha256: string | null, fileDigestHex: 
  * which always has fileDigestHex on hand directly from the raw file buffer).
  * Returns null only for a malformed value this product never actually
  * writes — the caller falls back to the pre-existing exact-match behavior
- * in that case, never throws. */
+ * in that case, never throws.
+ *
+ * Item 2: generalized the same way as isWellFormedDigestForFile above —
+ * `[0-9]+` recognizes any version, not just "1". */
 function extractFileDigestHex(contentSha256: string): string | null {
   if (/^[0-9a-f]{64}$/.test(contentSha256)) return contentSha256;
-  const match = new RegExp(`^${OVERRIDES_DIGEST_PREFIX}[0-9a-f]{64}:([0-9a-f]{64})$`).exec(contentSha256);
+  const match = new RegExp(`^${OVERRIDES_DIGEST_STEM}[0-9]+:[0-9a-f]{64}:([0-9a-f]{64})$`).exec(contentSha256);
   return match ? match[1] : null;
 }
 
@@ -916,12 +1102,17 @@ async function findLiveBatchesByUnderlyingFile(
     };
   }
 
+  // Item 2: OVERRIDES_DIGEST_STEM is the bare stem ("overrides-v", no
+  // version digit) — the "%" wildcard already has to absorb the sha256 hex
+  // blob, so it transparently absorbs "1:<hex>" or "2:<hex>" too. This LIKE
+  // pattern therefore matches BOTH namespace versions with no shape change
+  // here; only OVERRIDES_DIGEST_STEM's own value changed (see its comment).
   let query = supabase
     .from("import_batches")
     .select("id, status, session_id, chunk_index, content_sha256, created_at, filename")
     .eq("restaurant_id", restaurantId)
     .neq("status", "reverted")
-    .or(`content_sha256.eq.${fileDigestHex},content_sha256.like.${OVERRIDES_DIGEST_PREFIX}%:${fileDigestHex}`);
+    .or(`content_sha256.eq.${fileDigestHex},content_sha256.like.${OVERRIDES_DIGEST_STEM}%:${fileDigestHex}`);
 
   if (options.excludeSessionId) {
     // NULL-safe "not this session": a plain `.neq("session_id", id)` would
@@ -1261,13 +1452,20 @@ export async function findSiblingWithAppliedRows(
   const fileDigestHex = contentSha256 ? extractFileDigestHex(contentSha256) : null;
   if (!fileDigestHex) return { ok: true, conflictBatchId: null };
 
+  // Item 2: same OVERRIDES_DIGEST_STEM generalization as
+  // findLiveBatchesByUnderlyingFile's own identical `.or()` pattern above —
+  // this call site was NOT one of the three the item-2 brief named, but it
+  // hardcoded the exact same v1 literal and would otherwise have silently
+  // stopped recognizing a v2 (rejections-bearing) sibling's content_sha256
+  // as referring to this same underlying file, defeating the apply-time
+  // sibling-conflict guard for exactly the confirms this feature adds.
   const { data, error } = await supabase
     .from("import_batches")
     .select("id, content_sha256, import_batch_rows!inner(id)")
     .eq("restaurant_id", restaurantId)
     .neq("id", batchId)
     .eq("import_batch_rows.apply_status", "applied")
-    .or(`content_sha256.eq.${fileDigestHex},content_sha256.like.${OVERRIDES_DIGEST_PREFIX}%:${fileDigestHex}`)
+    .or(`content_sha256.eq.${fileDigestHex},content_sha256.like.${OVERRIDES_DIGEST_STEM}%:${fileDigestHex}`)
     .limit(5);
 
   if (error) {

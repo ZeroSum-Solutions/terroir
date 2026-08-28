@@ -130,3 +130,51 @@ export const RowOverridesFieldSchema = z
     return parsed;
   })
   .pipe(RowOverridesSchema.optional());
+
+// Item 2 (per-row LWIN match visibility/rejection): which matched rows the
+// operator has rejected — a boolean fact about a row, so it's modeled as a
+// SET of row indexes rather than a reserved key inside RowOverrideFieldsSchema
+// (that schema is .strict() over exactly the 12 canonical headers by design,
+// and no sentinel VALUE is safe — `producer: ""` is already meaningful).
+// Mirrors RowOverridesSchema's own index format exactly: same canonical
+// positive-integer regex (no leading zeros — see RowOverridesSchema's own
+// comment for why), same MAX_ROWS bound. The dynamic "does this row exist in
+// THIS upload" check is necessarily dynamic (same reasoning as
+// RowOverridesSchema) and happens in confirmImportBatch (batch-service.ts),
+// against the file's own post-merge row numbers.
+export const RejectedLwinRowsSchema = z
+  .array(z.string().regex(/^[1-9][0-9]*$/, "Row index must be a canonical positive whole number (no leading zeros)."))
+  .superRefine((rowNumbers, ctx) => {
+    if (rowNumbers.length > MAX_ROWS) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Cannot reject more than ${MAX_ROWS} rows.` });
+      return;
+    }
+    for (const key of rowNumbers) {
+      const n = Number(key);
+      if (!Number.isSafeInteger(n) || n < 1 || n > MAX_ROWS) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Row index ${key} is out of bounds.` });
+      }
+    }
+  });
+
+// Mirrors RowOverridesFieldSchema exactly: rejectedLwinRows arrives as a
+// JSON-string multipart field, parsed then piped through
+// RejectedLwinRowsSchema in one step. No __proto__ hardening is needed here
+// (unlike RowOverridesFieldSchema) — this is a JSON ARRAY, not an object
+// keyed by row index, so there is no key for "__proto__" to occupy.
+export const RejectedLwinRowsFieldSchema = z
+  .string()
+  .max(1_000_000)
+  .optional()
+  .transform((val, ctx) => {
+    if (val === undefined) return undefined;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(val);
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "rejectedLwinRows must be valid JSON." });
+      return z.NEVER;
+    }
+    return parsed;
+  })
+  .pipe(RejectedLwinRowsSchema.optional());

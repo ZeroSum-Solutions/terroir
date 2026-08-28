@@ -1386,6 +1386,135 @@ describe("PreviewStep — incremental error-row disclosure (Sol round-2 audit fi
   }
 });
 
+// Item 2 (per-row LWIN match visibility/rejection): a PR #133 audit (variant
+// LWIN matching lifted the match rate 29.6% -> 77.0%) BLOCKed on the UI
+// showing only an aggregate "LWIN matched" count — a wrong match applied
+// silently, and the higher the match rate, the more wrong matches. This
+// pins that each matched row's own catalog name + score render, and that
+// the reject toggle round-trips through onToggleLwinReject.
+describe("PreviewStep — matched-row visibility and rejection (item 2)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  it("renders each matched row's catalog display name and score", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [
+            { rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A Cuvee One 2020", lwinScore: 0.92 },
+          ],
+        })}
+      />,
+    );
+
+    expect(container.textContent).toContain("Matched wines (1)");
+    const item = rowItem(container, "Row 1");
+    expect(item.textContent).toContain("Domaine A Cuvee One 2020");
+    expect(item.textContent).toContain("0.92");
+    expect(findButton(item, "Reject match")).toBeTruthy();
+  });
+
+  it("falls back to an honest placeholder when the catalog row has since disappeared (lwinDisplayName null)", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({ matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: null, lwinScore: 0.5 }] })}
+      />,
+    );
+
+    expect(rowItem(container, "Row 1").textContent).toContain("Catalog entry (name unavailable)");
+  });
+
+  it("calls onToggleLwinReject with the row number when Reject match is clicked", async () => {
+    const toggled: number[] = [];
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [{ rowNumber: 3, lwinId: "LWIN003", lwinDisplayName: "Wine 3", lwinScore: 0.7 }],
+          onToggleLwinReject: (rowNumber) => toggled.push(rowNumber),
+        })}
+      />,
+    );
+
+    await click(findButton(container, "Reject match")!);
+    expect(toggled).toEqual([3]);
+  });
+
+  it("shows the rejected state and an Undo reject control once a row is in rejectedLwinRows", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.9 }],
+          rejectedLwinRows: new Set([1]),
+        })}
+      />,
+    );
+
+    const item = rowItem(container, "Row 1");
+    expect(item.textContent).toContain("Match rejected");
+    expect(item.textContent).not.toContain("Domaine A");
+    expect(findButton(item, "Undo reject")).toBeTruthy();
+    expect(findButton(item, "Reject match")).toBeFalsy();
+  });
+
+  it("renders nothing when matchedRows is omitted — every pre-existing caller keeps working unchanged", async () => {
+    const { container } = await mount(<PreviewStep {...baseProps()} />);
+    expect(container.textContent).not.toContain("Matched wines");
+  });
+
+  it("disables the reject toggle for a row whose chunk is already confirmed, with the same explanatory copy RowFixItem uses (Sol round-2 audit finding 1's reasoning)", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [
+            { rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.9 },
+            { rowNumber: 3, lwinId: "LWIN003", lwinDisplayName: "Domaine C", lwinScore: 0.8 },
+          ],
+          isRowLocked: (rowNumber) => rowNumber === 1,
+        })}
+      />,
+    );
+
+    const lockedItem = rowItem(container, "Row 1");
+    expect(findButton(lockedItem, "Reject match")!.disabled).toBe(true);
+    expect(lockedItem.textContent).toContain("Row already imported with this chunk — revert the import to change it.");
+
+    const unlockedItem = rowItem(container, "Row 3");
+    expect(findButton(unlockedItem, "Reject match")!.disabled).toBe(false);
+  });
+
+  it("disables the reject toggle while a confirm attempt is in flight (same freeze as RowFixItem's own inputs)", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          matchedRows: [{ rowNumber: 1, lwinId: "LWIN001", lwinDisplayName: "Domaine A", lwinScore: 0.9 }],
+          confirming: true,
+        })}
+      />,
+    );
+
+    expect(findButton(container, "Reject match")!.disabled).toBe(true);
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
+  }
+
+  async function click(element: HTMLElement) {
+    await act(async () => element.click());
+  }
+});
+
 // Round-5 audit finding 2: even with the server-side hardening (2a/2b),
 // there's a narrow residual — a batch reverting AFTER toAlreadyExistsResult's
 // fresh read but BEFORE the client acts on it. Resuming it is DATA-safe
@@ -1424,6 +1553,7 @@ describe("BatchStep — a resumed batch that reads as reverted is surfaced hones
           validation_errors: [],
           lwin_status: "matched",
           lwin_id: "lwin-1",
+          lwin_score: 0.9,
           cost_status: "present",
           resolution: "auto",
           manual_unit_cost: null,
@@ -1501,6 +1631,7 @@ describe("BatchStep — Revert is reachable for every live status, not only comp
           validation_errors: [],
           lwin_status: "matched",
           lwin_id: "lwin-1",
+          lwin_score: 0.9,
           cost_status: "present",
           resolution: "auto",
           manual_unit_cost: null,
@@ -1571,6 +1702,7 @@ describe("BatchStep — applyAll stops immediately on a reverted batchStatus (ro
           validation_errors: [],
           lwin_status: "matched",
           lwin_id: "lwin-1",
+          lwin_score: 0.9,
           cost_status: "present",
           resolution: "auto",
           manual_unit_cost: null,

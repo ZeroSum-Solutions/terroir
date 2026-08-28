@@ -5,14 +5,23 @@ function csv(rows: string) {
   return Buffer.from(`producer,name,vintage,quantity,unit_cost\n${rows}`);
 }
 
-function makeSupabase(matchRows: Array<{ idx: number; lwin_id: string | null; score: number | null }> = []) {
+function makeSupabase(
+  matchRows: Array<{ idx: number; lwin_id: string | null; score: number | null }> = [],
+  catalogRows: Array<{ lwin_id: string; display_name: string }> = [],
+) {
   const from = vi.fn();
   const insert = vi.fn();
   const update = vi.fn();
   const rpc = vi.fn().mockResolvedValue({ data: matchRows, error: null });
   return {
-    from: (...args: unknown[]) => {
-      from(...args);
+    from: (table: string, ...args: unknown[]) => {
+      from(table, ...args);
+      // Item 2: the display-name lookup's own table — a plain
+      // select().in() read, distinct from the insert/update-shaped stub
+      // every other table gets (this preview endpoint never writes).
+      if (table === "lwin_catalog") {
+        return { select: () => ({ in: () => Promise.resolve({ data: catalogRows, error: null }) }) };
+      }
       return { insert, update, select: () => ({ insert, update }) };
     },
     rpc,
@@ -27,17 +36,30 @@ function makeSupabase(matchRows: Array<{ idx: number; lwin_id: string | null; sc
 }
 
 describe("buildImportPreview", () => {
-  it("performs zero database writes and zero table reads — only a read-only RPC call", async () => {
+  it("performs zero database writes — only the read-only match RPC and a read-only display-name lookup", async () => {
     const supabase = makeSupabase([{ idx: 0, lwin_id: "LWIN001", score: 0.9 }]);
     await buildImportPreview(supabase, csv("Domaine A,Cuvee 1,2020,6,24.50\n"));
 
-    expect(supabase._from).not.toHaveBeenCalled();
+    // Item 2: buildImportPreview now also reads lwin_catalog (a
+    // display-name lookup, for the one row that actually matched) — a
+    // second read-only call, never a write. Both writer spies below are
+    // this test's real guarantee.
+    expect(supabase._from).toHaveBeenCalledWith("lwin_catalog");
     expect(supabase._insert).not.toHaveBeenCalled();
     expect(supabase._update).not.toHaveBeenCalled();
     expect(supabase.rpc).toHaveBeenCalledWith(
       "match_lwin_bulk",
       expect.objectContaining({ p_queries: expect.any(Array) }),
     );
+  });
+
+  it("performs zero table reads when nothing matched — the display-name lookup is skipped entirely", async () => {
+    const supabase = makeSupabase([{ idx: 0, lwin_id: null, score: null }]);
+    await buildImportPreview(supabase, csv("Domaine A,Cuvee 1,2020,6,24.50\n"));
+
+    expect(supabase._from).not.toHaveBeenCalled();
+    expect(supabase._insert).not.toHaveBeenCalled();
+    expect(supabase._update).not.toHaveBeenCalled();
   });
 
   it("returns a per-row preview with row numbers, LWIN status, and cost status", async () => {
@@ -177,6 +199,35 @@ describe("buildImportPreview", () => {
     expect(result.rows[1].rowState).toBe("error");
     expect(result.rows[1].raw.quantity).toBeNull();
     expect(result.rows[1].rawText.quantity).toBe("0.9");
+  });
+
+  describe("lwinDisplayName — item 2 per-row match visibility", () => {
+    it("surfaces the catalog display_name for a matched row", async () => {
+      const supabase = makeSupabase(
+        [{ idx: 0, lwin_id: "LWIN001", score: 0.95 }],
+        [{ lwin_id: "LWIN001", display_name: "Domaine A Cuvee One 2020" }],
+      );
+      const result = await buildImportPreview(supabase, csv("Domaine A,Cuvee 1,2020,6,24.50\n"));
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.rows[0]).toMatchObject({ lwinId: "LWIN001", lwinDisplayName: "Domaine A Cuvee One 2020" });
+    });
+
+    it("degrades to null when the matched lwin_id has no catalog row (never fails the preview)", async () => {
+      const supabase = makeSupabase([{ idx: 0, lwin_id: "LWIN001", score: 0.95 }], []);
+      const result = await buildImportPreview(supabase, csv("Domaine A,Cuvee 1,2020,6,24.50\n"));
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.rows[0]).toMatchObject({ lwinId: "LWIN001", lwinDisplayName: null });
+    });
+
+    it("is null for an unmatched row", async () => {
+      const supabase = makeSupabase([{ idx: 0, lwin_id: null, score: null }]);
+      const result = await buildImportPreview(supabase, csv("Domaine A,Cuvee 1,2020,6,24.50\n"));
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.rows[0]).toMatchObject({ lwinStatus: "unmatched", lwinDisplayName: null });
+    });
   });
 
   describe("rowOverrides — inline row-fix", () => {

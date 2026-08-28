@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   applyImportBatchChunk,
+  applyLwinRejections,
+  canonicalizeConfirmExtras,
+  canonicalizeRejectedLwinRows,
   canonicalizeRowOverrides,
   confirmImportBatch,
   deriveBatchStatus,
@@ -11,6 +14,7 @@ import {
   type BatchCounts,
 } from "./batch-service";
 import { CLEANUP_BUDGET_FROM_ENTRY_MS } from "./constants";
+import type { PreviewRow } from "./preview-service";
 
 const RESTAURANT_ID = "11111111-1111-4111-8111-111111111111";
 const USER_ID = "22222222-2222-4222-8222-222222222222";
@@ -119,6 +123,14 @@ function fakeImportBatchesTable(
         },
       };
       return builder;
+    }
+    // Item 2: buildImportPreview's display-name lookup — every confirm
+    // whose match_lwin_bulk mock returns a real (non-null) lwin_id reaches
+    // this table. No test in this file asserts on display names (that's
+    // preview-service.test.ts's job); an empty catalog is enough to let
+    // the lookup degrade to null and move on.
+    if (table === "lwin_catalog") {
+      return { select: () => ({ in: () => Promise.resolve({ data: [], error: null }) }) };
     }
     if (table !== "import_batches") throw new Error(`unexpected table ${table}`);
     let predicate: (row: FakeBatchRow) => boolean = () => true;
@@ -2031,6 +2043,382 @@ describe("canonicalizeRowOverrides", () => {
       [2, [["name", "X"], ["unit_cost", "5.00"]]],
       [10, [["quantity", "1"]]],
     ]));
+  });
+});
+
+// Item 2 — per-row LWIN match visibility/rejection. The digest-format tests
+// here are the LOAD-BEARING regression gate for this feature: every one of
+// these must pass BEFORE and AFTER this feature's own changes, unchanged,
+// because they pin the exact bytes already sitting in the (restaurant_id,
+// content_sha256) unique index for every batch confirmed before rejection
+// existed. See the item-2 brief's decision 2 for the full scheme.
+describe("content_sha256 digest — backward compatibility (item 2 regression gate)", () => {
+  it("a confirm with neither overrides nor rejections still hashes to the bare fileDigestHex, byte-for-byte", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    let captured: string | undefined;
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+        create_import_batch: (args) => {
+          captured = (args as { p_content_sha256: string }).p_content_sha256;
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable([]),
+    };
+
+    await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file);
+
+    expect(captured).toBe(fileHex);
+    expect(captured).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("a confirm with overrides only still hashes to the exact pre-item-2 overrides-v1 format, unchanged", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const rowOverrides = { "1": { quantity: "12" } };
+    const overridesJson = canonicalizeRowOverrides(rowOverrides);
+    if (overridesJson === null) throw new Error("expected a non-null canonical overrides JSON");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const overridesHex = createHash("sha256").update(overridesJson).digest("hex");
+    const expected = `overrides-v1:${overridesHex}:${fileHex}`;
+
+    let captured: string | undefined;
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+        create_import_batch: (args) => {
+          captured = (args as { p_content_sha256: string }).p_content_sha256;
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable([]),
+    };
+
+    await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, { rowOverrides });
+
+    expect(captured).toBe(expected);
+  });
+});
+
+describe("content_sha256 digest — rejectedLwinRows (item 2, new v2 namespace)", () => {
+  function captureDigestSupabase(matchRows: Array<{ idx: number; lwin_id: string | null; score: number | null }>) {
+    const captured: string[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: matchRows, error: null }),
+        create_import_batch: (args) => {
+          captured.push((args as { p_content_sha256: string }).p_content_sha256);
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable([]),
+    };
+    return { supabase, captured };
+  }
+
+  it("rejections alone produce a NEW overrides-v2 digest, distinct from the bare digest", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const fileHex = createHash("sha256").update(file).digest("hex");
+    const { supabase, captured } = captureDigestSupabase([{ idx: 0, lwin_id: "LWIN001", score: 0.9 }]);
+
+    await confirmImportBatch(supabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rejectedLwinRows: ["1"],
+    });
+
+    expect(captured[0]).not.toBe(fileHex);
+    expect(captured[0]).toMatch(/^overrides-v2:[0-9a-f]{64}:[0-9a-f]{64}$/);
+    expect(captured[0].endsWith(`:${fileHex}`)).toBe(true);
+  });
+
+  it("rejections + overrides together also use the v2 namespace, distinct from an overrides-only v1 digest of the same overrides", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\n");
+    const rowOverrides = { "1": { quantity: "12" } };
+    const { supabase: overridesOnlySupabase, captured: overridesOnlyCaptured } = captureDigestSupabase([
+      { idx: 0, lwin_id: "LWIN001", score: 0.9 },
+    ]);
+    await confirmImportBatch(overridesOnlySupabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rowOverrides,
+    });
+
+    const { supabase: combinedSupabase, captured: combinedCaptured } = captureDigestSupabase([
+      { idx: 0, lwin_id: "LWIN001", score: 0.9 },
+    ]);
+    await confirmImportBatch(combinedSupabase as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rowOverrides,
+      rejectedLwinRows: ["1"],
+    });
+
+    expect(overridesOnlyCaptured[0]).toMatch(/^overrides-v1:/);
+    expect(combinedCaptured[0]).toMatch(/^overrides-v2:/);
+    expect(combinedCaptured[0]).not.toBe(overridesOnlyCaptured[0]);
+  });
+
+  it("hashes identically for the same rejected-row set regardless of order or duplicates (resume still works)", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\nDomaine B,Cuvee 2,2019,3,18.00\n");
+    const matchRows = [
+      { idx: 0, lwin_id: "LWIN001", score: 0.9 },
+      { idx: 1, lwin_id: "LWIN002", score: 0.9 },
+    ];
+    const { supabase: a, captured: capturedA } = captureDigestSupabase(matchRows);
+    await confirmImportBatch(a as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      rejectedLwinRows: ["1", "2"],
+    });
+    const { supabase: b, captured: capturedB } = captureDigestSupabase(matchRows);
+    await confirmImportBatch(b as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, {
+      // Reversed order, plus a duplicate — must canonicalize identically.
+      rejectedLwinRows: ["2", "1", "2"],
+    });
+
+    expect(capturedA[0]).toBe(capturedB[0]);
+  });
+
+  it("a different rejected-row set hashes differently — not treated as a duplicate of the first", async () => {
+    const file = csv("Domaine A,Cuvee 1,2020,6,24.50\nDomaine B,Cuvee 2,2019,3,18.00\n");
+    const matchRows = [
+      { idx: 0, lwin_id: "LWIN001", score: 0.9 },
+      { idx: 1, lwin_id: "LWIN002", score: 0.9 },
+    ];
+    const { supabase: a, captured: capturedA } = captureDigestSupabase(matchRows);
+    await confirmImportBatch(a as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, { rejectedLwinRows: ["1"] });
+    const { supabase: b, captured: capturedB } = captureDigestSupabase(matchRows);
+    await confirmImportBatch(b as never, RESTAURANT_ID, USER_ID, "cellar.csv", file, { rejectedLwinRows: ["2"] });
+
+    expect(capturedA[0]).not.toBe(capturedB[0]);
+  });
+});
+
+describe("confirmImportBatch — rejectedLwinRows behavior (item 2)", () => {
+  it("rejects an out-of-bounds rejected-row index without ever calling create_import_batch", async () => {
+    const rpc = makeRpc({
+      match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: "LWIN001", score: 0.9 }], error: null }),
+      create_import_batch: () => ({ data: { batchId: BATCH_ID }, error: null }),
+    });
+    const supabase = { rpc, from: fakeImportBatchesTable([]) };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+      { rejectedLwinRows: ["2"] },
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: "invalid_rejected_lwin_row" } });
+    expect(rpc).not.toHaveBeenCalledWith("create_import_batch", expect.anything());
+  });
+
+  it("persists a rejected row with the exact unmatched shape — no LWIN link, resolution pending", async () => {
+    let createArgs:
+      | { p_rows: Array<{ row_number: number; lwin_status: string; lwin_id: string | null; lwin_score: number | null; resolution: string }> }
+      | undefined;
+    const rows: FakeBatchRow[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: "LWIN001", score: 0.9 }], error: null }),
+        create_import_batch: (args) => {
+          createArgs = args as typeof createArgs;
+          rows.push({
+            id: BATCH_ID,
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
+          });
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+      { rejectedLwinRows: ["1"] },
+    );
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: false });
+    expect(createArgs?.p_rows[0]).toMatchObject({
+      row_number: 1,
+      lwin_status: "unmatched",
+      lwin_id: null,
+      lwin_score: null,
+      resolution: "pending",
+    });
+    // The summary the caller sees must agree with what was persisted —
+    // decision 5's "apply once, before BOTH" requirement.
+    if (result.ok && !result.alreadyExists) {
+      expect(result.summary.matchedRows).toBe(0);
+      expect(result.summary.pendingResolutionRows).toBe(1);
+    }
+  });
+
+  it("rejecting a row that never matched is a harmless no-op — the row persists exactly as it would have anyway", async () => {
+    let createArgs: { p_rows: Array<{ row_number: number; lwin_status: string; resolution: string }> } | undefined;
+    const rows: FakeBatchRow[] = [];
+    const supabase = {
+      rpc: makeRpc({
+        match_lwin_bulk: () => ({ data: [{ idx: 0, lwin_id: null, score: null }], error: null }),
+        create_import_batch: (args) => {
+          createArgs = args as typeof createArgs;
+          rows.push({
+            id: BATCH_ID,
+            status: "created",
+            session_id: null,
+            chunk_index: null,
+            content_sha256: (args as { p_content_sha256: string }).p_content_sha256,
+            restaurant_id: RESTAURANT_ID,
+            created_at: "2026-08-27T00:00:00.000Z",
+          });
+          return { data: { batchId: BATCH_ID }, error: null };
+        },
+      }),
+      from: fakeImportBatchesTable(rows),
+    };
+
+    const result = await confirmImportBatch(
+      supabase as never,
+      RESTAURANT_ID,
+      USER_ID,
+      "cellar.csv",
+      csv("Domaine A,Cuvee 1,2020,6,24.50\n"),
+      { rejectedLwinRows: ["1"] },
+    );
+
+    expect(result).toMatchObject({ ok: true, alreadyExists: false });
+    expect(createArgs?.p_rows[0]).toMatchObject({ row_number: 1, lwin_status: "unmatched", resolution: "pending" });
+  });
+});
+
+describe("applyLwinRejections", () => {
+  function matchedRow(overrides: Partial<PreviewRow> = {}): PreviewRow {
+    return {
+      rowNumber: 1,
+      raw: {
+        producer: "Domaine A",
+        name: "Cuvee 1",
+        vintage: "2020",
+        varietal: null,
+        region: null,
+        country: null,
+        size_ml: null,
+        format: null,
+        currency: null,
+        quantity: "6",
+        unit_cost: "24.50",
+        bin: null,
+        section: null,
+      },
+      rawText: {
+        producer: "Domaine A",
+        name: "Cuvee 1",
+        vintage: "2020",
+        varietal: "",
+        region: "",
+        country: "",
+        size_ml: "",
+        format: "",
+        currency: "",
+        quantity: "6",
+        unit_cost: "24.50",
+        bin: "",
+        section: "",
+      },
+      rowState: "valid",
+      errors: [],
+      lwinStatus: "matched",
+      lwinId: "LWIN001",
+      lwinScore: 0.9,
+      lwinDisplayName: "Domaine A Cuvee One 2020",
+      costStatus: "present",
+      resolution: "auto",
+      mergedFromRowNumbers: [],
+      duplicateReason: null,
+      ...overrides,
+    };
+  }
+
+  it("returns the SAME array reference for an empty rejection set", () => {
+    const rows = [matchedRow()];
+    expect(applyLwinRejections(rows, new Set())).toBe(rows);
+  });
+
+  it("nulls every LWIN field and sets resolution to pending for a rejected matched row, without mutating the input", () => {
+    const rows = [matchedRow()];
+    const result = applyLwinRejections(rows, new Set([1]));
+    expect(result[0]).toMatchObject({
+      lwinStatus: "unmatched",
+      lwinId: null,
+      lwinScore: null,
+      lwinDisplayName: null,
+      resolution: "pending",
+    });
+    expect(rows[0].lwinStatus).toBe("matched");
+  });
+
+  it("leaves an already-unmatched row untouched — rejecting a non-match is a no-op", () => {
+    const alreadyUnmatched = matchedRow({
+      lwinStatus: "unmatched",
+      lwinId: null,
+      lwinScore: null,
+      lwinDisplayName: null,
+      resolution: "pending",
+    });
+    const result = applyLwinRejections([alreadyUnmatched], new Set([1]));
+    expect(result[0]).toEqual(alreadyUnmatched);
+  });
+
+  it("leaves a row outside the rejected set untouched", () => {
+    const rows = [matchedRow({ rowNumber: 1 }), matchedRow({ rowNumber: 2, lwinId: "LWIN002" })];
+    const result = applyLwinRejections(rows, new Set([2]));
+    expect(result[0].lwinStatus).toBe("matched");
+    expect(result[1].lwinStatus).toBe("unmatched");
+  });
+
+  it("a rejected row that was also missing cost still needs resolution — costStatus is untouched", () => {
+    const rows = [matchedRow({ costStatus: "missing", resolution: "pending" })];
+    const result = applyLwinRejections(rows, new Set([1]));
+    expect(result[0]).toMatchObject({ costStatus: "missing", resolution: "pending", lwinStatus: "unmatched" });
+  });
+});
+
+describe("canonicalizeRejectedLwinRows", () => {
+  it("returns null for undefined", () => {
+    expect(canonicalizeRejectedLwinRows(undefined)).toBeNull();
+  });
+
+  it("returns null for an empty array", () => {
+    expect(canonicalizeRejectedLwinRows([])).toBeNull();
+  });
+
+  it("sorts numerically and dedupes, regardless of input order", () => {
+    const a = canonicalizeRejectedLwinRows(["10", "2", "2"]);
+    const b = canonicalizeRejectedLwinRows(["2", "10"]);
+    expect(a).toBe(b);
+    expect(a).toBe(JSON.stringify([2, 10]));
+  });
+});
+
+describe("canonicalizeConfirmExtras", () => {
+  it("folds both extras into one deterministic blob, with a fixed key order", () => {
+    const overridesJson = canonicalizeRowOverrides({ "1": { quantity: "6" } });
+    const rejectedJson = canonicalizeRejectedLwinRows(["2"]);
+    expect(canonicalizeConfirmExtras(overridesJson, rejectedJson)).toBe(
+      JSON.stringify({ overrides: [[1, [["quantity", "6"]]]], rejectedLwinRows: [2] }),
+    );
+  });
+
+  it("represents a missing extra as null, not an absent key", () => {
+    const rejectedJson = canonicalizeRejectedLwinRows(["3"]);
+    expect(canonicalizeConfirmExtras(null, rejectedJson)).toBe(
+      JSON.stringify({ overrides: null, rejectedLwinRows: [3] }),
+    );
   });
 });
 

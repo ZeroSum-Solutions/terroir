@@ -20,7 +20,7 @@ import { ActionDialog } from "@/components/action-dialog";
 import { CLIENT_CHUNK_TARGET_ROWS, type CanonicalHeader } from "@/domains/import/constants";
 import { buildChunkPlan, serializeChunk, sha256HexOfBytes } from "@/domains/import/csv-splitter";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
-import type { BatchRow, ErrorRowEntry, RowOverrides } from "./import-client";
+import type { BatchRow, ErrorRowEntry, MatchedLwinRowEntry, RejectedLwinRows, RowOverrides } from "./import-client";
 
 // ---------------------------------------------------------------------------
 // Chunk plan / upload state, and the pure functions that drive the two
@@ -61,6 +61,10 @@ export type ChunkedPreviewState = {
   summary: PreviewSummary;
   perChunk: ChunkPreviewEntry[];
   errorRows: ErrorRowEntry[];
+  /** Item 2 (per-row LWIN match visibility): every matched row across every
+   * chunk, mirroring errorRows above exactly (same GLOBAL row-number /
+   * chunkIndex / chunkRowNumber convention). */
+  matchedRows: MatchedLwinRowEntry[];
 };
 
 // Round-5 audit finding 4: "skipped" is a purely CLIENT-SIDE terminal state
@@ -193,6 +197,8 @@ export async function planChunkedPreview(
   const planChunks: ChunkPlanItem[] = [];
   const perChunk: ChunkPreviewEntry[] = [];
   const errorRows: ChunkedPreviewState["errorRows"] = [];
+  // Item 2: mirrors errorRows above exactly.
+  const matchedRows: ChunkedPreviewState["matchedRows"] = [];
   const summary: PreviewSummary = { ...ZERO_SUMMARY };
 
   for (const chunkEntry of chunkEntries) {
@@ -293,6 +299,17 @@ export async function planChunkedPreview(
           errors: row.errors,
           rawText: row.rawText,
         });
+      } else if (row.lwinStatus === "matched" && row.lwinId !== null) {
+        // Item 2 (per-row LWIN match visibility): same GLOBAL-row-number
+        // convention as errorRows above.
+        matchedRows.push({
+          rowNumber: chunkEntry.startRow - 1 + row.rowNumber,
+          chunkIndex: chunkEntry.index,
+          chunkRowNumber: row.rowNumber,
+          lwinId: row.lwinId,
+          lwinDisplayName: row.lwinDisplayName,
+          lwinScore: row.lwinScore ?? 0,
+        });
       }
     }
   }
@@ -300,7 +317,7 @@ export async function planChunkedPreview(
   return {
     ok: true,
     plan: { headerRecord, chunkTotal: chunkEntries.length, chunks: planChunks, sourceSha256 },
-    preview: { summary, perChunk, errorRows },
+    preview: { summary, perChunk, errorRows, matchedRows },
   };
 }
 
@@ -317,6 +334,12 @@ export type ConfirmChunkedSessionParams = {
    * each chunk's own slice into the LOCAL row numbers that chunk's own
    * re-upload of buildImportPreview will assign. */
   rowOverrides?: RowOverrides;
+  /** Item 2 (per-row LWIN match visibility/rejection) — GLOBAL row numbers
+   * (same convention as rowOverrides above) the operator rejected a LWIN
+   * match on. localizeRejectedLwinRows (below) translates each chunk's own
+   * slice into that chunk's own local row numbers, mirroring
+   * localizeRowOverrides exactly. */
+  rejectedLwinRows?: RejectedLwinRows;
   onSessionId: (sessionId: string) => void;
   onProgress: (upload: ChunkUploadState[]) => void;
 };
@@ -339,6 +362,23 @@ export function localizeRowOverrides(
   return local;
 }
 
+/** Item 2 (per-row LWIN match visibility/rejection) — the rejectedLwinRows
+ * counterpart to localizeRowOverrides above: translates the operator's
+ * rejected-row set (keyed by the GLOBAL row number the aggregated chunked
+ * preview shows) into the LOCAL row numbers one chunk's own re-upload will
+ * assign. */
+export function localizeRejectedLwinRows(
+  globalRejected: RejectedLwinRows,
+  chunk: { startRow: number; endRow: number },
+): string[] {
+  const local: string[] = [];
+  for (const globalRowNumber of globalRejected) {
+    if (globalRowNumber < chunk.startRow || globalRowNumber > chunk.endRow) continue;
+    local.push(String(globalRowNumber - chunk.startRow + 1));
+  }
+  return local;
+}
+
 export type ConfirmChunkedSessionResult =
   | { ok: true }
   /** conflictingSessionId is set when a chunk's content already belongs to
@@ -352,7 +392,8 @@ export type ConfirmChunkedSessionResult =
  * after a failure with the same `plan` and the returned chunkUpload state
  * as `initialUpload` — already-confirmed chunks are skipped. */
 export async function confirmChunkedSession(params: ConfirmChunkedSessionParams): Promise<ConfirmChunkedSessionResult> {
-  const { plan, initialUpload, existingSessionId, fileLabel, timestampsRef, rowOverrides, onSessionId, onProgress } = params;
+  const { plan, initialUpload, existingSessionId, fileLabel, timestampsRef, rowOverrides, rejectedLwinRows, onSessionId, onProgress } =
+    params;
   let results = initialUpload;
   onProgress(results);
 
@@ -418,6 +459,11 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       }
       const localOverrides = localizeRowOverrides(rowOverrides, chunk);
       if (Object.keys(localOverrides).length > 0) form.append("rowOverrides", JSON.stringify(localOverrides));
+    }
+    // Item 2: same localize-then-append pattern as rowOverrides above.
+    if (rejectedLwinRows && rejectedLwinRows.size > 0) {
+      const localRejected = localizeRejectedLwinRows(rejectedLwinRows, chunk);
+      if (localRejected.length > 0) form.append("rejectedLwinRows", JSON.stringify(localRejected));
     }
 
     try {

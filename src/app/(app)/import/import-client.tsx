@@ -52,6 +52,31 @@ export type ErrorRowEntry = {
   rawText: Record<CanonicalHeader, string>;
 };
 
+/** Item 2 (per-row LWIN match visibility): one matched row's worth of
+ * display info for the "Matched wines" section — same rowNumber/chunkIndex/
+ * chunkRowNumber convention as ErrorRowEntry above (GLOBAL row number for
+ * both paths; chunkIndex/chunkRowNumber set ONLY for the chunked path, for
+ * the same honest "Chunk N, data row M" label). lwinId is carried so a
+ * reject toggle always knows exactly which match it's rejecting, even
+ * though it isn't rendered directly. */
+export type MatchedLwinRowEntry = {
+  rowNumber: number;
+  chunkIndex?: number;
+  chunkRowNumber?: number;
+  lwinId: string;
+  lwinDisplayName: string | null;
+  lwinScore: number;
+};
+
+/** rowNumber -> true for a matched row whose LWIN link the operator
+ * rejected. GLOBAL row numbers, same keying as RowOverrides/ErrorRowEntry.
+ * Sent to confirm as an explicit rejectedLwinRows payload — server-side
+ * re-validation stays the sole authority (a rejected row that no longer
+ * matches at confirm time, e.g. because an override also changed its text,
+ * is simply a harmless no-op there — see applyLwinRejections'
+ * (batch-service.ts) own comment). */
+export type RejectedLwinRows = Set<number>;
+
 /** rowNumber -> canonical field -> the operator's edited replacement
  * text. Sent to confirm as an explicit overrides payload — server-side
  * validation stays the sole authority (see request-schemas.ts's
@@ -158,6 +183,10 @@ export type BatchRow = {
   validation_errors: { field: string; message: string }[];
   lwin_status: "matched" | "unmatched";
   lwin_id: string | null;
+  /** Item 2 (per-row LWIN match visibility): the server (GET /api/import/
+   * batches/[id]) already sends this — it was previously dropped here even
+   * though every persisted row carries it (import_batch_rows.lwin_score). */
+  lwin_score: number | null;
   cost_status: "present" | "missing";
   resolution: "auto" | "pending" | "include" | "exclude";
   manual_unit_cost: number | null;
@@ -178,6 +207,20 @@ const TEMPLATE_CSV = `${CANONICAL_HEADERS.join(",")}\nDomaine Example,Cuvee One,
 // MAX_SHOWN_ERROR_ROWS rows, repeatable until every error row is shown,
 // and the overflow warning disappears once nothing is left hidden.
 export const MAX_SHOWN_ERROR_ROWS = 100;
+
+// Item 2 (per-row LWIN match visibility): same incremental-disclosure
+// pattern as MAX_SHOWN_ERROR_ROWS above, for the "Matched wines" section —
+// at PR #133's measured 77% match rate, a file at the MAX_ROWS (5000)
+// ceiling can have thousands of matched rows, which would otherwise render
+// unbounded.
+export const MAX_SHOWN_MATCHED_ROWS = 100;
+
+// Stable empty defaults for PreviewStep's optional matchedRows/
+// rejectedLwinRows props — module-level so every render that omits them
+// (every pre-existing caller) reuses the SAME reference rather than
+// allocating a fresh empty array/Set every render.
+const EMPTY_MATCHED_ROWS: MatchedLwinRowEntry[] = [];
+const EMPTY_REJECTED_LWIN_ROWS: RejectedLwinRows = new Set();
 
 /** Round-5 audit finding 3: whether two override slices for the same chunk
  * are the SAME edit — an order-independent, deep value comparison used
@@ -316,6 +359,18 @@ export function ImportClient() {
   // UI) for both the plain and chunked paths — handleConfirmChunked
   // translates it back to each chunk's own local row numbers.
   const [rowOverrides, setRowOverrides] = useState<RowOverrides>({});
+  // Item 2 (per-row LWIN match visibility/rejection): which matched rows
+  // (GLOBAL row numbers, same convention as rowOverrides above) the
+  // operator has rejected the LWIN match on.
+  const [rejectedLwinRows, setRejectedLwinRows] = useState<RejectedLwinRows>(() => new Set());
+  const onToggleLwinReject = useCallback((rowNumber: number) => {
+    setRejectedLwinRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowNumber)) next.delete(rowNumber);
+      else next.add(rowNumber);
+      return next;
+    });
+  }, []);
   const onRowFieldChange = useCallback((rowNumber: number, field: CanonicalHeader, value: string) => {
     setRowOverrides((prev) => ({ ...prev, [rowNumber]: { ...prev[rowNumber], [field]: value } }));
   }, []);
@@ -447,6 +502,7 @@ export function ImportClient() {
     setPreviewing(true);
     setPreviewError(null);
     setRowOverrides({});
+    setRejectedLwinRows(new Set());
     try {
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
@@ -497,6 +553,9 @@ export function ImportClient() {
       if (Object.keys(rowOverrides).length > 0) {
         form.append("rowOverrides", JSON.stringify(rowOverrides));
       }
+      if (rejectedLwinRows.size > 0) {
+        form.append("rejectedLwinRows", JSON.stringify(Array.from(rejectedLwinRows)));
+      }
       const response = await fetch("/api/import/batches", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) {
@@ -518,7 +577,7 @@ export function ImportClient() {
     } finally {
       setConfirming(false);
     }
-  }, [file, rowOverrides, loadRecent]);
+  }, [file, rowOverrides, rejectedLwinRows, loadRecent]);
 
   /** Skips any chunk `chunkUpload` already marks "confirmed" — the
    * retry-after-failure path reruns confirmChunkedSession (via
@@ -543,6 +602,7 @@ export function ImportClient() {
         fileLabel: file?.name ?? sessionLabel,
         timestampsRef: requestTimestampsRef,
         rowOverrides,
+        rejectedLwinRows,
         onSessionId: (id) => {
           setSessionId(id);
           setSessionLabel(file?.name ?? sessionLabel);
@@ -561,7 +621,7 @@ export function ImportClient() {
     } finally {
       setConfirmingChunked(false);
     }
-  }, [chunkedPlan, chunkUpload, sessionId, file, sessionLabel, rowOverrides, loadRecent]);
+  }, [chunkedPlan, chunkUpload, sessionId, file, sessionLabel, rowOverrides, rejectedLwinRows, loadRecent]);
 
   const isRowLocked = useCallback(
     (rowNumber: number) => isRowInConfirmedChunk(rowNumber, chunkedPlan, chunkUpload),
@@ -637,6 +697,7 @@ export function ImportClient() {
     setSessionId(null);
     setSessionLabel("cellar.csv");
     setRowOverrides({});
+    setRejectedLwinRows(new Set());
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
@@ -670,6 +731,19 @@ export function ImportClient() {
               .filter((r) => r.rowState === "error")
               .map((r) => ({ rowNumber: r.rowNumber, errors: r.errors, rawText: r.rawText })) ?? [])
           }
+          matchedRows={
+            chunkedPreview?.matchedRows ??
+            (preview?.rows
+              .filter((r): r is PreviewRow & { lwinId: string; lwinScore: number } => r.lwinStatus === "matched" && r.lwinId !== null)
+              .map((r) => ({
+                rowNumber: r.rowNumber,
+                lwinId: r.lwinId,
+                lwinDisplayName: r.lwinDisplayName,
+                lwinScore: r.lwinScore,
+              })) ?? [])
+          }
+          rejectedLwinRows={rejectedLwinRows}
+          onToggleLwinReject={onToggleLwinReject}
           rowOverrides={rowOverrides}
           onRowFieldChange={onRowFieldChange}
           isRowLocked={isRowLocked}
@@ -800,6 +874,9 @@ export function PreviewStep({
   filename,
   summary,
   errorRows,
+  matchedRows,
+  rejectedLwinRows,
+  onToggleLwinReject,
   rowOverrides,
   onRowFieldChange,
   isRowLocked,
@@ -818,6 +895,14 @@ export function PreviewStep({
   filename: string;
   summary: PreviewSummary;
   errorRows: ErrorRowEntry[];
+  /** Item 2 (per-row LWIN match visibility): every matched row, so the
+   * operator can see WHAT matched (not just that it did) and reject a
+   * match they don't trust. Optional (defaults to none shown) so every
+   * pre-existing caller/test that doesn't know about this feature keeps
+   * working unchanged — mirrors isRowSkipped's own optionality above. */
+  matchedRows?: MatchedLwinRowEntry[];
+  rejectedLwinRows?: RejectedLwinRows;
+  onToggleLwinReject?: (rowNumber: number) => void;
   rowOverrides: RowOverrides;
   onRowFieldChange: (rowNumber: number, field: CanonicalHeader, value: string) => void;
   /** Sol round-2 audit finding 1: true for a row whose chunk is already
@@ -863,6 +948,12 @@ export function PreviewStep({
   // list can ever replace this one, so there's no stale-count case to
   // reset for.
   const [shownCount, setShownCount] = useState(MAX_SHOWN_ERROR_ROWS);
+  // Item 2: same incremental-disclosure pattern, for matchedRows.
+  const effectiveMatchedRows = matchedRows ?? EMPTY_MATCHED_ROWS;
+  const effectiveRejectedLwinRows = rejectedLwinRows ?? EMPTY_REJECTED_LWIN_ROWS;
+  const [shownMatchedCount, setShownMatchedCount] = useState(MAX_SHOWN_MATCHED_ROWS);
+  const shownMatchedRows = effectiveMatchedRows.slice(0, shownMatchedCount);
+  const hiddenMatchedCount = effectiveMatchedRows.length - shownMatchedRows.length;
   const shownErrorRows = errorRows.slice(0, shownCount);
   const hiddenCount = errorRows.length - shownErrorRows.length;
   // A row the operator has edited into passing validation counts toward
@@ -1105,6 +1196,45 @@ export function PreviewStep({
         </div>
       )}
 
+      {shownMatchedRows.length > 0 && (
+        <div className="mt-lg">
+          <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
+            Matched wines ({effectiveMatchedRows.length})
+          </h3>
+          <p className="mt-2xs text-caption text-grey">
+            Each row below matched a wine in the catalog — reject a match you don&rsquo;t trust and it imports with
+            no catalog link, exactly like a row that never matched.
+          </p>
+          <ul className="mt-xs space-y-2xs">
+            {shownMatchedRows.map((row) => (
+              <MatchedLwinRowItem
+                key={row.rowNumber}
+                row={row}
+                rejected={effectiveRejectedLwinRows.has(row.rowNumber)}
+                onToggle={onToggleLwinReject ?? (() => {})}
+                // Same PERMANENT lock as RowFixItem's own `locked` — a row
+                // whose chunk is already confirmed can never be resent, so
+                // a reject click here would silently go nowhere (Sol
+                // round-2 audit finding 1's exact reasoning, applied to
+                // this new control).
+                locked={isRowLocked(row.rowNumber)}
+                skipped={isRowSkipped?.(row.rowNumber) ?? false}
+                frozen={confirming}
+              />
+            ))}
+          </ul>
+          {hiddenMatchedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShownMatchedCount((count) => count + MAX_SHOWN_MATCHED_ROWS)}
+              className="mt-xs min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+            >
+              Show {Math.min(hiddenMatchedCount, MAX_SHOWN_MATCHED_ROWS)} more matched row(s)
+            </button>
+          )}
+        </div>
+      )}
+
       {chunkUpload && (
         <ChunkUploadProgress
           chunks={chunkUpload}
@@ -1259,6 +1389,71 @@ function RowFixItem({
             />
           </label>
         ))}
+      </div>
+    </li>
+  );
+}
+
+/** Item 2 (per-row LWIN match visibility) — one matched row: the catalog's
+ * own display name and match score, with a reject toggle. Rejecting is a
+ * simple client-side flag, round-tripped through the SAME reject/accept
+ * pair on every render (never a one-way action) — an operator can change
+ * their mind right up until confirm, exactly like an inline row-fix edit
+ * can. The label mirrors RowFixItem's own "Chunk N, data row M" vs
+ * "Row N" convention (see its own comment). */
+function MatchedLwinRowItem({
+  row,
+  rejected,
+  onToggle,
+  locked,
+  skipped,
+  frozen,
+}: {
+  row: MatchedLwinRowEntry;
+  rejected: boolean;
+  onToggle: (rowNumber: number) => void;
+  /** Sol round-2 audit finding 1's reasoning, applied to this new control:
+   * a row whose chunk is already CONFIRMED can never be resent, so a
+   * reject click here would silently go nowhere — disabled with the same
+   * explanatory copy RowFixItem uses. Always false on the plain
+   * (non-chunked) path. */
+  locked: boolean;
+  /** Round-6 audit finding 5's counterpart — a row belonging to a
+   * client-side skipped chunk, same reasoning as `locked`. */
+  skipped: boolean;
+  /** Same TEMPORARY in-flight freeze RowFixItem's own `frozen` prop
+   * applies — a reject/undo click while a confirm attempt is already
+   * dispatching this row's rejection state would otherwise be silently
+   * overwritten by that attempt's own snapshot. */
+  frozen: boolean;
+}) {
+  const disabled = locked || skipped || frozen;
+  const label = row.chunkIndex !== undefined && row.chunkRowNumber !== undefined
+    ? `Chunk ${row.chunkIndex}, data row ${row.chunkRowNumber}`
+    : `Row ${row.rowNumber}`;
+  return (
+    <li className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
+      <div className="flex flex-wrap items-center justify-between gap-sm">
+        <div>
+          <span>{label}</span>
+          <p className="mt-2xs text-caption text-grey">
+            {locked
+              ? "Row already imported with this chunk — revert the import to change it."
+              : skipped
+                ? "Row belongs to a skipped chunk."
+                : rejected
+                  ? "Match rejected — will import with no wine-catalog link, same as an unmatched row."
+                  : `${row.lwinDisplayName ?? "Catalog entry (name unavailable)"} — match score ${row.lwinScore.toFixed(2)}`}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onToggle(row.rowNumber)}
+          disabled={disabled}
+          className="min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {rejected ? "Undo reject" : "Reject match"}
+        </button>
       </div>
     </li>
   );
