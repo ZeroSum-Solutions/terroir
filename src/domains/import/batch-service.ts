@@ -1558,7 +1558,9 @@ async function cleanupOrphanWines(
       // before delete — Sol audit round 5, finding 1, extended round 6,
       // finding 1, generalized round 7, finding 1: see
       // findForgeableReferencesForWine for why every non-RESTRICT
-      // WINE_REFERENCING_TABLES table (seven total) is re-checked here,
+      // WINE_REFERENCING_TABLES table (six of the nine, plus the
+      // separately queried import_batch_rows cross-batch claim — seven
+      // concurrent checks) is re-checked here,
       // and why that's a Promise.all, not a sequential
       // findReferencedWineIds call). No other await happens between this
       // resolving and the DELETE call below besides the synchronous

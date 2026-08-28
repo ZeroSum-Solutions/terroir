@@ -203,8 +203,9 @@ would destroy the evidence.
   "What the timestamp equality does and does not prove" below. Reference
   checks (the 9-table sweep plus other batches' `applied_wine_id` claims)
   run once in bulk against every candidate; then, immediately before each
-  wine's own `DELETE`, the four FORGEABLE tables among them (round 5,
-  finding 1, extended round 6, finding 1 — see "Cross-tenant reference
+  wine's own `DELETE`, every non-RESTRICT table among them plus other
+  batches' `applied_wine_id` claims (round 5, finding 1, extended round 6,
+  generalized round 7 — see "Cross-tenant reference
   checks run on the service-role client" below) are re-checked again,
   single-wine and concurrently, and the `DELETE` itself carries a
   compare-and-swap against the exact timestamp the equality check above
@@ -403,7 +404,9 @@ classified by its `ON DELETE` action —
   CASCADE), and `import_batch_rows.applied_wine_id` (SET NULL).
 
 `findForgeableReferencesForWine` now re-checks EVERY non-RESTRICT
-`WINE_REFERENCING_TABLES` table — seven total — concurrently via one
+`WINE_REFERENCING_TABLES` table — six of the nine — plus the separately
+queried `import_batch_rows.applied_wine_id` cross-batch claim (seven
+concurrent checks) via one
 `Promise.all`, still one parallel page-read in the common case. **The two
 layers catch different writers:** the final parallel read catches every
 non-RESTRICT child's writer, including a service-role/job path that never
@@ -530,8 +533,9 @@ microsecond timestamp would be indistinguishable — negligible, accepted;
 (b) the reference re-check and the `DELETE` are still separate steps, so
 in principle ANY referencing table could receive a fresh, cascade-linked
 insert in the gap between them. **The general rule (round 7, finding
-1):** EVERY non-RESTRICT `WINE_REFERENCING_TABLES` table — seven of the
-nine — is covered by the final, per-candidate re-check
+1):** EVERY non-RESTRICT `WINE_REFERENCING_TABLES` table — six of the
+nine, plus the separately queried `import_batch_rows.applied_wine_id`
+cross-batch claim — is covered by the final, per-candidate re-check
 (`findForgeableReferencesForWine`); only the three RESTRICT tables are
 NOT covered, and for them alone this gap is harmless by construction, not
 merely unlikely: `inventory_items`, `wine_list_items`, and `pour_events`
