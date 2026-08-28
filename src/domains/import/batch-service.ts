@@ -21,6 +21,12 @@ import {
   type CanonicalHeader,
 } from "./constants";
 
+// Round-4 audit finding 4 / round-5 audit finding 6: how many candidate rows
+// findLiveBatchByUnderlyingFile reads before format-filtering in TS — see
+// that function's own comment for why 20, and its post-read saturation
+// check for what happens if contamination ever actually fills this.
+const LIVE_BATCH_LOOKUP_LIMIT = 20;
+
 // Namespace prefix for an overrides-bearing content_sha256 (see
 // confirmImportBatch's own comment for the full format and why). Contains
 // characters (":" ) that never appear in a bare hex sha256 digest, so a
@@ -329,69 +335,63 @@ export async function confirmImportBatch(
   // (A's post-check happens to run after B's commit, and vice versa —
   // e.g. both inserts commit before either post-check starts). Then BOTH
   // self-revert unconditionally, under this rule — zero survivors, never
-  // two. That residual is handled explicitly below: after self-reverting,
-  // this confirm re-reads the rival's CURRENT status (not the stale
-  // snapshot from its own post-check query) — if the rival is still live,
-  // return the already-exists result pointing at it (the normal case: we
-  // lost, cleanly, to a real survivor). If the rival has ALSO been
-  // reverted by then (its own symmetric self-revert), or the re-read
-  // itself fails, there is no live batch left to point at — returning an
-  // already-exists for a reverted batch would be a lie, so this returns a
-  // distinct, explicitly retryable error instead. A retry from the
-  // client then either lands cleanly (both sides already reverted, no
-  // rival left to race) or hits the ordinary pre-check against whichever
-  // batch is now the sole survivor.
+  // two. A retry from either client then re-enters this function from
+  // scratch and hits the ordinary PRE-check, which resolves against
+  // whichever batch (if any) is now the sole survivor.
+  //
+  // Round-5 audit finding 1 — SCOPE of the proof above: "at most one
+  // survivor" is proven for every interleaving of two SUCCESSFUL
+  // post-checks. It says nothing about a post-check that itself FAILS
+  // (a lookup error, not "no rival found") — that is a distinct case,
+  // handled explicitly below by selfRevertAndRetry: a failure to verify
+  // is treated exactly like a rival was actually seen, never like "no
+  // rival, safe to survive". Every path out of this function past the
+  // insert — success, sees a rival, or can't tell — either returns a
+  // survivor whose post-check genuinely saw no rival, or reverts-BEFORE-
+  // returning. A single failure (the post-check call, or the revert it
+  // triggers) can therefore never itself produce two live survivors; it
+  // can only ever leave OUR OWN batch live (see selfRevertAndRetry's own
+  // comment for that residual) or ask for a retry.
+  //
+  // Round-5 audit finding 7: this residual — and the "both self-revert"
+  // case above — assume retries are HUMAN-triggered, arriving with
+  // natural timing jitter (a page reload, a re-click), not two processes
+  // racing to resubmit in lockstep. Two literally-simultaneous automated
+  // retries COULD repeat a zero-survivor round again — that is still
+  // SAFE (never a duplicate, just another round of the same protocol) and
+  // converges given any real-world timing variance between the two
+  // retries; it is not a scenario this codebase needs to engineer around.
   const postCheck = await findLiveBatchByUnderlyingFile(supabase, restaurantId, fileDigestHex, {
     excludeSessionId: options.sessionId,
     excludeBatchId: batchId,
   });
   if (!postCheck.ok) {
-    return { ok: false, error: postCheck.error };
+    // Round-5 audit finding 1: a lookup ERROR here is not evidence there's
+    // no rival — it's evidence we can't tell. Treating it as "no rival,
+    // batch survives" would let an unverified batch stay live opposite a
+    // concurrent confirm that also can't see it (findLiveBatchByUnderlyingFile
+    // is symmetric — the SAME lookup backs both this batch's and the
+    // rival's own post-check). Fail exactly like seeing a rival: self-revert.
+    return selfRevertAndRetry(supabase, batchId);
   }
 
   if (postCheck.match) {
     // We saw a rival that was already committed — yield unconditionally.
     // Nothing has applied yet — apply only ever starts after this confirm
     // call returns — so undoing our own batch is always safe.
-    // import_batches/import_batch_rows both have DELETE REVOKEd from
-    // `authenticated` (0076) and migrations are locked for this fix, so a
-    // literal DELETE is out of reach; revert_import_batch (already
-    // TS-layer-reachable, and — per the auditor — migration 0109 permits
-    // reverting a batch that was only just created, since its guard is
-    // "status <> reverted", not "status = completed") is the equivalent
-    // move here — it flips our batch to status='reverted' (0 rows to
-    // revert, since nothing was ever applied), which every live-batch
-    // lookup in this file already treats as gone via
-    // .neq("status","reverted"): functionally indistinguishable from
-    // deleted to every future confirm.
-    const revertResult = await revertImportBatch(supabase, batchId);
-    if (!revertResult.ok) {
-      return {
-        ok: false,
-        error: {
-          code: "duplicate_check_failed",
-          message:
-            "This import raced with another upload of the same file and could not be reconciled automatically — please try confirming again.",
-        },
-      };
-    }
-
-    // Re-read the rival's CURRENT status rather than trusting the
-    // (possibly now-stale) snapshot the post-check query captured — the
-    // residual case above is exactly a rival that has, in the interim,
-    // also reverted itself.
-    const rival = await readBatchLiveState(supabase, postCheck.match.id);
-    if (!rival || rival.status === "reverted") {
-      return {
-        ok: false,
-        error: {
-          code: "duplicate_race_retry",
-          message:
-            "This upload raced with a duplicate confirm of the same file, and both attempts were withdrawn to avoid a conflict. Please retry the upload.",
-        },
-      };
-    }
-    return toAlreadyExistsResult(supabase, rival);
+    //
+    // Round-5 audit finding 2(a): this used to re-read the rival's CURRENT
+    // status and, if still live, return an already-exists result pointing
+    // at it directly. That is itself a race: the rival may be mid its OWN
+    // self-revert on a different connection, and even a fresh read here
+    // can't prove it won't revert a moment later, before the client acts
+    // on the pointer. Never hand back already-exists from this path at
+    // all — always ask for a retry. A retry re-enters this function from
+    // scratch and resolves through the ordinary PRE-check, whose
+    // already-exists path (toAlreadyExistsResult) is itself hardened
+    // (finding 2(b)) to re-verify a target's live status immediately
+    // before ever handing it out as a resume pointer.
+    return selfRevertAndRetry(supabase, batchId);
   }
 
   return {
@@ -403,11 +403,79 @@ export async function confirmImportBatch(
   };
 }
 
+/** Self-revert OUR just-created batch and hand back the retryable
+ * duplicate_race_retry error — the SEER-YIELDS "we lost, or can't prove we
+ * didn't" outcome (round-5 audit findings 1 and 2(a)). Used identically
+ * whether we can PROVE a rival exists (postCheck.match) or merely CAN'T
+ * PROVE we're clear (the postCheck lookup itself failed) — an inability to
+ * verify is not evidence of safety, so it's treated exactly like seeing a
+ * rival, never like "no rival, safe to survive".
+ *
+ * Nothing has applied yet — apply only ever starts after confirm returns —
+ * so undoing our own batch is always safe. import_batches/import_batch_rows
+ * both have DELETE REVOKEd from `authenticated` (0076) and migrations are
+ * locked for this fix, so a literal DELETE is out of reach; revert_import_batch
+ * (already TS-layer-reachable, and — per the auditor — migration 0109
+ * permits reverting a batch that was only just created, since its guard is
+ * "status <> reverted", not "status = completed") is the equivalent move
+ * here — it flips our batch to status='reverted' (0 rows to revert, since
+ * nothing was ever applied), which every live-batch lookup in this file
+ * already treats as gone via .neq("status","reverted"): functionally
+ * indistinguishable from deleted to every future confirm.
+ *
+ * Best-effort: if the revert call ITSELF also fails, this batch stays
+ * live — but not silently or unboundedly so. From that point on it is a
+ * completely ordinary live batch: the very next confirm's PRE-check
+ * (findLiveBatchByUnderlyingFile) will find it and resume it via
+ * toAlreadyExistsResult, exactly like any other live batch — the operator
+ * never loses their import, they just get a "this already exists" resume
+ * pointer on retry rather than an immediate success. A genuine duplicate
+ * LIVE batch can only result from two independent failures (this
+ * function's own trigger — a postCheck lookup error or an observed rival —
+ * AND the revert call it triggers) landing together with a real concurrent
+ * same-file confirm in between; that combination is deliberately not
+ * engineered around further here. */
+async function selfRevertAndRetry(
+  supabase: SupabaseClient<Database>,
+  batchId: string,
+): Promise<ConfirmBatchResult> {
+  // revertImportBatch only returns { ok: false } for the two named PostgREST
+  // error codes it recognizes (P0002/P0001) — anything else it re-throws
+  // verbatim. "Best-effort" here means an unrecognized revert failure must
+  // never escape as an uncaught exception either; both outcomes collapse to
+  // the same "revert did not succeed" branch below.
+  let reverted: boolean;
+  try {
+    reverted = (await revertImportBatch(supabase, batchId)).ok;
+  } catch {
+    reverted = false;
+  }
+  if (!reverted) {
+    return {
+      ok: false,
+      error: {
+        code: "duplicate_check_failed",
+        message:
+          "This import raced with another upload of the same file and could not be reconciled automatically — please try confirming again.",
+      },
+    };
+  }
+  return {
+    ok: false,
+    error: {
+      code: "duplicate_race_retry",
+      message:
+        "This upload raced with a duplicate confirm of the same file, and both attempts were withdrawn to avoid a conflict. Please retry the upload.",
+    },
+  };
+}
+
 /** Reads back a batch's CURRENT (post-any-revert) status, session and
- * chunk slot by primary key — used by the residual-race handling above to
- * decide whether a rival we're about to point the caller at is still
- * actually live, rather than trusting a snapshot read before we (or it)
- * may have reverted. Returns null on a missing row OR a lookup error —
+ * chunk slot by primary key — used by toAlreadyExistsResult (round-5 audit
+ * finding 2(b)) to re-verify a resume-pointer target's live status
+ * immediately before handing it out, rather than trusting a snapshot read
+ * by whichever query found the match (the pre-check's own read, or the
+ * 23505 fallback's). Returns null on a missing row OR a lookup error —
  * both are treated identically by the caller (fail toward the safe,
  * explicitly-retryable outcome, never toward an already-exists pointing
  * at a batch that may no longer be live). */
@@ -490,19 +558,43 @@ async function findDuplicateBatch(
 
 /** Shared "resume pointer" projection — every existing-batch lookup below
  * (byHash, the session+chunk fallback, and the finding-2 underlying-file
- * check) converges on this exact result shape. */
+ * check) converges on this exact result shape.
+ *
+ * Round-5 audit finding 2(b): `match.status` (and the rest of `match`) may
+ * be a STALE snapshot from whatever query found it — the target could have
+ * been reverted (by its own SEER-YIELDS self-revert, racing a completely
+ * different confirm) in the moments between that query and this call. Every
+ * already-exists result in this file funnels through here, so re-reading
+ * the CURRENT status right before handing out a resume pointer closes that
+ * gap for every caller at once — including the finding-2(a) POST-check race
+ * path above, which no longer does its own rival re-read and relies
+ * entirely on this one. (Resuming a reverted batch would be DATA-safe
+ * regardless — apply only ever selects apply_status='not_applied' rows,
+ * and a revert never leaves any row in that state — but it's a confusing
+ * dead end for the operator: refused here rather than merely tolerated.) */
 async function toAlreadyExistsResult(
   supabase: SupabaseClient<Database>,
   match: { id: string; status: string; session_id: string | null; chunk_index: number | null },
 ): Promise<ConfirmBatchResult> {
-  const counts = await countBatchRows(supabase, match.id);
+  const current = await readBatchLiveState(supabase, match.id);
+  if (!current || current.status === "reverted") {
+    return {
+      ok: false,
+      error: {
+        code: "duplicate_race_retry",
+        message:
+          "This upload matched an import that was withdrawn moments ago — please try confirming again.",
+      },
+    };
+  }
+  const counts = await countBatchRows(supabase, current.id);
   return {
     ok: true,
     alreadyExists: true,
-    batchId: match.id,
-    status: match.status,
-    sessionId: match.session_id,
-    chunkIndex: match.chunk_index,
+    batchId: current.id,
+    status: current.status,
+    sessionId: current.session_id,
+    chunkIndex: current.chunk_index,
     counts,
   };
 }
@@ -621,7 +713,7 @@ async function findLiveBatchByUnderlyingFile(
   const { data, error } = await query
     .order("created_at", { ascending: true })
     .order("id", { ascending: true })
-    .limit(20);
+    .limit(LIVE_BATCH_LOOKUP_LIMIT);
 
   if (error) {
     return {
@@ -635,6 +727,27 @@ async function findLiveBatchByUnderlyingFile(
 
   const rows = (data ?? []) as LiveBatchMatch[];
   const match = rows.find((row) => isWellFormedDigestForFile(row.content_sha256 ?? null, fileDigestHex)) ?? null;
+
+  // Round-5 audit finding 6: LIVE_BATCH_LOOKUP_LIMIT is heuristic, not a
+  // proof — if the query returns EXACTLY the limit and NONE of those rows
+  // survive the exact-format re-check above, a genuine well-formed match
+  // could be sitting beyond row LIVE_BATCH_LOOKUP_LIMIT, shadowed by that
+  // many malformed/contaminated rows sorting ahead of it (the comment above
+  // already calls this "vanishingly unlikely" for this product's own write
+  // paths — unlikely is not impossible). Fail CLOSED here rather than
+  // silently reporting "no live batch" and letting the caller proceed to
+  // create — a spurious duplicate live batch is a worse failure mode than
+  // asking the operator to retry.
+  if (match === null && rows.length === LIVE_BATCH_LOOKUP_LIMIT) {
+    return {
+      ok: false,
+      error: {
+        code: "duplicate_check_failed",
+        message: "Could not verify this file wasn't already imported — please try confirming again.",
+      },
+    };
+  }
+
   return { ok: true, match };
 }
 

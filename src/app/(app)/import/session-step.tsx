@@ -48,7 +48,13 @@ export type ChunkedPreviewState = {
   errorRows: ErrorRowEntry[];
 };
 
-export type ChunkUploadStatus = "pending" | "waiting" | "uploading" | "confirmed" | "failed";
+// Round-5 audit finding 4: "skipped" is a purely CLIENT-SIDE terminal state
+// — never sent to, or acknowledged by, the server (migrations are locked,
+// there is no DB column for it). It means "the operator chose not to
+// re-attempt this chunk," used to escape the permanent dead end a fully-
+// valid duplicate_chunk_content chunk (no error rows, so no override to
+// edit) would otherwise be — see ChunkUploadState.skippedDuplicateOfChunkIndex.
+export type ChunkUploadStatus = "pending" | "waiting" | "uploading" | "confirmed" | "failed" | "skipped";
 export type ChunkUploadState = {
   index: number;
   status: ChunkUploadStatus;
@@ -60,6 +66,21 @@ export type ChunkUploadState = {
    * fail again the same way). null for every non-error state, and for a
    * failure with no typed code (network error, generic upload failure). */
   code: string | null;
+  /** Round-5 audit finding 3: the operator's override slice for THIS
+   * chunk's rows (GLOBAL row numbers, same keying as RowOverrides).
+   * exactly as it was included in the confirm attempt that failed with
+   * duplicate_chunk_content — captured so the client can tell "an override
+   * exists" (true forever after a single edit) apart from "the override
+   * CHANGED since the collision" (the only thing that actually produces a
+   * different content_sha256 and can plausibly resolve it on retry).
+   * undefined until a duplicate_chunk_content failure actually occurs. */
+  sentOverridesSnapshot?: RowOverrides;
+  /** Round-5 audit finding 3/4: the sibling chunk index (body.chunkIndex
+   * from the server's alreadyExists response) THIS chunk's content
+   * collided with, when status is "failed" with code "duplicate_chunk_content"
+   * — or, once the operator skips it, the same value carried onto
+   * "skipped" so the session summary can name it. undefined otherwise. */
+  duplicateOfChunkIndex?: number;
 };
 
 export const ZERO_SUMMARY: PreviewSummary = {
@@ -320,7 +341,10 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
 
   for (const chunk of plan.chunks) {
     const current = results.find((c) => c.index === chunk.index);
-    if (current?.status === "confirmed") continue;
+    // Round-5 audit finding 4: a "skipped" chunk is a deliberate, permanent
+    // client-side terminal state — never re-attempted, exactly like a
+    // "confirmed" one.
+    if (current?.status === "confirmed" || current?.status === "skipped") continue;
 
     const now = Date.now();
     timestampsRef.current = timestampsRef.current.filter((t) => now - t < CONFIRM_RATE_WINDOW_MS);
@@ -342,7 +366,19 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
     form.append("chunkIndex", String(chunk.index));
     form.append("chunkTotal", String(plan.chunkTotal));
     form.append("sourceSha256", plan.sourceSha256);
+    // Round-5 audit finding 3: this chunk's own override slice, keyed by
+    // the GLOBAL row numbers PreviewStep shows — captured here (before
+    // localizing to this chunk's own local row numbers for the request
+    // body) so a duplicate_chunk_content failure below can snapshot
+    // EXACTLY what was sent, for the "did the fix actually change" gate.
+    const chunkGlobalOverridesSlice: RowOverrides = {};
     if (rowOverrides) {
+      for (const [key, fields] of Object.entries(rowOverrides)) {
+        const globalRowNumber = Number(key);
+        if (globalRowNumber >= chunk.startRow && globalRowNumber <= chunk.endRow) {
+          chunkGlobalOverridesSlice[globalRowNumber] = fields;
+        }
+      }
       const localOverrides = localizeRowOverrides(rowOverrides, chunk);
       if (Object.keys(localOverrides).length > 0) form.append("rowOverrides", JSON.stringify(localOverrides));
     }
@@ -406,30 +442,53 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
         // digest. Tagged with a distinct TERMINAL code — duplicate_chunk_
         // content — so PreviewStep never offers a "Retry upload" that
         // would just fail identically again, and the guidance below tells
-        // the operator the actual way forward: edit a row (even
-        // re-entering the same value) to make this upload distinct, or
-        // leave it alone if the duplication was accidental. This chunk's
-        // rows are NOT locked by this — isRowInConfirmedChunk only locks
-        // rows belonging to a chunk whose status is 'confirmed', and this
-        // one is 'failed' — so the operator can act on that guidance
-        // immediately, and a subsequent confirm carrying the override
+        // the operator the actual way forward: edit a row so its fix
+        // actually DIFFERS from the sibling's, or leave it alone (or skip
+        // it — PreviewStep's own "Skip this chunk" control) if the
+        // duplication was accidental. This chunk's rows are NOT locked by
+        // this — isRowInConfirmedChunk only locks rows belonging to a
+        // chunk whose status is 'confirmed', and this one is 'failed' —
+        // so the operator can act on that guidance immediately, and a
+        // subsequent confirm carrying a genuinely DIFFERENT override
         // reaches the create path normally (the same-session exclusion in
         // findLiveBatchByUnderlyingFile already keeps this sibling from
         // short-circuiting that retry as a false duplicate).
+        //
+        // Round-5 audit finding 3: the guidance used to say "edit any row
+        // below (even re-entering the same value)" — that is actively
+        // WRONG: re-entering the identical text produces the identical
+        // canonical overrides JSON, hence the identical namespaced digest,
+        // hence the identical collision, forever. Named explicitly below:
+        // the fix must DIFFER from the sibling's own value for that row.
         const conflictError = !body.sessionId
           ? `Chunk ${chunk.index} was already imported as a standalone batch. Revert that batch under ` +
             "Recent imports before re-uploading this file."
           : sameSession
             ? `Chunk ${chunk.index}'s content is identical to chunk ${body.chunkIndex}, already imported in this ` +
               `session — the database can't hold two imports with identical content, so this can't be resolved by ` +
-              "retrying. If this is a genuine repeated segment that needs to import again, edit any row below " +
-              "(even re-entering the same value) so this upload is tracked as distinct, then confirm again. If it " +
-              `was an accidental duplicate, no action is needed — chunk ${body.chunkIndex} already imported these rows.`
+              "retrying unchanged. If this is a genuine repeated segment that needs to import again, edit a row " +
+              `below so its fix actually DIFFERS from chunk ${body.chunkIndex}'s own value for that row — ` +
+              "re-entering the identical text won't change anything — then confirm again. If it was an accidental " +
+              `duplicate, no action is needed, or skip this chunk below — chunk ${body.chunkIndex} already imported ` +
+              "these rows."
             : "This file was already partially uploaded as a different, unfinished import — resuming that import " +
               "instead of starting a second one.";
         const conflictCode = sameSession ? "duplicate_chunk_content" : null;
         results = results.map((c) =>
-          c.index === chunk.index ? { ...c, status: "failed", error: conflictError, code: conflictCode } : c,
+          c.index === chunk.index
+            ? {
+                ...c,
+                status: "failed",
+                error: conflictError,
+                code: conflictCode,
+                // Round-5 audit finding 3: only meaningful (and only ever
+                // read) for duplicate_chunk_content — the exact override
+                // slice this failed attempt sent, for the "did it actually
+                // change" gate PreviewStep computes on retry.
+                sentOverridesSnapshot: conflictCode === "duplicate_chunk_content" ? chunkGlobalOverridesSlice : c.sentOverridesSnapshot,
+                duplicateOfChunkIndex: conflictCode === "duplicate_chunk_content" ? (body.chunkIndex as number) : c.duplicateOfChunkIndex,
+              }
+            : c,
         );
         onProgress(results);
         // sessionId null = the identical bytes were confirmed earlier as a
@@ -481,11 +540,29 @@ function chunkUploadStatusLabel(status: ChunkUploadStatus): string {
       return "Uploaded";
     case "failed":
       return "Failed";
+    case "skipped":
+      return "Skipped";
   }
 }
 
-export function ChunkUploadProgress({ chunks, chunkTotal }: { chunks: ChunkUploadState[]; chunkTotal: number }) {
-  const confirmedCount = chunks.filter((c) => c.status === "confirmed").length;
+/** Round-5 audit finding 4: `onSkipChunk`, when given, renders a "Skip
+ * this chunk" control on any chunk stuck on duplicate_chunk_content —
+ * the escape hatch for the case that has no editable row at all (a fully
+ * VALID duplicate chunk: no error rows, so no override editor, so no way
+ * to ever make its content_sha256 differ). Skipping is client-side only:
+ * it marks the chunk "skipped" so confirmChunkedSession never re-attempts
+ * it and PreviewStep's Confirm/Retry button is no longer blocked by it —
+ * it does not create, delete, or touch anything server-side. */
+export function ChunkUploadProgress({
+  chunks,
+  chunkTotal,
+  onSkipChunk,
+}: {
+  chunks: ChunkUploadState[];
+  chunkTotal: number;
+  onSkipChunk?: (index: number) => void;
+}) {
+  const confirmedCount = chunks.filter((c) => c.status === "confirmed" || c.status === "skipped").length;
   return (
     <div className="mt-lg">
       <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
@@ -495,13 +572,26 @@ export function ChunkUploadProgress({ chunks, chunkTotal }: { chunks: ChunkUploa
         {chunks.map((c) => (
           <li
             key={c.index}
-            className="flex items-center justify-between rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink"
+            className="flex items-center justify-between gap-sm rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink"
           >
             <span>Chunk {c.index}</span>
-            <span className="flex items-center gap-2xs text-caption text-grey">
+            <span className="flex items-center gap-xs text-caption text-grey">
               {c.status === "uploading" && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
-              {chunkUploadStatusLabel(c.status)}
+              {c.status === "skipped"
+                ? c.duplicateOfChunkIndex !== undefined
+                  ? `Skipped — identical to chunk ${c.duplicateOfChunkIndex}, already imported`
+                  : chunkUploadStatusLabel(c.status)
+                : chunkUploadStatusLabel(c.status)}
               {c.status === "failed" && c.error ? `: ${c.error}` : ""}
+              {c.status === "failed" && c.code === "duplicate_chunk_content" && onSkipChunk && (
+                <button
+                  type="button"
+                  onClick={() => onSkipChunk(c.index)}
+                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                >
+                  Skip this chunk
+                </button>
+              )}
             </span>
           </li>
         ))}
@@ -553,13 +643,22 @@ type SessionProgress = {
   allApplied: boolean;
 };
 
+/** Round-5 audit finding 4: one client-side-skipped chunk, for
+ * SessionStep's own honest summary line. Sourced from ImportClient's
+ * chunkUpload state (the server has no record of a skip at all — this is
+ * never persisted, so it does not survive a page reload). */
+export type SkippedChunkSummary = { index: number; duplicateOfChunkIndex: number | undefined };
+
 export function SessionStep({
   sessionId,
   label,
+  skippedChunks,
   onDone,
 }: {
   sessionId: string;
   label: string;
+  /** See SkippedChunkSummary. Omitted (or empty) renders nothing extra. */
+  skippedChunks?: SkippedChunkSummary[];
   onDone: () => void;
 }) {
   const [progress, setProgress] = useState<SessionProgress | null>(null);
@@ -827,6 +926,21 @@ export function SessionStep({
           <p className="mt-xs text-caption text-grey">
             Not every expected chunk has arrived yet — if the upload was interrupted, start a new import with the
             same file to finish it.
+          </p>
+        )}
+        {/* Round-5 audit finding 4: reports honestly WHY a skipped chunk's
+            rows never arrived, distinct from the generic "interrupted
+            upload" message above — client-side only, so this list is
+            empty (and this block renders nothing) after a page reload. */}
+        {skippedChunks && skippedChunks.length > 0 && (
+          <p className="mt-xs text-caption text-grey">
+            {skippedChunks
+              .map((s) =>
+                s.duplicateOfChunkIndex !== undefined
+                  ? `Chunk ${s.index} skipped — byte-identical to chunk ${s.duplicateOfChunkIndex}, whose rows are already imported.`
+                  : `Chunk ${s.index} skipped.`,
+              )
+              .join(" ")}
           </p>
         )}
       </div>

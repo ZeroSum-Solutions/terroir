@@ -94,7 +94,7 @@ const FIELD_LABELS: Record<CanonicalHeader, string> = {
   section: "Section",
 };
 
-type BatchSummary = {
+export type BatchSummary = {
   id: string;
   filename: string;
   status: "created" | "applying" | "completed" | "reverted";
@@ -117,7 +117,7 @@ export type BatchRow = {
   apply_status: "not_applied" | "applied" | "reverted";
 };
 
-type BatchDetail = { batch: BatchSummary; rows: BatchRow[] };
+export type BatchDetail = { batch: BatchSummary; rows: BatchRow[] };
 
 type Step = "upload" | "preview" | "batch" | "session";
 
@@ -131,6 +131,34 @@ const TEMPLATE_CSV = `${CANONICAL_HEADERS.join(",")}\nDomaine Example,Cuvee One,
 // MAX_SHOWN_ERROR_ROWS rows, repeatable until every error row is shown,
 // and the overflow warning disappears once nothing is left hidden.
 export const MAX_SHOWN_ERROR_ROWS = 100;
+
+/** Round-5 audit finding 3: whether two override slices for the same chunk
+ * are the SAME edit — an order-independent, deep value comparison used
+ * only to gate the "Retry upload" button on a chunk stuck at
+ * duplicate_chunk_content (an unchanged override reproduces the identical
+ * canonical overrides JSON server-side, hence the identical namespaced
+ * digest, hence the identical collision, forever). It does NOT need to
+ * exactly mirror batch-service.ts's own canonicalizeRowOverrides — that
+ * function is server-only (pulls in node:crypto, never importable from a
+ * client component) — it only needs to reliably distinguish "identical"
+ * from "different"; the server's own digest remains the actual authority
+ * on whether a retry produces a new content_sha256. */
+function overridesSliceEqual(
+  a: Record<number, Partial<Record<CanonicalHeader, string>>>,
+  b: Record<number, Partial<Record<CanonicalHeader, string>>>,
+): boolean {
+  const normalize = (slice: Record<number, Partial<Record<CanonicalHeader, string>>>) =>
+    Object.entries(slice)
+      .map(([rowNumber, fields]) => [
+        Number(rowNumber),
+        Object.entries(fields ?? {})
+          .filter(([, value]) => value !== undefined)
+          .sort(([fieldA], [fieldB]) => fieldA.localeCompare(fieldB)),
+      ] as const)
+      .filter(([, fields]) => fields.length > 0)
+      .sort(([rowA], [rowB]) => rowA - rowB);
+  return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b));
+}
 
 export function ImportClient() {
   const [step, setStep] = useState<Step>("upload");
@@ -398,6 +426,20 @@ export function ImportClient() {
     [chunkedPlan, chunkUpload],
   );
 
+  /** Round-5 audit finding 4: marks a chunk stuck on duplicate_chunk_content
+   * "skipped" — client-side only (see ChunkUploadState's own comment).
+   * confirmChunkedSession never re-attempts a "skipped" chunk, and it no
+   * longer counts toward PreviewStep's blocksConfirmButton, so the
+   * operator can proceed with every OTHER chunk instead of being stuck
+   * forever on one they've decided not to import. */
+  const handleSkipChunk = useCallback((index: number) => {
+    setChunkUpload((prev) =>
+      (prev ?? []).map((c) =>
+        c.index === index ? { ...c, status: "skipped", error: null, code: null } : c,
+      ),
+    );
+  }, []);
+
   const reset = useCallback(() => {
     setStep("upload");
     setFile(null);
@@ -449,6 +491,7 @@ export function ImportClient() {
           chunkBreakdown={chunkedPreview?.perChunk}
           chunkTotal={chunkedPlan?.chunkTotal}
           chunkUpload={chunkUpload}
+          onSkipChunk={chunkedPreview ? handleSkipChunk : undefined}
           onConfirm={chunkedPreview ? () => void handleConfirmChunked() : () => void handleConfirm()}
           confirming={chunkedPreview ? confirmingChunked : confirming}
           onBack={reset}
@@ -464,6 +507,11 @@ export function ImportClient() {
         <SessionStep
           sessionId={sessionId}
           label={sessionLabel}
+          skippedChunks={
+            chunkUpload
+              ?.filter((c) => c.status === "skipped")
+              .map((c) => ({ index: c.index, duplicateOfChunkIndex: c.duplicateOfChunkIndex })) ?? []
+          }
           onDone={() => {
             writeStoredSession(null);
             reset();
@@ -570,6 +618,7 @@ export function PreviewStep({
   chunkBreakdown,
   chunkTotal,
   chunkUpload,
+  onSkipChunk,
   onConfirm,
   confirming,
   onBack,
@@ -587,6 +636,10 @@ export function PreviewStep({
   chunkBreakdown?: { index: number; startRow: number; endRow: number; summary: PreviewSummary }[];
   chunkTotal?: number;
   chunkUpload: ChunkUploadState[] | null;
+  /** Round-5 audit finding 4: "Skip this chunk" for a duplicate_chunk_content
+   * chunk — see ChunkUploadProgress's own comment. Omitted on the plain
+   * (non-chunked) path, where the concept doesn't apply. */
+  onSkipChunk?: (index: number) => void;
   onConfirm: () => void;
   confirming: boolean;
   onBack: () => void;
@@ -639,7 +692,17 @@ export function PreviewStep({
   // guaranteed to "apply." Relabeled to "Passing validation" (see the
   // stat tile below) with an always-visible caption stating plainly that
   // the server decides the final ready/needs-resolution split at import.
-  const effectiveReadyToApplyRows = summary.readyToApplyRows + fixedCount;
+  //
+  // Round-5 audit finding 5: the VALUE here used to be summary.readyToApplyRows
+  // (rows with resolution === 'auto' — schema-valid AND already
+  // auto-resolvable) even though the LABEL claims "Passing validation" —
+  // so a schema-valid-but-unmatched wine (needs LWIN/cost resolution)
+  // counted toward neither tile: "Passing validation: 0, Needs resolution:
+  // 1" for a file with exactly one perfectly valid row. Fixed to derive
+  // from summary.validRows (every schema-valid row, matching the label's
+  // actual claim) plus locally-fixed rows — "Needs resolution" stays its
+  // own separate line below, unaffected.
+  const effectivePassingValidationRows = summary.validRows + fixedCount;
   const effectiveErrorRows = summary.errorRows - fixedCount;
   const hasFailedChunk = chunkUpload?.some((c) => c.status === "failed") ?? false;
   // Sol round-2 audit finding 3: chunk_content_mismatch is TERMINAL —
@@ -659,25 +722,32 @@ export function PreviewStep({
   // any rowOverride namespaces the chunk's content_sha256 so it no longer
   // collides with its sibling (the same-session exclusion in
   // findLiveBatchByUnderlyingFile then keeps the sibling from
-  // short-circuiting the retry as a false duplicate). So the block below
-  // only stays "unresolved" — hiding the button — until the operator has
-  // actually entered an override for at least one of this chunk's own
-  // (visible, editable) error rows; the moment they do, the button
-  // reappears and a normal confirm/retry sends the now-distinct content.
-  // A duplicate chunk with NO error rows of its own (fully valid,
-  // byte-identical bytes) has no row for the operator to edit at all —
-  // correctly stays permanently hidden, matching the server's own
-  // guidance that "leave it" is the only available resolution then.
+  // short-circuiting the retry as a false duplicate).
+  //
+  // Round-5 audit finding 3: the gate used to check only that an override
+  // EXISTS for one of this chunk's own rows — but two identical chunks
+  // given the exact same inline fix hash identically every time (same
+  // canonical overrides JSON -> same namespaced digest), so "an override
+  // exists" never stops being true once the operator edits a field once,
+  // and Retry would resend the same doomed digest forever. The gate now
+  // compares the CURRENT override slice for this chunk's rows against the
+  // slice that was actually SENT with the failed attempt
+  // (ChunkUploadState.sentOverridesSnapshot, captured in
+  // session-step.tsx) — only a slice that has genuinely CHANGED can
+  // plausibly produce a different digest and resolve the collision.
   const unresolvedDuplicateChunkContentIndexes = new Set(
     (chunkUpload ?? [])
       .filter((c) => c.status === "failed" && c.code === "duplicate_chunk_content")
-      .map((c) => c.index)
-      .filter(
-        (chunkIndex) =>
-          !errorRows.some(
-            (row) => row.chunkIndex === chunkIndex && Object.keys(rowOverrides[row.rowNumber] ?? {}).length > 0,
-          ),
-      ),
+      .filter((c) => {
+        const currentSlice: RowOverrides = {};
+        for (const row of errorRows) {
+          if (row.chunkIndex !== c.index) continue;
+          const override = rowOverrides[row.rowNumber];
+          if (override && Object.keys(override).length > 0) currentSlice[row.rowNumber] = override;
+        }
+        return overridesSliceEqual(currentSlice, c.sentOverridesSnapshot ?? {});
+      })
+      .map((c) => c.index),
   );
   const hasUnresolvedDuplicateChunkContent = unresolvedDuplicateChunkContentIndexes.size > 0;
   const blocksConfirmButton = hasChunkContentMismatch || hasUnresolvedDuplicateChunkContent;
@@ -694,7 +764,7 @@ export function PreviewStep({
 
       <dl className="mt-md grid grid-cols-2 gap-sm text-[13px]">
         <SummaryStat label="Total rows" value={summary.totalRows} />
-        <SummaryStat label="Passing validation" value={effectiveReadyToApplyRows} />
+        <SummaryStat label="Passing validation" value={effectivePassingValidationRows} />
         <SummaryStat label="Needs resolution" value={summary.pendingResolutionRows} />
         <SummaryStat label="Errors (excluded)" value={effectiveErrorRows} />
         <SummaryStat label="LWIN matched" value={summary.matchedRows} />
@@ -776,7 +846,9 @@ export function PreviewStep({
         </div>
       )}
 
-      {chunkUpload && <ChunkUploadProgress chunks={chunkUpload} chunkTotal={chunkTotal ?? chunkUpload.length} />}
+      {chunkUpload && (
+        <ChunkUploadProgress chunks={chunkUpload} chunkTotal={chunkTotal ?? chunkUpload.length} onSkipChunk={onSkipChunk} />
+      )}
 
       {error && (
         <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
@@ -963,7 +1035,9 @@ function summarizeRevertResult(result: RevertResult): string {
   return parts.join(" ");
 }
 
-function BatchStep({
+/** Exported so import-client.test.tsx can pin the reverted-batch banner
+ * directly (Sol round-5 audit finding 2's client-detectability ask). */
+export function BatchStep({
   batch,
   setBatch,
   onDone,
@@ -1151,8 +1225,25 @@ function BatchStep({
         </div>
       )}
 
+      {/* Round-5 audit finding 2: a batch that self-reverted via the
+          SEER-YIELDS race protocol before anything was ever applied still
+          has rows sitting at apply_status='not_applied' — eligibleNotApplied
+          stays nonzero even though the batch itself is dead. apply_import_batch_chunk_v2
+          already no-ops on a reverted batch (batch-service.ts), so clicking
+          Apply here would silently do nothing; batch.batch.status is a
+          fresh server read (GET /api/import/batches/[id]) so this is
+          cheaply, reliably detectable — the operator gets an honest
+          explanation instead of a confusing no-op button. Data-safe either
+          way: apply only ever selects apply_status='not_applied' rows, and
+          this is refused for clarity, not because resuming would be unsafe. */}
+      {batch.batch.status === "reverted" && eligibleNotApplied.length > 0 && (
+        <p role="status" className="mt-md text-[13px] text-grey">
+          This upload was superseded by a duplicate import and was withdrawn — these rows were never applied. Re-upload the file if you still need to import it.
+        </p>
+      )}
+
       <div className="mt-lg flex flex-col gap-sm">
-        {eligibleNotApplied.length > 0 && (
+        {eligibleNotApplied.length > 0 && batch.batch.status !== "reverted" && (
           <button
             type="button"
             disabled={applying}

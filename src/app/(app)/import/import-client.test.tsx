@@ -12,7 +12,7 @@
 import { act, type ComponentProps, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { PreviewStep, isRowInConfirmedChunk, MAX_SHOWN_ERROR_ROWS, type ErrorRowEntry } from "./import-client";
+import { PreviewStep, BatchStep, isRowInConfirmedChunk, MAX_SHOWN_ERROR_ROWS, type ErrorRowEntry, type BatchDetail } from "./import-client";
 import { ZERO_SUMMARY, type ChunkUploadState, type ChunkedPlanState } from "./session-step";
 import type { CanonicalHeader } from "@/domains/import/constants";
 
@@ -262,6 +262,38 @@ describe("PreviewStep — revalidated summary counts (Sol round-3 audit finding 
     expect(container.textContent).not.toContain("re-checked when you confirm");
   });
 
+  // Round-5 audit finding 5: "Passing validation" was computed from
+  // summary.readyToApplyRows (rows with resolution === 'auto' — schema-valid
+  // AND already auto-resolvable), not summary.validRows (every schema-valid
+  // row) — so a perfectly valid-but-unmatched wine (needs LWIN/cost
+  // resolution) rendered "Passing validation: 0" even though it passed
+  // validation outright, alongside a correct-but-confusing "Needs
+  // resolution: 1" on its own separate line.
+  it("counts a valid-but-unmatched row toward Passing validation, not just readyToApplyRows", async () => {
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          summary: {
+            ...ZERO_SUMMARY,
+            totalRows: 1,
+            validRows: 1,
+            errorRows: 0,
+            readyToApplyRows: 0, // needs resolution, so NOT auto-ready
+            pendingResolutionRows: 1,
+            unmatchedRows: 1,
+          },
+          errorRows: [],
+        })}
+      />,
+    );
+
+    const stats = new Map(
+      [...container.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]),
+    );
+    expect(stats.get("Passing validation")).toBe("1");
+    expect(stats.get("Needs resolution")).toBe("1");
+  });
+
   async function mount(element: ReactElement) {
     const container = document.createElement("div");
     document.body.append(container);
@@ -378,10 +410,11 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
         batchId: null,
         error:
           "Chunk 1's content is identical to chunk 2, already imported in this session — the database can't hold " +
-          "two imports with identical content, so this can't be resolved by retrying. If this is a genuine " +
-          "repeated segment that needs to import again, edit any row below (even re-entering the same value) so " +
-          "this upload is tracked as distinct, then confirm again. If it was an accidental duplicate, no action " +
-          "is needed — chunk 2 already imported these rows.",
+          "two imports with identical content, so this can't be resolved by retrying unchanged. If this is a " +
+          "genuine repeated segment that needs to import again, edit a row below so its fix actually DIFFERS from " +
+          "chunk 2's own value for that row — re-entering the identical text won't change anything — then confirm " +
+          "again. If it was an accidental duplicate, no action is needed, or skip this chunk below — chunk 2 " +
+          "already imported these rows.",
         code: "duplicate_chunk_content",
       },
     ];
@@ -401,12 +434,26 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
     expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
     expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
     expect(container.textContent).toContain("identical to chunk 2");
-    expect(container.textContent).toContain("edit any row below");
+    expect(container.textContent).toContain("actually DIFFERS");
   });
 
-  it("shows the Retry button again once an override exists for one of the failed chunk's own rows", async () => {
+  // Round-5 audit finding 3: the gate used to check only that an override
+  // EXISTS for the failed chunk's own row — two identical chunks given the
+  // exact SAME inline fix hash identically every time, so this would
+  // (wrongly) offer Retry forever without the fix ever actually resolving
+  // the collision. The gate now compares the CURRENT override against the
+  // slice that was actually SENT with the failed attempt
+  // (sentOverridesSnapshot) — only a genuine change re-enables Retry.
+  it("keeps the Retry button HIDDEN when the current override is UNCHANGED from what was already sent and failed", async () => {
     const chunkUpload: ChunkUploadState[] = [
-      { index: 1, status: "failed", batchId: null, error: "Chunk 1's content is identical to chunk 2.", code: "duplicate_chunk_content" },
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error: "Chunk 1's content is identical to chunk 2.",
+        code: "duplicate_chunk_content",
+        sentOverridesSnapshot: { 1: { quantity: "6" } },
+      },
     ];
 
     const { container } = await mount(
@@ -416,10 +463,40 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
           chunkTotal: 2,
           error: chunkUpload[0].error,
           errorRows: [errorRow(1, { chunkIndex: 1, chunkRowNumber: 1 })],
-          // The operator edited row 1 (which belongs to the failed chunk) —
-          // even re-entering the same-shaped value counts, per the
-          // server's own guidance.
+          // Same value the failed attempt already sent — the SAME
+          // canonical overrides JSON server-side, hence the SAME digest,
+          // hence the SAME collision. Retry must stay hidden.
           rowOverrides: { 1: { quantity: "6" } },
+        })}
+      />,
+    );
+
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.some((b) => b.textContent?.includes("Retry upload"))).toBe(false);
+    expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
+  });
+
+  it("shows the Retry button once the current override DIFFERS from what was already sent and failed", async () => {
+    const chunkUpload: ChunkUploadState[] = [
+      {
+        index: 1,
+        status: "failed",
+        batchId: null,
+        error: "Chunk 1's content is identical to chunk 2.",
+        code: "duplicate_chunk_content",
+        sentOverridesSnapshot: { 1: { quantity: "6" } },
+      },
+    ];
+
+    const { container } = await mount(
+      <PreviewStep
+        {...baseProps({
+          chunkUpload,
+          chunkTotal: 2,
+          error: chunkUpload[0].error,
+          errorRows: [errorRow(1, { chunkIndex: 1, chunkRowNumber: 1 })],
+          // A genuinely different value from what was already sent.
+          rowOverrides: { 1: { quantity: "7" } },
         })}
       />,
     );
@@ -452,6 +529,66 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
     expect(buttons.some((b) => b.textContent?.includes("Confirm import"))).toBe(false);
   });
 
+  // Round-5 audit finding 4: a fully VALID duplicate chunk (no error rows
+  // at all) has no override to ever enter — Retry can never re-enable, and
+  // without an escape hatch the whole multi-chunk upload is stuck forever
+  // (blocksConfirmButton hides Confirm/Retry site-wide, not just for this
+  // chunk). "Skip this chunk" is the escape hatch: it's client-side only
+  // and unblocks the rest of the upload.
+  describe("Skip this chunk (round-5 audit finding 4)", () => {
+    it("offers a Skip control for a duplicate_chunk_content chunk with NO error rows of its own, and calling it unblocks Confirm/Retry", async () => {
+      const chunkUpload: ChunkUploadState[] = [
+        { index: 1, status: "failed", batchId: null, error: "Chunk 1's content is identical to chunk 2.", code: "duplicate_chunk_content" },
+        { index: 2, status: "confirmed", batchId: "b2", error: null, code: null },
+      ];
+      let skippedIndex: number | null = null;
+
+      const { container } = await mount(
+        <PreviewStep
+          {...baseProps({
+            chunkUpload,
+            chunkTotal: 2,
+            error: chunkUpload[0].error,
+            errorRows: [], // fully valid chunk — no row to edit at all
+            onSkipChunk: (index) => {
+              skippedIndex = index;
+            },
+          })}
+        />,
+      );
+
+      const skipButton = findButton(container, "Skip this chunk");
+      expect(skipButton).toBeTruthy();
+      expect(container.querySelectorAll("button").length).toBeGreaterThan(0);
+      // Confirm/Retry stays hidden until the skip is actually applied —
+      // this only pins that the control exists and reports the right index.
+      await click(skipButton!);
+      expect(skippedIndex).toBe(1);
+    });
+
+    it("a chunk marked 'skipped' no longer blocks the Confirm/Retry button for the rest of the upload", async () => {
+      const chunkUpload: ChunkUploadState[] = [
+        { index: 1, status: "skipped", batchId: null, error: null, code: null, duplicateOfChunkIndex: 2 },
+        { index: 2, status: "confirmed", batchId: "b2", error: null, code: null },
+      ];
+
+      const { container } = await mount(
+        <PreviewStep
+          {...baseProps({
+            chunkUpload,
+            chunkTotal: 2,
+            errorRows: [],
+            summary: { ...ZERO_SUMMARY, totalRows: 1, validRows: 1, readyToApplyRows: 1 },
+          })}
+        />,
+      );
+
+      const buttons = [...container.querySelectorAll("button")];
+      expect(buttons.some((b) => b.textContent?.includes("Confirm import") || b.textContent?.includes("Retry upload"))).toBe(true);
+      expect(container.textContent).toContain("Skipped");
+    });
+  });
+
   async function mount(element: ReactElement) {
     const container = document.createElement("div");
     document.body.append(container);
@@ -459,6 +596,10 @@ describe("PreviewStep — duplicate_chunk_content is recoverable, not a dead end
     mountedRoots.push(root);
     await act(async () => root.render(element));
     return { container, root };
+  }
+
+  async function click(element: HTMLElement) {
+    await act(async () => element.click());
   }
 });
 
@@ -504,6 +645,81 @@ describe("PreviewStep — incremental error-row disclosure (Sol round-2 audit fi
 
   async function click(element: HTMLElement) {
     await act(async () => element.click());
+  }
+});
+
+// Round-5 audit finding 2: even with the server-side hardening (2a/2b),
+// there's a narrow residual — a batch reverting AFTER toAlreadyExistsResult's
+// fresh read but BEFORE the client acts on it. Resuming it is DATA-safe
+// (apply only ever selects apply_status='not_applied' rows, untouched by a
+// revert of an unapplied batch) but UI-confusing: eligibleNotApplied stays
+// nonzero even though the batch is dead and apply_import_batch_chunk_v2
+// no-ops on it. batch.batch.status is a fresh server read
+// (GET /api/import/batches/[id]), so this is cheaply, reliably detectable
+// client-side.
+describe("BatchStep — a resumed batch that reads as reverted is surfaced honestly (round-5 audit finding 2)", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    document.body.innerHTML = "";
+  });
+
+  function batchDetail(status: BatchDetail["batch"]["status"]): BatchDetail {
+    return {
+      batch: {
+        id: "batch-1",
+        filename: "cellar.csv",
+        status,
+        total_rows: 1,
+        created_at: "2026-08-27T00:00:00.000Z",
+        reverted_at: status === "reverted" ? "2026-08-27T00:00:01.000Z" : null,
+      },
+      rows: [
+        {
+          id: "row-1",
+          row_number: 1,
+          raw: { producer: "Domaine A", name: "Cuvee 1" },
+          row_state: "valid",
+          validation_errors: [],
+          lwin_status: "matched",
+          lwin_id: "lwin-1",
+          cost_status: "present",
+          resolution: "auto",
+          manual_unit_cost: null,
+          apply_status: "not_applied",
+        },
+      ],
+    };
+  }
+
+  it("hides the Apply button and shows a superseded-import banner when the batch reads as reverted with rows still not_applied", async () => {
+    const { container } = await mount(
+      <BatchStep batch={batchDetail("reverted")} setBatch={() => {}} onDone={() => {}} />,
+    );
+
+    expect(findButton(container, /Apply \d+ row/)).toBeFalsy();
+    expect(container.textContent).toContain("superseded by a duplicate import");
+  });
+
+  it("shows the Apply button normally, and no banner, for a live (non-reverted) batch with the same row shape", async () => {
+    const { container } = await mount(
+      <BatchStep batch={batchDetail("created")} setBatch={() => {}} onDone={() => {}} />,
+    );
+
+    expect(findButton(container, /Apply \d+ row/)).toBeTruthy();
+    expect(container.textContent).not.toContain("superseded by a duplicate import");
+  });
+
+  async function mount(element: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(element));
+    return { container, root };
   }
 });
 
