@@ -41,6 +41,8 @@ import {
   type ChunkedPreviewState,
   type ChunkUploadState,
 } from "./session-step";
+import { convertSpreadsheetFile, isSpreadsheetFile } from "./spreadsheet-upload";
+import { takeHandoffFile } from "./spreadsheet-handoff";
 
 /** BLOCK 1 (round-11 fix) — how many preview/confirm "units" (chunks, or 1
  * for a file at/under MAX_ROWS that never gets split) this file will need,
@@ -485,6 +487,8 @@ export function buildImportAnywayOverride(
 export function ImportClient() {
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
+  const [converting, setConverting] = useState(false);
+  const [conversionNotice, setConversionNotice] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ rows: PreviewRow[]; summary: PreviewSummary } | null>(null);
@@ -896,9 +900,62 @@ export function ImportClient() {
     [chunkedPreview],
   );
 
+  /** A spreadsheet is converted to CSV the moment it is chosen, server-side
+   * (the xlsx reader is far too heavy to ship to the browser). From that point
+   * on the file IS a CSV: record splitting, chunk planning, preview and
+   * confirm all run on the converted text exactly as they would on an uploaded
+   * .csv, so nothing downstream needs to know a workbook was ever involved. */
+  const handleFileSelected = useCallback(async (selected: File | null) => {
+    setConversionNotice(null);
+    setPreviewError(null);
+
+    if (!selected) {
+      setFile(null);
+      return;
+    }
+    if (!isSpreadsheetFile(selected)) {
+      setFile(selected);
+      return;
+    }
+
+    // Clear any previously-selected file first: if the conversion fails there
+    // must be no stale file left sitting behind the error, ready to be
+    // previewed as though it were the one just chosen.
+    setFile(null);
+    setConverting(true);
+    try {
+      const outcome = await convertSpreadsheetFile(selected);
+      if (!outcome.ok) {
+        setPreviewError(outcome.message);
+        return;
+      }
+      setFile(outcome.file);
+      setConversionNotice(outcome.notice);
+    } finally {
+      setConverting(false);
+    }
+  }, []);
+
+  // A spreadsheet chosen on the scan screen was parked for us on the way here.
+  // Pick it up and treat it exactly as if it had been chosen on this screen.
+  // takeHandoffFile is single-consumption, so React's development double-invoke
+  // of this effect cannot import the same file twice.
+  useEffect(() => {
+    const handedOff = takeHandoffFile();
+    if (!handedOff) return;
+    // Deferred into a promise callback rather than called straight from the
+    // effect body: handleFileSelected sets state synchronously before its first
+    // await, and `react-hooks/set-state-in-effect` (rightly) rejects that in an
+    // effect body while allowing it from an async continuation — the same
+    // pattern the preview-unit counter below already follows.
+    void Promise.resolve().then(() => handleFileSelected(handedOff));
+  }, [handleFileSelected]);
+
   const reset = useCallback(() => {
     setStep("upload");
     setFile(null);
+    setConversionNotice(null);
+    setConverting(false);
     setPreview(null);
     setPreviewError(null);
     setBatch(null);
@@ -917,14 +974,16 @@ export function ImportClient() {
       <header className="mb-lg">
         <h1 className="font-serif text-[28px] font-normal leading-tight text-ink">Import cellar</h1>
         <p className="mt-2xs text-[14px] text-grey">
-          Upload a CSV of your existing inventory. Nothing is written to your cellar until you confirm the preview.
+          Upload a CSV or Excel (.xlsx) file of your existing inventory. Nothing is written to your cellar until you confirm the preview.
         </p>
       </header>
 
       {step === "upload" && (
         <UploadStep
           file={file}
-          setFile={setFile}
+          setFile={handleFileSelected}
+          converting={converting}
+          conversionNotice={conversionNotice}
           fileInputRef={fileInputRef}
           onPreview={handlePreview}
           previewing={previewing}
@@ -1041,6 +1100,8 @@ function describeWaitEstimate(seconds: number): string {
 function UploadStep({
   file,
   setFile,
+  converting,
+  conversionNotice,
   fileInputRef,
   onPreview,
   previewing,
@@ -1050,6 +1111,12 @@ function UploadStep({
 }: {
   file: File | null;
   setFile: (f: File | null) => void;
+  /** True while a chosen .xlsx is being converted to CSV server-side. */
+  converting: boolean;
+  /** What the conversion read, once it succeeds — which sheet, how many rows.
+   * A workbook can hold several sheets and only the first is imported, so the
+   * operator is told which one they are about to preview. */
+  conversionNotice: string | null;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onPreview: () => void;
   previewing: boolean;
@@ -1079,7 +1146,7 @@ function UploadStep({
           ref={fileInputRef}
           id="import-file"
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           className="sr-only"
           onChange={(event) => setFile(event.target.files?.[0] ?? null)}
         />
@@ -1087,12 +1154,16 @@ function UploadStep({
           <Upload className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
         </span>
         <span className="text-[14px] font-medium text-ink">
-          {file ? file.name : "Choose a CSV file"}
+          {converting ? "Reading spreadsheet…" : file ? file.name : "Choose a CSV or Excel file"}
         </span>
         <span className="text-caption text-grey">
-          .csv up to 5 MB per upload — larger files split into {CLIENT_CHUNK_TARGET_ROWS}-row chunks automatically
+          .csv or .xlsx up to 5 MB per upload — larger files split into {CLIENT_CHUNK_TARGET_ROWS}-row chunks automatically
         </span>
       </label>
+
+      {conversionNotice && (
+        <p className="mt-md text-[13px] text-grey">{conversionNotice}</p>
+      )}
 
       {error && (
         <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
@@ -1125,7 +1196,10 @@ function UploadStep({
         // was just swapped in and this one's async count is still in
         // flight). "unavailable" still allows a click: handlePreview's own
         // real decode/split will surface the actual error.
-        disabled={!file || previewing || previewUnitsStatus === "pending"}
+        // `converting` is belt-and-braces: the conversion path clears `file`
+        // first, so `!file` already covers it — but the guard must not depend on
+        // that ordering staying true.
+        disabled={!file || converting || previewing || previewUnitsStatus === "pending"}
         onClick={onPreview}
         className="mt-lg flex min-h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
       >

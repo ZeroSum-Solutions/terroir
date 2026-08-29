@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 91,
-  "discoveredOperationCount": 106,
+  "routeFileCount": 92,
+  "discoveredOperationCount": 107,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/bins",
@@ -310,6 +310,17 @@
         "file": "src/app/api/import/batches/[id]/rows/[rowId]/route.ts",
         "exportKind": "function-declaration",
         "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/import/convert",
+      "method": "POST",
+      "path": "/api/import/convert",
+      "source": {
+        "file": "src/app/api/import/convert/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
         "moduleSpecifier": null
       }
     },

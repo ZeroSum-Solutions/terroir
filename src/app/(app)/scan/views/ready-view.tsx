@@ -10,6 +10,7 @@ import { accuracyColor } from "@/lib/scanner/accuracy-color";
 import { markScanStage } from "@/lib/scanner/scan-timing";
 import type { RecentScan, ScanMode } from "@/lib/scanner/types";
 import { formatMoney } from "../components/field-inputs";
+import { isImportableSpreadsheet } from "@/app/(app)/import/spreadsheet-handoff";
 
 interface RecentScansListProps {
   scans: RecentScan[];
@@ -53,6 +54,9 @@ function RecentScansList({ scans }: RecentScansListProps) {
 
 interface ReadyViewProps {
   onStart: (files: File[]) => void;
+  /** A spreadsheet chosen here belongs to /import, not to document
+   * intelligence. The parent parks it and navigates rather than refusing it. */
+  onSpreadsheet: (file: File) => void;
   mode: ScanMode;
   onModeChange: (mode: ScanMode) => void;
   recentScans: RecentScan[];
@@ -62,6 +66,7 @@ interface ReadyViewProps {
 
 export function ReadyView({
   onStart,
+  onSpreadsheet,
   mode,
   onModeChange,
   recentScans,
@@ -86,6 +91,15 @@ export function ReadyView({
     // browsers/webviews otherwise treat an unchanged input as a no-op.
     input.value = "";
     if (fileArr.length === 0) return;
+    // A cellar spreadsheet is not a scannable document — document intelligence
+    // reads photos and PDFs. Hand it to /import instead of starting a scan that
+    // could only fail. Deliberately BEFORE the capture-stage end marker: no
+    // scan begins here, so there is no scan for that timing to belong to.
+    const spreadsheet = fileArr.find(isImportableSpreadsheet);
+    if (spreadsheet) {
+      onSpreadsheet(spreadsheet);
+      return;
+    }
     // M1-1: client-side "capture" stage ends here (started at the
     // take-photo/upload-file button click below); reported once a scan id
     // exists, in scanner.tsx's startScan.
@@ -203,7 +217,7 @@ export function ReadyView({
         <p className="mt-xs text-center text-[12px] text-grey">
           {isBottle
             ? "JPG or PNG · up to 20MB"
-            : "JPG, PNG, or PDF · up to 10MB · multi-page invoices welcome"}
+            : "JPG, PNG, or PDF · up to 10MB · multi-page invoices welcome · a .csv or .xlsx cellar list opens in Import"}
         </p>
       </div>
 
@@ -218,7 +232,11 @@ export function ReadyView({
       <input
         ref={fileRef}
         type="file"
-        accept={isBottle ? "image/jpeg,image/png" : "image/*,application/pdf"}
+        accept={
+          isBottle
+            ? "image/jpeg,image/png"
+            : "image/*,application/pdf,.csv,.xlsx"
+        }
         // A multi-page invoice can genuinely be scanned as several files
         // in one batch (BND-081 / TER-CF-032); a bottle scan identifies
         // one wine from one label photo, so there's nothing to batch.

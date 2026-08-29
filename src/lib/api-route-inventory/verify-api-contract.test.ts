@@ -317,9 +317,10 @@ describe("checked-in API contract gate", () => {
       // 103 + 2 = 105.
       // Bulk onboarding resolution added
       // POST /api/import/batches/[id]/resolve-all — 105 + 1 = 106.
-      discoveredOperationCount: 106,
+      // Excel import added POST /api/import/convert — 106 + 1 = 107.
+      discoveredOperationCount: 107,
       plannedOperationCount: 15,
-      classificationCount: 106,
+      classificationCount: 107,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,

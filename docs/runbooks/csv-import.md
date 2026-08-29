@@ -6,6 +6,34 @@ bounded chunks. See `supabase/migrations/0076_csv_import_batches.sql` for
 the original schema, `supabase/migrations/010{2..11}_*.sql` for P3's
 additions, and `src/domains/import/*` for the implementation.
 
+## Excel (.xlsx) uploads
+
+An .xlsx is converted to CSV **before it reaches any of the below**, and every
+rule on this page then applies to it unchanged — headers, row validation,
+dedup, LWIN matching, chunk planning, digests, revert.
+
+- `POST /api/import/convert` (`src/app/api/import/convert/route.ts`) reads the
+  workbook with `exceljs` and returns CSV text. It writes nothing to the
+  database and creates no session or batch.
+- The browser calls it the moment a spreadsheet is selected
+  (`src/app/(app)/import/spreadsheet-upload.ts`) and swaps in the returned CSV,
+  so a large workbook is split into chunks by exactly the same client-side
+  splitter a large .csv is.
+- **Only the first worksheet is read.** When a workbook has more, the UI says
+  which sheet it used and how many sheets it saw — a silent one-of-four import
+  is otherwise invisible until the totals come out wrong.
+- Formula cells contribute their cached **result**, not the formula text.
+  Trailing empty columns are padded so the CSV stays rectangular.
+- **`.xls` is not supported** (the legacy binary format, which `exceljs` cannot
+  read). The upload validator rejects it by name with a message telling the
+  operator to re-save as .xlsx or export as .csv.
+- Caps live in `src/domains/import/constants.ts`: `MAX_SPREADSHEET_ROWS` and
+  `MAX_SPREADSHEET_CSV_BYTES` bound how far a small (ZIP-compressed) upload may
+  expand. Exceeding either is a 413, not a 422.
+- A spreadsheet dropped on the **scan** screen is parked and the operator is
+  sent to /import (`src/app/(app)/import/spreadsheet-handoff.ts`); the scanner
+  reads photos and PDFs, and cannot read a spreadsheet.
+
 ## The decision: chunked ingest, not a raised cap or a worker
 
 **Superseded 2026-08-23 (P3, `docs/plans/2026-08-23-p3-chunked-import.md`).**

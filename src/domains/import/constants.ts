@@ -24,6 +24,27 @@ export const ALLOWED_CSV_MIME_TYPES = new Set([
   "text/plain",
 ]);
 
+/** Spreadsheet (.xlsx) uploads are converted to CSV before they touch any
+ * other part of the import pipeline. An .xlsx is a ZIP archive, so a small
+ * upload can legitimately decompress into an enormous sheet — these two caps
+ * bound that expansion. They are deliberately much larger than MAX_ROWS: a
+ * converted spreadsheet is chunked by exactly the same client-side splitter a
+ * large CSV is, so it is allowed to exceed one upload's worth of rows.
+ * Cell-level limits (MAX_FIELD_LENGTH and friends) are NOT re-applied here —
+ * the CSV parser downstream already owns those rules. */
+export const MAX_SPREADSHEET_ROWS = 50_000;
+export const MAX_SPREADSHEET_CSV_BYTES = 20 * 1024 * 1024; // 20 MB
+
+/** MIME types browsers report for .xlsx. As with CSV the set is small but
+ * inconsistent across browsers and operating systems, and an empty string is
+ * accepted because some platforms send no type at all for a drag-and-drop. */
+export const ALLOWED_SPREADSHEET_MIME_TYPES = new Set([
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "application/octet-stream",
+  "application/zip",
+]);
+
 /** P3 — target row count for one client- or script-planned upload chunk of
  * a file that exceeds MAX_ROWS. Deliberately smaller than MAX_ROWS (5000):
  * leaves headroom so a plan stays valid even if MAX_ROWS is ever tightened,

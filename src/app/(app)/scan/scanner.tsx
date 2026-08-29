@@ -20,6 +20,8 @@ import type {
   ScanMode,
 } from "@/lib/scanner/types";
 import { ReadyView } from "./views/ready-view";
+import { useRouter } from "next/navigation";
+import { setHandoffFile } from "@/app/(app)/import/spreadsheet-handoff";
 import { ProcessingView, stageForProgress } from "./views/processing-view";
 import { ErrorView } from "./views/error-view";
 import { ConfidenceGateView } from "./views/confidence-gate";
@@ -157,6 +159,7 @@ export function Scanner({
 }) {
   const { restaurantId: _restaurantId } = useRestaurant();
   const [status, setStatus] = useState<Status>("ready");
+  const router = useRouter();
   const [progress, setProgress] = useState(0);
   const [scan, setScan] = useState<Scan | null>(null);
   const [originalItems, setOriginalItems] = useState<LineItem[]>([]);
@@ -798,11 +801,20 @@ export function Scanner({
 
   const hasRetryableFile = mode === "bottle" ? !!lastFile : lastFiles.length > 0;
 
-  if (!hydrated) return <ReadyView onStart={handleStart} mode={mode} onModeChange={handleModeChange} recentScans={recentScans} savedResult={null} onDismissSaved={() => {}} />;
+  // A cellar spreadsheet dropped on the scanner is not an error to report back
+  // to the operator — it is the right file at the wrong door. Park it and take
+  // them to /import, which picks it up and behaves exactly as if they had
+  // chosen it there.
+  const handleSpreadsheet = (file: File) => {
+    setHandoffFile(file);
+    router.push("/import");
+  };
+
+  if (!hydrated) return <ReadyView onStart={handleStart} onSpreadsheet={handleSpreadsheet} mode={mode} onModeChange={handleModeChange} recentScans={recentScans} savedResult={null} onDismissSaved={() => {}} />;
 
   return (
     <>
-      {status === "ready" && <ReadyView onStart={handleStart} mode={mode} onModeChange={handleModeChange} recentScans={recentScans} savedResult={savedResult} onDismissSaved={() => setSavedResult(null)} />}
+      {status === "ready" && <ReadyView onStart={handleStart} onSpreadsheet={handleSpreadsheet} mode={mode} onModeChange={handleModeChange} recentScans={recentScans} savedResult={savedResult} onDismissSaved={() => setSavedResult(null)} />}
       {status === "processing" && (
         <ProcessingView
           progress={progress}
