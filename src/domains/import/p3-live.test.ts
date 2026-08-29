@@ -62,6 +62,12 @@ function csvOf(rows: Array<{ producer: string; name: string; vintage?: number; q
   return Buffer.from([header, ...lines].join("\n") + "\n");
 }
 
+let fixtureDigestCounter = 0;
+function fixtureDigest(): string {
+  fixtureDigestCounter += 1;
+  return fixtureDigestCounter.toString(16).padStart(64, "0");
+}
+
 // 60s per-test budget: several tests here push 1,500-row batches through
 // PostgREST and drain them via repeated RPC calls — comfortably under a
 // second alone, but the default 5s flakes when the whole suite runs the
@@ -227,11 +233,15 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
     it("BEFORE (simulated pre-fix path): the OLD two-separate-statement confirm pattern really did create two batches and double quantities — proves the bug was real, not hypothetical", async () => {
       // Reproduces confirmImportBatch's EXACT pre-P3 body: two independent
       // client statements with no atomicity between them. The pre-P3 body also
-      // wrote no content hash; this fixture now supplies one because 0129
-      // requires every NEW batch to carry a digest 0128 can lock on. The hash
-      // was never what this test was about — the double-batch/double-quantity
-      // bug came from the two statements not sharing a transaction, and that is
-      // reproduced unchanged.
+      // wrote no content hash; each call now supplies its own DISTINCT digest,
+      // because 0129 requires every new batch to carry an identity 0128 can lock
+      // on. Two distinct digests are a faithful model of a body that hashed
+      // nothing at all — reusing ONE digest would let
+      // import_batches_content_sha256_idx perform exactly the deduplication this
+      // test exists to prove was absent, and the test would pass for the wrong
+      // reason. The hash was never what C09 was about: the double-batch,
+      // double-quantity bug came from the two statements not sharing a
+      // transaction, and that is reproduced here unchanged.
       async function oldConfirm(contentSha256: string) {
         const { data: batch, error: batchError } = await admin
           .from("import_batches")
@@ -255,12 +265,8 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
         return batchId;
       }
 
-      // Two DISTINCT digests: the pre-P3 body hashed nothing, so nothing tied
-      // two uploads of the same content together. Reusing one digest would let
-      // import_batches_content_sha256_idx perform exactly the deduplication this
-      // test exists to prove was absent.
-      const batchId1 = await oldConfirm("c09a".repeat(16));
-      const batchId2 = await oldConfirm("c09b".repeat(16));
+      const batchId1 = await oldConfirm(fixtureDigest());
+      const batchId2 = await oldConfirm(fixtureDigest());
       expect(batchId1).not.toBe(batchId2); // the bug: two batches for identical content
 
       await userClient.rpc("apply_import_batch_chunk", { p_batch_id: batchId1, p_limit: 10 } as never);
@@ -278,6 +284,22 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
         .eq("wine_id", (wine as { id: string }).id);
       const totalQty = (inv ?? []).reduce((s: number, r: { quantity: number }) => s + r.quantity, 0);
       expect(totalQty).toBe(12); // doubled: 6 + 6, the exact C09 bug
+    });
+
+    it("the legacy two-statement confirm path can no longer omit the content digest", async () => {
+      // Keeps the concurrent commit's assertion, corrected for the trigger
+      // spelling: 0129 raises P0005 from import_batches_guard_digest, not 23514
+      // from a CHECK constraint. The CHECK spelling was replaced because it also
+      // blocked UPDATEs to grandfathered historic rows, which would have made
+      // every pre-0103 batch unrevertable.
+      const { data: batch, error } = await admin
+        .from("import_batches")
+        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c09-old.csv", total_rows: 1 } as never)
+        .select("id")
+        .single();
+
+      expect(batch).toBeNull();
+      expect(error?.code).toBe("P0005");
     });
 
     it("AFTER (the real confirmImportBatch, fixed): confirming identical bytes twice returns a resume pointer, creates exactly ONE batch, and never doubles quantity", async () => {
@@ -378,7 +400,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
 
       const { data: batch, error: batchError } = await admin
         .from("import_batches")
-        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c16.csv", total_rows: 101, content_sha256: "c16bc16bc16bc16bc16bc16bc16bc16bc16bc16bc16bc16bc16bc16bc16bc16b" } as never)
+        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c16.csv", total_rows: 101, content_sha256: fixtureDigest() } as never)
         .select("id")
         .single();
       if (batchError || !batch) throw batchError;
@@ -459,7 +481,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
     it("a later HIGHER-confidence match overwrites an earlier lower-confidence one (0.31 then 0.95)", async () => {
       const { data: batch } = await admin
         .from("import_batches")
-        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c24a.csv", total_rows: 2, content_sha256: "c24ac24ac24ac24ac24ac24ac24ac24ac24ac24ac24ac24ac24ac24ac24ac24a" } as never)
+        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c24a.csv", total_rows: 2, content_sha256: fixtureDigest() } as never)
         .select("id")
         .single();
       const batchId = (batch as { id: string }).id;
@@ -479,7 +501,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
     it("a later LOWER-confidence match never downgrades a higher-confidence one already in place (0.95 then 0.31)", async () => {
       const { data: batch } = await admin
         .from("import_batches")
-        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c24b.csv", total_rows: 2, content_sha256: "c24bc24bc24bc24bc24bc24bc24bc24bc24bc24bc24bc24bc24bc24bc24bc24b" } as never)
+        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c24b.csv", total_rows: 2, content_sha256: fixtureDigest() } as never)
         .select("id")
         .single();
       const batchId = (batch as { id: string }).id;
@@ -499,7 +521,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
     it("a score between the old 0.3 bar and the new 0.6 bar (0.45) never sets wines.lwin_id at all", async () => {
       const { data: batch } = await admin
         .from("import_batches")
-        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c24c.csv", total_rows: 1, content_sha256: "c24cc24cc24cc24cc24cc24cc24cc24cc24cc24cc24cc24cc24cc24cc24cc24c" } as never)
+        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c24c.csv", total_rows: 1, content_sha256: fixtureDigest() } as never)
         .select("id")
         .single();
       const batchId = (batch as { id: string }).id;
@@ -542,7 +564,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
 
       const { data: batch, error: batchError } = await admin
         .from("import_batches")
-        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c2contract.csv", total_rows: 1, content_sha256: "c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0" } as never)
+        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c2contract.csv", total_rows: 1, content_sha256: fixtureDigest() } as never)
         .select("id")
         .single();
       if (batchError || !batch) throw batchError ?? new Error("failed to insert batch");

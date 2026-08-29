@@ -21,6 +21,7 @@ const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const hasLiveDb = Boolean(supabaseUrl && publishableKey && serviceRoleKey);
+const MERGE_BATCH_DIGEST = "b".repeat(64);
 // Fail LOUD, never skip, when the live stack should be there (integration
 // critic finding): a silent describe.skipIf here once let a full run
 // report green with every MANDATORY live-DB suite unexecuted. CI always
@@ -229,7 +230,7 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
 
     const { data: batch } = await admin
       .from("import_batches")
-      .insert({ restaurant_id: restaurantA, filename: "p2-merge-test.csv", total_rows: 1, content_sha256: "2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a" } as never)
+      .insert({ restaurant_id: restaurantA, filename: "p2-merge-test.csv", total_rows: 1, content_sha256: MERGE_BATCH_DIGEST } as never)
       .select("id")
       .single();
     const { data: batchRow } = await admin
