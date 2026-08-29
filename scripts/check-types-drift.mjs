@@ -1,8 +1,9 @@
 // Schema-drift gate for src/types/database.ts.
 //
-// `pnpm run types:gen` regenerates this file from the LIVE hosted Supabase
-// project, and CI fails the build when the committed file no longer matches.
-// That gate is about SCHEMA drift: a migration landed without regenerating.
+// `pnpm run types:gen` regenerates this file from hosted Supabase. CI compares
+// it with the local schema produced by the checked-out migrations, and fails
+// when the committed file no longer matches. That gate is about SCHEMA drift:
+// a migration landed without regenerating.
 //
 // The generated artifact also carries `__InternalSupabase.PostgrestVersion`,
 // which reports the hosted project's PostgREST deployment. Supabase can change
@@ -56,7 +57,10 @@ function main() {
 
   const gen = spawnSync(
     process.execPath,
-    ["scripts/generate-supabase-types.mjs"],
+    [
+      "scripts/generate-supabase-types.mjs",
+      ...(process.argv.includes("--local") ? ["--local"] : []),
+    ],
     { stdio: ["ignore", "inherit", "inherit"] },
   );
   if (gen.status !== 0) {
@@ -77,8 +81,9 @@ function main() {
   }
 
   if (!drifted) {
+    const source = process.argv.includes("--local") ? "local" : "live";
     console.log(
-      `${OUT} matches the live schema (ambient PostgrestVersion ignored).`,
+      `${OUT} matches the ${source} schema (ambient PostgrestVersion ignored).`,
     );
     return;
   }
