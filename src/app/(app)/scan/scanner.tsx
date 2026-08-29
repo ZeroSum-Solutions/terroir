@@ -69,6 +69,24 @@ function isAllowedInvoiceFile(file: File): boolean {
   return ALLOWED_INVOICE_EXTENSIONS.has(fileExtension(file.name));
 }
 
+/**
+ * Best-effort: hand a bottle scan's own photo to the wine it identified.
+ *
+ * Silent on every failure by design. The wine is already saved by the time
+ * this runs; a picture that did not stick is not worth an error message over a
+ * completed save. The route also treats "this wine already has a picture" as
+ * an ordinary 200, not a problem to report.
+ */
+async function keepLabelPhoto(wineId: string, file: File): Promise<void> {
+  try {
+    const body = new FormData();
+    body.append("file", file);
+    await fetch(`/api/wines/${wineId}/label-photo`, { method: "POST", body });
+  } catch {
+    // Deliberately swallowed — see above.
+  }
+}
+
 export { formatMoney } from "./components/field-inputs";
 
 /**
@@ -762,7 +780,18 @@ export function Scanner({
             ).message,
           );
         }
+        const saved = (await res.json().catch(() => null)) as { wineId?: unknown } | null;
         bottleSaveKeyRef.current = null;
+
+        // The photo that identified this wine becomes its picture, if it has
+        // none. Deliberately after the save and deliberately not awaited: the
+        // bottle is in the cellar either way, and a failed photo must never
+        // read as a failed save.
+        const savedWineId = typeof saved?.wineId === "string" ? saved.wineId : null;
+        if (savedWineId && lastFile) {
+          void keepLabelPhoto(savedWineId, lastFile);
+        }
+
         setBottleResult(null);
         setBottlePreview(null);
         setSavedResult({ itemCount: 1, wineCount: 1 });
@@ -775,7 +804,7 @@ export function Scanner({
         setIsSaving(false);
       }
     },
-    [setBottlePreview],
+    [setBottlePreview, lastFile],
   );
 
   const handleStart = useCallback(

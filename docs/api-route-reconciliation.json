@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 90,
+    "extensionDiscoveredCount": 91,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -920,6 +920,12 @@
     },
     {
       "operationId": "api:DELETE:/api/wines/{param}/image",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/wines/{param}/label-photo",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []

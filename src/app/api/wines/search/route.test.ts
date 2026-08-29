@@ -68,7 +68,9 @@ describe("GET /api/wines/search", () => {
     expect(response.status).toBe(200);
     expect(calls).toContainEqual({
       method: "wines.select",
-      args: ["id, name, producer, vintage, varietal, region"],
+      // colour + hero_image_url were added so a search result can render the
+      // wine's picture, or the tinted stand-in when it has none.
+      args: ["id, name, producer, vintage, varietal, region, colour, hero_image_url"],
     });
     expect(calls).toContainEqual({ method: "wines.ilike", args: ["producer", "Jamet"] });
     expect(calls).toContainEqual({ method: "wines.ilike", args: ["region", "Rhone"] });
