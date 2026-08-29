@@ -132,6 +132,114 @@ export async function uploadWineHeroImage(
   return publicUrl;
 }
 
+export type SaveWineLabelPhotoInput = {
+  supabase: SupabaseClient<Database>;
+  restaurantId: string;
+  wineId: string;
+  file: File;
+};
+
+export type SaveWineLabelPhotoOutcome = {
+  /** False when the wine already had an image, which is the ordinary outcome
+   * of re-scanning a bottle already in the cellar — not a failure. */
+  applied: boolean;
+  heroImageUrl: string | null;
+};
+
+/**
+ * Makes a bottle scan's label photo the wine's hero image, but only if the
+ * wine has none.
+ *
+ * Distinct from uploadWineHeroImage, which is a manager deliberately choosing
+ * a picture and may replace one. This is a byproduct of scanning: it fills an
+ * empty slot and can never overwrite a chosen image, which is why it is open
+ * to any member rather than owner/manager.
+ *
+ * The claim happens BEFORE the upload, not after. The object path is
+ * deterministic, so the URL is known in advance and the row can be claimed
+ * with a conditional update — without that ordering, a manager's upload
+ * landing between the check and the write would have its object overwritten
+ * by this one while the URL still pointed at it.
+ */
+export async function saveWineLabelPhoto(
+  input: SaveWineLabelPhotoInput,
+): Promise<SaveWineLabelPhotoOutcome> {
+  const { supabase, restaurantId, wineId, file } = input;
+
+  await assertWineExists({ supabase, restaurantId, wineId });
+
+  if (!ALLOWED_MIME.has(file.type)) {
+    throw new WineImageUnsupportedTypeError();
+  }
+  if (file.size > MAX_BYTES) {
+    throw new WineImageTooLargeError();
+  }
+
+  const ext = EXT_BY_MIME[file.type] ?? "jpg";
+  const storagePath = `${restaurantId}/${wineId}.${ext}`;
+  const publicUrl = getSupabasePublicUrl({
+    supabase,
+    bucket: WINE_IMAGE_BUCKET,
+    path: storagePath,
+  });
+
+  const { data: claimed, error: claimError } = await supabase
+    .from("wines")
+    .update({ hero_image_url: publicUrl })
+    .eq("id", wineId)
+    .eq("restaurant_id", restaurantId)
+    .is("hero_image_url", null)
+    .select("id");
+
+  if (claimError) {
+    console.error("wine label photo claim failed:", claimError);
+    Sentry.captureException(claimError, {
+      tags: { surface: "wines", phase: "claim-label-photo" },
+      extra: { wineId, restaurantId },
+    });
+    throw new WineImagePersistenceError("Failed to save image URL.", claimError);
+  }
+
+  if (!claimed || claimed.length === 0) {
+    // The wine already has an image. Nothing was uploaded, so nothing was
+    // overwritten — the existing picture stands.
+    return { applied: false, heroImageUrl: null };
+  }
+
+  const body = Buffer.from(await file.arrayBuffer());
+  try {
+    await uploadSupabaseObject({
+      supabase,
+      bucket: WINE_IMAGE_BUCKET,
+      path: storagePath,
+      body,
+      contentType: file.type,
+      upsert: true,
+    });
+  } catch (error) {
+    // The claim is already written. Release it, or the wine keeps a
+    // hero_image_url pointing at an object that was never stored.
+    await supabase
+      .from("wines")
+      .update({ hero_image_url: null })
+      .eq("id", wineId)
+      .eq("restaurant_id", restaurantId)
+      .eq("hero_image_url", publicUrl);
+
+    if (error instanceof SupabaseStorageError) {
+      console.error("wine label photo upload failed:", error.cause ?? error);
+      Sentry.captureException(error.cause ?? error, {
+        tags: { surface: "wines", phase: "upload-label-photo" },
+        extra: { wineId, restaurantId, storagePath },
+      });
+      throw new WineImageStorageError(error);
+    }
+    throw error;
+  }
+
+  return { applied: true, heroImageUrl: publicUrl };
+}
+
 export async function deleteWineHeroImage(
   input: DeleteWineHeroImageInput,
 ): Promise<null> {

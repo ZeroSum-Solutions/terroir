@@ -25,6 +25,7 @@ const {
   WineImageTooLargeError,
   WineImageUnsupportedTypeError,
   deleteWineHeroImage,
+  saveWineLabelPhoto,
   uploadWineHeroImage,
 } = await import("./wine-image-service");
 
@@ -203,5 +204,241 @@ describe("deleteWineHeroImage", () => {
     });
 
     expect(result).toBeNull();
+  });
+});
+
+/** saveWineLabelPhoto's claim is a conditional update
+ * (`.is("hero_image_url", null).select("id")`), which the shared makeSupabase
+ * above does not model — it needs its own builder. */
+function makeLabelPhotoSupabase(opts: {
+  wineExists?: boolean;
+  /** Rows the conditional claim matched: [] means the wine already had an image. */
+  claimedRows?: Array<{ id: string }>;
+  claimError?: { message?: string } | null;
+}) {
+  const claims: Array<Record<string, unknown>> = [];
+  const releases: Array<{ patch: Record<string, unknown>; filters: Array<[string, unknown]> }> = [];
+
+  const from = vi.fn((table: string) => {
+    if (table !== "wines") throw new Error(`unexpected table ${table}`);
+    return {
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            single: async () =>
+              opts.wineExists === false
+                ? { data: null, error: { code: "PGRST116" } }
+                : { data: { id: WINE_ID }, error: null },
+          }),
+        }),
+      }),
+      update: (patch: Record<string, unknown>) => {
+        const filters: Array<[string, unknown]> = [];
+        const chain = {
+          eq: (col: string, val: unknown) => {
+            filters.push([col, val]);
+            // A plain thenable, deliberately NOT a Promise with `then` assigned
+            // onto it: `await` short-circuits a native promise and would never
+            // call the override. The release path ends on its third .eq() and
+            // is awaited directly.
+            return {
+              eq: chain.eq,
+              is: chain.is,
+              then: (resolve: (v: { error: null }) => unknown) => {
+                if (filters.length === 3) {
+                  releases.push({ patch, filters });
+                }
+                return Promise.resolve({ error: null }).then(resolve);
+              },
+            };
+          },
+          is: () => ({
+            select: async () => {
+              claims.push(patch);
+              return {
+                data: opts.claimError ? null : (opts.claimedRows ?? [{ id: WINE_ID }]),
+                error: opts.claimError ?? null,
+              };
+            },
+          }),
+        };
+        return chain;
+      },
+    };
+  });
+
+  return { supabase: { from }, claims, releases };
+}
+
+describe("saveWineLabelPhoto — a bottle scan's own photo becomes the wine's picture", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetPublicUrl.mockImplementation(
+      ({ path }: { path: string }) => `https://cdn.example/${path}`,
+    );
+  });
+
+  it("refuses a wine that doesn't exist in this restaurant", async () => {
+    const { supabase } = makeLabelPhotoSupabase({ wineExists: false });
+
+    await expect(
+      saveWineLabelPhoto({
+        supabase: supabase as never,
+        restaurantId: RESTAURANT_ID,
+        wineId: WINE_ID,
+        file: makeFile("image/jpeg", 1000),
+      }),
+    ).rejects.toBeInstanceOf(WineImageNotFoundError);
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unsupported type before touching storage", async () => {
+    const { supabase } = makeLabelPhotoSupabase({});
+
+    await expect(
+      saveWineLabelPhoto({
+        supabase: supabase as never,
+        restaurantId: RESTAURANT_ID,
+        wineId: WINE_ID,
+        file: makeFile("image/gif", 1000),
+      }),
+    ).rejects.toBeInstanceOf(WineImageUnsupportedTypeError);
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  it("rejects a file over the size ceiling before touching storage", async () => {
+    const { supabase } = makeLabelPhotoSupabase({});
+
+    await expect(
+      saveWineLabelPhoto({
+        supabase: supabase as never,
+        restaurantId: RESTAURANT_ID,
+        wineId: WINE_ID,
+        file: makeFile("image/jpeg", 10 * 1024 * 1024 + 1),
+      }),
+    ).rejects.toBeInstanceOf(WineImageTooLargeError);
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  it("stores the photo and returns the URL for a wine with no picture", async () => {
+    const { supabase, claims } = makeLabelPhotoSupabase({});
+
+    const outcome = await saveWineLabelPhoto({
+      supabase: supabase as never,
+      restaurantId: RESTAURANT_ID,
+      wineId: WINE_ID,
+      file: makeFile("image/jpeg", 1000),
+    });
+
+    expect(outcome).toEqual({
+      applied: true,
+      heroImageUrl: `https://cdn.example/${RESTAURANT_ID}/${WINE_ID}.jpg`,
+    });
+    expect(claims).toEqual([
+      { hero_image_url: `https://cdn.example/${RESTAURANT_ID}/${WINE_ID}.jpg` },
+    ]);
+    expect(mockUpload).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes to the same canonical path a manual upload uses, so deletion still finds it", async () => {
+    const { supabase } = makeLabelPhotoSupabase({});
+
+    await saveWineLabelPhoto({
+      supabase: supabase as never,
+      restaurantId: RESTAURANT_ID,
+      wineId: WINE_ID,
+      file: makeFile("image/png", 1000, "label.png"),
+    });
+
+    expect(mockUpload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucket: "wine-images",
+        path: `${RESTAURANT_ID}/${WINE_ID}.png`,
+        contentType: "image/png",
+      }),
+    );
+  });
+
+  it("uploads NOTHING when the wine already has a picture", async () => {
+    const { supabase } = makeLabelPhotoSupabase({ claimedRows: [] });
+
+    const outcome = await saveWineLabelPhoto({
+      supabase: supabase as never,
+      restaurantId: RESTAURANT_ID,
+      wineId: WINE_ID,
+      file: makeFile("image/jpeg", 1000),
+    });
+
+    expect(outcome).toEqual({ applied: false, heroImageUrl: null });
+    // The whole point of claiming before uploading: the object path is shared
+    // with the manual hero image, so an upload here would have overwritten a
+    // manager's chosen picture while its URL kept pointing at the same place.
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  it("claims the row before uploading, not after", async () => {
+    const order: string[] = [];
+    const { supabase } = makeLabelPhotoSupabase({});
+    mockGetPublicUrl.mockImplementation(({ path }: { path: string }) => `https://cdn.example/${path}`);
+    mockUpload.mockImplementation(async () => {
+      order.push("upload");
+    });
+    const originalFrom = supabase.from;
+    supabase.from = vi.fn((table: string) => {
+      const built = originalFrom(table);
+      return {
+        ...built,
+        update: (patch: Record<string, unknown>) => {
+          order.push("claim");
+          return built.update(patch);
+        },
+      };
+    }) as never;
+
+    await saveWineLabelPhoto({
+      supabase: supabase as never,
+      restaurantId: RESTAURANT_ID,
+      wineId: WINE_ID,
+      file: makeFile("image/jpeg", 1000),
+    });
+
+    expect(order).toEqual(["claim", "upload"]);
+  });
+
+  it("releases the claim when the upload fails, so no wine points at a missing object", async () => {
+    const { supabase, releases } = makeLabelPhotoSupabase({});
+    mockUpload.mockRejectedValueOnce(new SupabaseStorageError("upload", { cause: new Error("boom") }));
+
+    await expect(
+      saveWineLabelPhoto({
+        supabase: supabase as never,
+        restaurantId: RESTAURANT_ID,
+        wineId: WINE_ID,
+        file: makeFile("image/jpeg", 1000),
+      }),
+    ).rejects.toBeInstanceOf(WineImageStorageError);
+
+    expect(releases).toHaveLength(1);
+    expect(releases[0].patch).toEqual({ hero_image_url: null });
+    // Scoped to the URL this call wrote, so a picture someone else set in the
+    // meantime is not cleared.
+    expect(releases[0].filters).toContainEqual([
+      "hero_image_url",
+      `https://cdn.example/${RESTAURANT_ID}/${WINE_ID}.jpg`,
+    ]);
+  });
+
+  it("surfaces a failed claim as a persistence error rather than uploading anyway", async () => {
+    const { supabase } = makeLabelPhotoSupabase({ claimError: { message: "db down" } });
+
+    await expect(
+      saveWineLabelPhoto({
+        supabase: supabase as never,
+        restaurantId: RESTAURANT_ID,
+        wineId: WINE_ID,
+        file: makeFile("image/jpeg", 1000),
+      }),
+    ).rejects.toBeInstanceOf(WineImagePersistenceError);
+    expect(mockUpload).not.toHaveBeenCalled();
   });
 });

@@ -318,9 +318,11 @@ describe("checked-in API contract gate", () => {
       // Bulk onboarding resolution added
       // POST /api/import/batches/[id]/resolve-all — 105 + 1 = 106.
       // Excel import added POST /api/import/convert — 106 + 1 = 107.
-      discoveredOperationCount: 107,
+      // Keeping a bottle scan's own photo added
+      // POST /api/wines/[id]/label-photo — 107 + 1 = 108.
+      discoveredOperationCount: 108,
       plannedOperationCount: 15,
-      classificationCount: 107,
+      classificationCount: 108,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,

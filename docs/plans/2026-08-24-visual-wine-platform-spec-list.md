@@ -41,7 +41,8 @@ THIS document first.
 | 0127 | `match_lwin_deterministic_tiebreak.sql` | `create or replace public.match_lwin(text, text, float)`: retain 0078 matching semantics and add `ORDER BY score DESC, lc.lwin_id ASC`; `match_lwin_batch` and `match_lwin_bulk` inherit the total ordering through their existing calls | 0078 | — |
 | 0128 | `apply_import_batch_chunk_sibling_lock.sql` | `create or replace public.apply_import_batch_chunk(uuid, integer)`: transaction-scoped advisory lock plus under-lock sibling-applied recheck; raise `P0004` on conflict | 0108 | — |
 | 0129 | `import_batches_digest_boundary.sql` | `not valid` CHECK requiring new `content_sha256` values to match a shape 0128 can normalise, plus a `before update` trigger freezing the column (`P0005`); closes the manufactured-malformed-digest bypass of 0128's barrier | 0128 | — |
-| 0130+ | reserved | Durable import staging IF VWP-D-04 chooses it; `wine_edition_formats` when barcode authority needs it; splat asset metadata if the spike passes | per decision | — |
+| 0130 | `wine_image_storage.sql` | Creates the `wine-images` storage bucket (public, 10 MB, JPEG/PNG/WebP) plus restaurant-scoped insert/update/delete policies. Declares the bucket `src/domains/cellar/wine-image-service.ts` has written to since BND-057 but that no migration ever created — a fresh environment had a hero-image upload that could only fail. Distinct from 0116, which provisions storage for P4's `wine_images` table; this one serves the shipped `wines.hero_image_url` feature and does not wait on P4. | 0072 | — |
+| 0131+ | reserved | Durable import staging IF VWP-D-04 chooses it; `wine_edition_formats` when barcode authority needs it; splat asset metadata if the spike passes | per decision | — |
 
 **Sequencing note (documented deviation from PRD phase lettering):** rows 0112–0126
 preserve the VWP DDL replay sequence. The order-independent function replacements at

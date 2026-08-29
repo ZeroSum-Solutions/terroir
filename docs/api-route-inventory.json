@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 92,
-  "discoveredOperationCount": 107,
+  "routeFileCount": 93,
+  "discoveredOperationCount": 108,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/bins",
@@ -1036,6 +1036,17 @@
         "file": "src/app/api/wines/[id]/image/route.ts",
         "exportKind": "function-declaration",
         "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wines/{param}/label-photo",
+      "method": "POST",
+      "path": "/api/wines/[id]/label-photo",
+      "source": {
+        "file": "src/app/api/wines/[id]/label-photo/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
         "moduleSpecifier": null
       }
     },

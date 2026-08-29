@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   const derivedFilter = filter === "open" || filter === "low";
   let query = supabase
     .from("wines")
-    .select("id, name, producer, vintage, varietal, region")
+    .select("id, name, producer, vintage, varietal, region, colour, hero_image_url")
     .eq("restaurant_id", restaurantId)
     .order("producer")
     .limit(derivedFilter ? 1000 : 20);
@@ -114,6 +114,8 @@ type SearchWine = {
   vintage: number | null;
   varietal: string | null;
   region: string | null;
+  colour: string | null;
+  hero_image_url: string | null;
 };
 
 type SupabaseClient = Awaited<

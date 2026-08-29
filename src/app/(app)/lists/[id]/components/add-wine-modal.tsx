@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, Plus, Search, Sparkles } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+import { WineThumb } from "@/components/wine-thumb";
 
 // BND-040 — pricing suggestion response shape from
 // /api/wines/[id]/pricing-suggestion. Mirrors the route's JSON.
@@ -29,6 +30,8 @@ type SearchWine = {
   vintage: number | null;
   varietal: string | null;
   region: string | null;
+  colour: string | null;
+  hero_image_url: string | null;
 };
 
 type LwinWine = {
@@ -255,6 +258,9 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
         vintage: null,
         varietal: lwin.varietal,
         region: lwin.region,
+        // A wine created from the catalog moments ago has neither.
+        colour: null,
+        hero_image_url: null,
       });
     } catch {
       setCatalogError("Couldn't import wine. Check your connection and try again.");
@@ -368,6 +374,13 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                       onClick={() => setSelected(wine)}
                       className="flex w-full items-center gap-md border-b border-hairline/50 px-lg py-sm text-left transition-colors hover:bg-bridge-surface"
                     >
+                      <WineThumb
+                        src={wine.hero_image_url}
+                        producer={wine.producer}
+                        name={wine.name}
+                        colour={wine.colour}
+                        size={36}
+                      />
                       <div className="min-w-0 flex-1">
                         <div className="font-serif text-[17px] text-ink">
                           {wine.producer}, {wine.name}
@@ -402,6 +415,17 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     onClick={() => handleSelectCatalog(wine)}
                     className="flex w-full items-center gap-md border-b border-hairline/50 px-lg py-sm text-left transition-colors hover:bg-bridge-surface"
                   >
+                    {/* A catalog row is a reference entry, not a wine in this
+                        cellar, so it can never have a picture — but it gets the
+                        same stand-in, or one search renders as two
+                        differently-shaped lists. */}
+                    <WineThumb
+                      src={null}
+                      producer={wine.producer}
+                      name={wine.display_name}
+                      colour={null}
+                      size={36}
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="font-serif text-[17px] text-ink">
                         {wine.display_name}
