@@ -62,14 +62,8 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        # No `version:` here on purpose — action-setup then takes the version
-        # from package.json's `packageManager` field, so CI and every developer
-        # machine run the SAME pnpm. They previously did not: CI pinned 9 while
-        # local was 11, two majors apart, and pnpm moved `overrides` out of
-        # package.json into pnpm-workspace.yaml in 10. A lockfile written
-        # locally therefore recorded overrides that CI's pnpm could not see,
-        # and `--frozen-lockfile` failed with ERR_PNPM_LOCKFILE_CONFIG_MISMATCH
-        # on a tree that installed cleanly for the author.
+        with:
+          version: 9
 
       - name: Setup Node
         uses: actions/setup-node@v4
