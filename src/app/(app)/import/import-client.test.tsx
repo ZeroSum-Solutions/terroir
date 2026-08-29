@@ -2308,3 +2308,159 @@ function findButton(root: ParentNode, text: string | RegExp): HTMLButtonElement 
     typeof text === "string" ? b.textContent?.includes(text) : text.test(b.textContent ?? ""),
   );
 }
+
+describe("ImportClient — dragging in and pasting reach the same handler as the picker", () => {
+  const mountedRoots: Root[] = [];
+
+  afterEach(async () => {
+    for (const root of mountedRoots.splice(0)) {
+      await act(async () => root.unmount());
+    }
+    vi.unstubAllGlobals();
+    document.body.innerHTML = "";
+  });
+
+  function fileEvent(type: string, files: File[], types: string[] = ["Files"]) {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    const transfer = {
+      items: files.map((file) => ({ kind: "file", type: file.type, getAsFile: () => file })),
+      files,
+      types,
+      dropEffect: "none",
+    };
+    Object.defineProperty(event, type === "paste" ? "clipboardData" : "dataTransfer", { value: transfer });
+    return event;
+  }
+
+  async function mountUpload(): Promise<HTMLElement> {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ batches: [] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+      ),
+    );
+    vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mountedRoots.push(root);
+    await act(async () => root.render(<ImportClient />));
+    return container;
+  }
+
+  async function drop(files: File[], type = "drop"): Promise<Event> {
+    const event = fileEvent(type, files);
+    await act(async () => {
+      window.dispatchEvent(event);
+      // countPreviewUnits reads file.arrayBuffer() before settling.
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    });
+    return event;
+  }
+
+  const csv = (name = "cellar.csv") =>
+    new File(["producer,wine\nA,B\n"], name, { type: "text/csv" });
+
+  it("selects a dropped CSV, showing its name exactly as the picker would", async () => {
+    const container = await mountUpload();
+
+    await drop([csv()]);
+
+    expect(container.textContent).toContain("cellar.csv");
+  });
+
+  it("selects a pasted CSV", async () => {
+    const container = await mountUpload();
+
+    await drop([csv("pasted-cellar.csv")], "paste");
+
+    expect(container.textContent).toContain("pasted-cellar.csv");
+  });
+
+  it("takes the first of several dropped files and says which ones it ignored", async () => {
+    const container = await mountUpload();
+
+    await drop([csv("first.csv"), csv("second.csv"), csv("third.csv")]);
+
+    expect(container.textContent).toContain("first.csv");
+    // Silently importing one file of three is the kind of partial import
+    // nobody notices until the counts come out wrong.
+    expect(container.textContent).toContain("the other 2 were not read");
+  });
+
+  it("says nothing about ignored files when only one was dropped", async () => {
+    const container = await mountUpload();
+
+    await drop([csv()]);
+
+    expect(container.textContent).not.toContain("were not read");
+  });
+
+  it("prevents the browser navigating away, which would abandon the import screen", async () => {
+    await mountUpload();
+
+    const event = await drop([csv()]);
+
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("ignores a drop while a spreadsheet is still being read", async () => {
+    const container = await mountUpload();
+    // A conversion that never resolves holds the screen in its reading state.
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    await drop([new File(["PK"], "first.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })]);
+    expect(container.textContent).toContain("Reading spreadsheet…");
+
+    await drop([csv("late-arrival.csv")]);
+
+    expect(container.textContent).not.toContain("late-arrival.csv");
+    expect(container.textContent).toContain("Reading spreadsheet…");
+  });
+
+  it("ignores a drop while the file already chosen is being previewed", async () => {
+    const container = await mountUpload();
+    await drop([csv("chosen.csv")]);
+
+    // A preview that never resolves holds the screen mid-request. A drop
+    // landing here would swap the file out from under a preview in flight.
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    const previewButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => b.textContent?.trim() === "Preview import",
+    );
+    expect(previewButton).toBeTruthy();
+    await act(async () => {
+      previewButton!.click();
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+    });
+    expect(container.textContent).toContain("Reading file…");
+
+    await drop([csv("late-arrival.csv")]);
+
+    expect(container.textContent).not.toContain("late-arrival.csv");
+    expect(container.textContent).toContain("chosen.csv");
+  });
+
+  it("hands an .xlsx to the same server conversion the picker uses", async () => {
+    const container = await mountUpload();
+    const convert = vi.fn(
+      async (input: RequestInfo | URL) =>
+        new Response(
+          JSON.stringify({ csv: "producer,wine\nA,B\n", sheetName: "Sheet1", rowCount: 1, sheetCount: 1, requested: String(input) }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    vi.stubGlobal("fetch", convert);
+
+    await drop([new File(["PK"], "cellar.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })]);
+
+    expect(convert).toHaveBeenCalled();
+    expect(String(convert.mock.calls[0][0])).toBe("/api/import/convert");
+    expect(container.textContent).toContain("cellar.csv");
+  });
+});

@@ -34,6 +34,40 @@ dedup, LWIN matching, chunk planning, digests, revert.
   sent to /import (`src/app/(app)/import/spreadsheet-handoff.ts`); the scanner
   reads photos and PDFs, and cannot read a spreadsheet.
 
+## Dropping and pasting a file
+
+A file can reach either upload surface three ways — the file dialog, a drag
+from the desktop, or a paste. All three converge on the same handler, so drop
+and paste have no validation, routing, size limit or conversion of their own:
+whatever the dialog does with a file, they do.
+
+- `src/lib/upload/file-intake.ts` turns a browser event (or the async clipboard)
+  into a plain `File[]`. `src/lib/upload/use-file-intake.ts` wires the window
+  listeners and exposes the drop-overlay flag.
+- **The whole window is the drop target**, not a rectangle inside it. Each of
+  these screens has exactly one upload, so there is nothing to aim at.
+- A `drop` is cancelled **even when the screen is not accepting one**. The
+  browser's default is to navigate to the dropped file, which would abandon a
+  scan or a half-reviewed import without a confirmation.
+- **Two different pastes.** A keyboard paste (⌘V, including a phone's photo
+  arriving on a Mac via Universal Clipboard) fires a `paste` event carrying real
+  files, and needs no button. A phone has no keyboard, and its long-press Paste
+  menu appears only over an editable field — so the scan screen also has a
+  **Paste button** that asks `navigator.clipboard.read()` directly. That path
+  yields images only, which is why /import has no such button: an OS clipboard
+  does not hand over a .csv this way. The button is hidden where the browser
+  has no clipboard read at all.
+- A paste whose target is a text field is left to that field, and a paste
+  carrying no files is ignored entirely.
+- Pasted screenshots all arrive named `image.png`. They are renamed
+  `pasted-<date>-<time>[-n]` so two pages of one invoice are distinguishable.
+- /import takes **the first** file of a multi-file drop and says which ones it
+  ignored; the scan screen keeps all of them, because a multi-page invoice is a
+  real batch.
+- `capture` scan-latency timing is marked for the **file dialog only**. That
+  stage measures tap-to-file-selected, and a dropped or pasted file waited on no
+  dialog.
+
 ## The decision: chunked ingest, not a raised cap or a worker
 
 **Superseded 2026-08-23 (P3, `docs/plans/2026-08-23-p3-chunked-import.md`).**

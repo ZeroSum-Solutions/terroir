@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowRight, Camera, FileUp, ImageIcon, Wine } from "lucide-react";
+import { ArrowRight, Camera, ClipboardPaste, FileUp, ImageIcon, Wine } from "lucide-react";
 import { Check, ListOrdered, ScanLine } from "lucide-react";
-import { useRef, type RefObject } from "react";
+import { useRef, useState, type RefObject } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { TimeAgo } from "@/components/time-ago";
@@ -11,6 +11,8 @@ import { markScanStage } from "@/lib/scanner/scan-timing";
 import type { RecentScan, ScanMode } from "@/lib/scanner/types";
 import { formatMoney } from "../components/field-inputs";
 import { isImportableSpreadsheet } from "@/app/(app)/import/spreadsheet-handoff";
+import { useFileIntake } from "@/lib/upload/use-file-intake";
+import type { ClipboardReadOutcome } from "@/lib/upload/file-intake";
 
 interface RecentScansListProps {
   scans: RecentScan[];
@@ -52,6 +54,16 @@ function RecentScansList({ scans }: RecentScansListProps) {
   );
 }
 
+/** What to tell the operator when the clipboard yields nothing. A refusal is
+ * an ordinary answer here — Safari asks its own permission first, and a
+ * clipboard holding text rather than a photo is simply the wrong clipboard. */
+function pasteHintFor(outcome: Extract<ClipboardReadOutcome, { ok: false }>): string {
+  if (outcome.reason === "empty") {
+    return "No image on the clipboard. Copy a photo or screenshot first, then paste.";
+  }
+  return "Couldn\u2019t read the clipboard. Allow paste when your browser asks, or use Upload file.";
+}
+
 interface ReadyViewProps {
   onStart: (files: File[]) => void;
   /** A spreadsheet chosen here belongs to /import, not to document
@@ -75,6 +87,7 @@ export function ReadyView({
 }: ReadyViewProps) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [pasteHint, setPasteHint] = useState<string | null>(null);
   const isBottle = mode === "bottle";
 
   // M1-1: client-side "capture" stage starts here — the moment the user
@@ -84,18 +97,23 @@ export function ReadyView({
     inputRef.current?.click();
   };
 
-  const handleFiles = (input: HTMLInputElement) => {
-    const fileArr = input.files ? Array.from(input.files) : [];
-    // Reset so re-selecting the exact same file (e.g. retaking a photo
-    // after "New photo") reliably fires `change` again — some mobile
-    // browsers/webviews otherwise treat an unchanged input as a no-op.
-    input.value = "";
-    if (fileArr.length === 0) return;
+  /**
+   * The one route every file takes, however it arrived — picked from the
+   * file dialog, dragged in from the desktop, or pasted. Drag and paste get no
+   * validation, routing or limits of their own; whatever the picker does with
+   * a file, they do too.
+   *
+   * `capture` timing belongs to the picker path alone. That stage measures
+   * tap-to-file-selected, and a dropped or pasted file waited on no dialog —
+   * marking it would report a capture latency that never happened.
+   */
+  const acceptFiles = (files: File[], source: "picker" | "drop-or-paste") => {
+    if (files.length === 0) return;
     // A cellar spreadsheet is not a scannable document — document intelligence
     // reads photos and PDFs. Hand it to /import instead of starting a scan that
     // could only fail. Deliberately BEFORE the capture-stage end marker: no
     // scan begins here, so there is no scan for that timing to belong to.
-    const spreadsheet = fileArr.find(isImportableSpreadsheet);
+    const spreadsheet = files.find(isImportableSpreadsheet);
     if (spreadsheet) {
       onSpreadsheet(spreadsheet);
       return;
@@ -103,12 +121,52 @@ export function ReadyView({
     // M1-1: client-side "capture" stage ends here (started at the
     // take-photo/upload-file button click below); reported once a scan id
     // exists, in scanner.tsx's startScan.
-    markScanStage("capture", "end");
-    onStart(fileArr);
+    if (source === "picker") markScanStage("capture", "end");
+    onStart(files);
+  };
+
+  const handleFiles = (input: HTMLInputElement) => {
+    const fileArr = input.files ? Array.from(input.files) : [];
+    // Reset so re-selecting the exact same file (e.g. retaking a photo
+    // after "New photo") reliably fires `change` again — some mobile
+    // browsers/webviews otherwise treat an unchanged input as a no-op.
+    input.value = "";
+    acceptFiles(fileArr, "picker");
+  };
+
+  const { isDragging, pasteFromClipboard, canPasteFromClipboard } = useFileIntake({
+    onFiles: (files) => {
+      setPasteHint(null);
+      acceptFiles(files, "drop-or-paste");
+    },
+  });
+
+  const handlePaste = async () => {
+    setPasteHint(null);
+    const outcome = await pasteFromClipboard();
+    if (!outcome.ok) setPasteHint(pasteHintFor(outcome));
   };
 
   return (
     <section>
+      {/* Shown while a drag carrying files is anywhere over the window: the
+          whole page is the drop target, so there is no rectangle to aim at. */}
+      {isDragging && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-lg"
+        >
+          <div className="rounded-card border-2 border-dashed border-beige bg-surface px-xl py-lg text-center">
+            <p className="font-serif text-[20px] text-ink">
+              {isBottle ? "Drop the label photo" : "Drop to scan"}
+            </p>
+            <p className="mt-xs text-[13px] text-grey">
+              {isBottle ? "JPG or PNG" : "JPG, PNG, PDF \u2014 or a .csv/.xlsx cellar list"}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Mode toggle */}
       <div className="mb-lg flex items-center justify-center">
         <div className="inline-flex rounded-pill border border-hairline bg-bridge-surface p-0.5">
@@ -206,18 +264,40 @@ export function ReadyView({
       {/* One camera entrance (the zone above) + one upload entrance — the
           old "Take photo" button duplicated the zone exactly. */}
       <div className="mt-md md:mt-lg">
-        <button
-          type="button"
-          onClick={() => beginCapture(fileRef)}
-          className="flex h-12 w-full items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          <FileUp className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-          Upload file
-        </button>
+        <div className="flex gap-sm">
+          <button
+            type="button"
+            onClick={() => beginCapture(fileRef)}
+            className="flex h-12 w-full flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            <FileUp className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+            Upload file
+          </button>
+          {/* The phone's only paste. A keyboard paste arrives as an event and
+              needs no button, but a phone has no keyboard, and its long-press
+              Paste menu appears only over an editable field — so asking the
+              clipboard directly is the sole way to paste a photo here.
+              Hidden where the browser cannot be asked. */}
+          {canPasteFromClipboard && (
+            <button
+              type="button"
+              onClick={() => void handlePaste()}
+              className="flex h-12 shrink-0 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface px-lg text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <ClipboardPaste className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              Paste
+            </button>
+          )}
+        </div>
+        {pasteHint && (
+          <p role="status" className="mt-xs text-center text-[12px] text-accent">
+            {pasteHint}
+          </p>
+        )}
         <p className="mt-xs text-center text-[12px] text-grey">
           {isBottle
-            ? "JPG or PNG · up to 20MB"
-            : "JPG, PNG, or PDF · up to 10MB · multi-page invoices welcome · a .csv or .xlsx cellar list opens in Import"}
+            ? "JPG or PNG · up to 20MB · drag one in or paste it"
+            : "JPG, PNG, or PDF · up to 10MB · multi-page invoices welcome · drag them in or paste them · a .csv or .xlsx cellar list opens in Import"}
         </p>
       </div>
 
