@@ -201,6 +201,160 @@ describe("ReadyView — spreadsheets belong to Import, not the scanner", () => {
   });
 });
 
+function fileEvent(type: string, files: File[]) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  const transfer = {
+    items: files.map((file) => ({ kind: "file", type: file.type, getAsFile: () => file })),
+    files,
+    types: ["Files"],
+    dropEffect: "none",
+  };
+  Object.defineProperty(event, type === "paste" ? "clipboardData" : "dataTransfer", { value: transfer });
+  return event;
+}
+
+describe("ReadyView — dropping and pasting reach the same route as the picker", () => {
+  it("scans a file dropped anywhere on the window", async () => {
+    const onStart = vi.fn();
+    await renderWithSpreadsheetHandler(onStart, vi.fn());
+
+    const file = new File(["invoice"], "invoice.jpg", { type: "image/jpeg" });
+    await act(async () => window.dispatchEvent(fileEvent("drop", [file])));
+
+    expect(onStart).toHaveBeenCalledWith([file]);
+  });
+
+  it("keeps every page of a multi-page invoice dropped together", async () => {
+    const onStart = vi.fn();
+    await renderWithSpreadsheetHandler(onStart, vi.fn());
+
+    const one = new File(["1"], "page-1.jpg", { type: "image/jpeg" });
+    const two = new File(["2"], "page-2.jpg", { type: "image/jpeg" });
+    await act(async () => window.dispatchEvent(fileEvent("drop", [one, two])));
+
+    expect(onStart).toHaveBeenCalledWith([one, two]);
+  });
+
+  it("sends a dropped spreadsheet to Import, exactly as the picker does", async () => {
+    const onStart = vi.fn();
+    const onSpreadsheet = vi.fn();
+    await renderWithSpreadsheetHandler(onStart, onSpreadsheet);
+
+    const file = new File(["producer,wine"], "cellar.csv", { type: "text/csv" });
+    await act(async () => window.dispatchEvent(fileEvent("drop", [file])));
+
+    expect(onSpreadsheet).toHaveBeenCalledWith(file);
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
+  it("scans a pasted screenshot, giving it a name of its own", async () => {
+    const onStart = vi.fn();
+    await renderWithSpreadsheetHandler(onStart, vi.fn());
+
+    const pasted = new File(["png"], "image.png", { type: "image/png" });
+    await act(async () => window.dispatchEvent(fileEvent("paste", [pasted])));
+
+    expect(onStart).toHaveBeenCalledTimes(1);
+    const [files] = onStart.mock.calls[0] as [File[]];
+    expect(files[0].name).toMatch(/^pasted-\d{4}-\d{2}-\d{2}-\d{4}\.png$/);
+  });
+
+  it("leaves no capture-latency mark for a dropped file, which waited on no dialog", async () => {
+    performance.clearMarks?.("terroir:scan:capture:end");
+    await renderWithSpreadsheetHandler(vi.fn(), vi.fn());
+
+    await act(async () =>
+      window.dispatchEvent(fileEvent("drop", [new File(["i"], "invoice.jpg", { type: "image/jpeg" })])),
+    );
+
+    // The capture stage measures tap-to-file-selected. A drop skips the dialog
+    // entirely, so marking it would report a wait that never happened — and a
+    // stale end mark would go on to corrupt the NEXT picked file's measurement.
+    expect(performance.getEntriesByName("terroir:scan:capture:end")).toHaveLength(0);
+  });
+
+  it("still marks capture for a file chosen through the dialog", async () => {
+    performance.clearMarks?.("terroir:scan:capture:end");
+    await renderWithSpreadsheetHandler(vi.fn(), vi.fn());
+
+    await selectFile(new File(["i"], "invoice.jpg", { type: "image/jpeg" }));
+
+    expect(performance.getEntriesByName("terroir:scan:capture:end").length).toBeGreaterThan(0);
+    performance.clearMarks?.("terroir:scan:capture:end");
+  });
+
+  it("prevents the browser navigating away from a drop, which would lose the screen", async () => {
+    await renderWithSpreadsheetHandler(vi.fn(), vi.fn());
+
+    const event = fileEvent("drop", [new File(["i"], "invoice.jpg", { type: "image/jpeg" })]);
+    await act(async () => window.dispatchEvent(event));
+
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("offers a Paste button where the browser can be asked for the clipboard", async () => {
+    await renderWithSpreadsheetHandler(vi.fn(), vi.fn());
+
+    expect(buttonNamed("Paste")).toBeTruthy();
+  });
+
+  it("hides the Paste button on a browser that cannot be asked", async () => {
+    // An older browser reaches the page with no clipboard read at all; a button
+    // that could only ever fail is worse than no button.
+    vi.stubGlobal("navigator", {});
+    await renderWithSpreadsheetHandler(vi.fn(), vi.fn());
+
+    expect(
+      [...container.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Paste"),
+    ).toBe(false);
+    vi.unstubAllGlobals();
+  });
+
+  it("scans what the Paste button reads from the clipboard", async () => {
+    const blob = new Blob(["png"], { type: "image/png" });
+    vi.stubGlobal("navigator", {
+      clipboard: { read: async () => [{ types: ["image/png"], getType: async () => blob }] },
+    });
+    const onStart = vi.fn();
+    await renderWithSpreadsheetHandler(onStart, vi.fn());
+
+    await act(async () => buttonNamed("Paste").click());
+
+    expect(onStart).toHaveBeenCalledTimes(1);
+    const [files] = onStart.mock.calls[0] as [File[]];
+    expect(files[0].type).toBe("image/png");
+    vi.unstubAllGlobals();
+  });
+
+  it("says so rather than failing silently when the clipboard holds no image", async () => {
+    vi.stubGlobal("navigator", { clipboard: { read: async () => [] } });
+    const onStart = vi.fn();
+    await renderWithSpreadsheetHandler(onStart, vi.fn());
+
+    await act(async () => buttonNamed("Paste").click());
+
+    expect(container.textContent).toContain("No image on the clipboard");
+    expect(onStart).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("says so when the browser refuses to share the clipboard", async () => {
+    vi.stubGlobal("navigator", {
+      clipboard: {
+        read: async () => {
+          throw new DOMException("denied", "NotAllowedError");
+        },
+      },
+    });
+    await renderWithSpreadsheetHandler(vi.fn(), vi.fn());
+
+    await act(async () => buttonNamed("Paste").click());
+
+    expect(container.textContent).toContain("Allow paste when your browser asks");
+    vi.unstubAllGlobals();
+  });
+});
+
 function getUploadInput(): HTMLInputElement {
   const inputs = [...container.querySelectorAll<HTMLInputElement>('input[type="file"]')];
   const input = inputs.at(-1);

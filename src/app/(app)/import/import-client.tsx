@@ -43,6 +43,7 @@ import {
 } from "./session-step";
 import { convertSpreadsheetFile, isSpreadsheetFile } from "./spreadsheet-upload";
 import { takeHandoffFile } from "./spreadsheet-handoff";
+import { useFileIntake } from "@/lib/upload/use-file-intake";
 
 /** BLOCK 1 (round-11 fix) — how many preview/confirm "units" (chunks, or 1
  * for a file at/under MAX_ROWS that never gets split) this file will need,
@@ -489,6 +490,10 @@ export function ImportClient() {
   const [file, setFile] = useState<File | null>(null);
   const [converting, setConverting] = useState(false);
   const [conversionNotice, setConversionNotice] = useState<string | null>(null);
+  // Set when a drop carried more than one file. An import takes one file, and
+  // silently keeping the first of four is exactly the sort of partial import
+  // nobody notices until the counts come out wrong.
+  const [dropNotice, setDropNotice] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ rows: PreviewRow[]; summary: PreviewSummary } | null>(null);
@@ -936,6 +941,22 @@ export function ImportClient() {
     }
   }, []);
 
+  // Dragging a file in from the desktop, or pasting one, reaches exactly the
+  // same handler as choosing it from the dialog — conversion, validation,
+  // chunking and preview all behave identically. Only accepted on the upload
+  // step: a drop landing mid-preview would discard a reviewed import.
+  const { isDragging } = useFileIntake({
+    enabled: step === "upload" && !converting && !previewing,
+    onFiles: (files) => {
+      setDropNotice(
+        files.length > 1
+          ? `Took “${files[0].name}”. Import one file at a time — the other ${files.length - 1} were not read.`
+          : null,
+      );
+      void handleFileSelected(files[0] ?? null);
+    },
+  });
+
   // A spreadsheet chosen on the scan screen was parked for us on the way here.
   // Pick it up and treat it exactly as if it had been chosen on this screen.
   // takeHandoffFile is single-consumption, so React's development double-invoke
@@ -955,6 +976,7 @@ export function ImportClient() {
     setStep("upload");
     setFile(null);
     setConversionNotice(null);
+    setDropNotice(null);
     setConverting(false);
     setPreview(null);
     setPreviewError(null);
@@ -971,19 +993,37 @@ export function ImportClient() {
 
   return (
     <div className="mx-auto max-w-[640px] px-md py-lg">
+      {/* The whole window is the drop target — there is one upload here, so
+          making the operator hit a rectangle buys nothing. */}
+      {isDragging && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-lg"
+        >
+          <div className="rounded-card border-2 border-dashed border-beige bg-surface px-xl py-lg text-center">
+            <p className="font-serif text-[20px] text-ink">Drop your cellar file</p>
+            <p className="mt-xs text-[13px] text-grey">.csv or .xlsx — one file at a time</p>
+          </div>
+        </div>
+      )}
+
       <header className="mb-lg">
         <h1 className="font-serif text-[28px] font-normal leading-tight text-ink">Import cellar</h1>
         <p className="mt-2xs text-[14px] text-grey">
-          Upload a CSV or Excel (.xlsx) file of your existing inventory. Nothing is written to your cellar until you confirm the preview.
+          Upload a CSV or Excel (.xlsx) file of your existing inventory — choose it, drag it in, or paste it. Nothing is written to your cellar until you confirm the preview.
         </p>
       </header>
 
       {step === "upload" && (
         <UploadStep
           file={file}
-          setFile={handleFileSelected}
+          setFile={(selected) => {
+            setDropNotice(null);
+            void handleFileSelected(selected);
+          }}
           converting={converting}
           conversionNotice={conversionNotice}
+          dropNotice={dropNotice}
           fileInputRef={fileInputRef}
           onPreview={handlePreview}
           previewing={previewing}
@@ -1102,6 +1142,7 @@ function UploadStep({
   setFile,
   converting,
   conversionNotice,
+  dropNotice,
   fileInputRef,
   onPreview,
   previewing,
@@ -1117,6 +1158,8 @@ function UploadStep({
    * A workbook can hold several sheets and only the first is imported, so the
    * operator is told which one they are about to preview. */
   conversionNotice: string | null;
+  /** Set when a drop carried several files and only the first was taken. */
+  dropNotice: string | null;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onPreview: () => void;
   previewing: boolean;
@@ -1154,12 +1197,16 @@ function UploadStep({
           <Upload className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
         </span>
         <span className="text-[14px] font-medium text-ink">
-          {converting ? "Reading spreadsheet…" : file ? file.name : "Choose a CSV or Excel file"}
+          {converting ? "Reading spreadsheet…" : file ? file.name : "Choose a CSV or Excel file, or drag one here"}
         </span>
         <span className="text-caption text-grey">
-          .csv or .xlsx up to 5 MB per upload — larger files split into {CLIENT_CHUNK_TARGET_ROWS}-row chunks automatically
+          .csv or .xlsx up to 5 MB per upload — drag one in or paste it — larger files split into {CLIENT_CHUNK_TARGET_ROWS}-row chunks automatically
         </span>
       </label>
+
+      {dropNotice && (
+        <p role="status" className="mt-md text-[13px] text-grey">{dropNotice}</p>
+      )}
 
       {conversionNotice && (
         <p className="mt-md text-[13px] text-grey">{conversionNotice}</p>
