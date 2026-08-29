@@ -214,6 +214,8 @@ function makeLabelPhotoSupabase(opts: {
   wineExists?: boolean;
   /** Rows the conditional claim matched: [] means the wine already had an image. */
   claimedRows?: Array<{ id: string }>;
+  /** PostgREST can answer a filtered update with null data rather than []. */
+  claimReturnsNull?: boolean;
   claimError?: { message?: string } | null;
 }) {
   const claims: Array<Record<string, unknown>> = [];
@@ -255,6 +257,7 @@ function makeLabelPhotoSupabase(opts: {
           is: () => ({
             select: async () => {
               claims.push(patch);
+              if (opts.claimReturnsNull) return { data: null, error: null };
               return {
                 data: opts.claimError ? null : (opts.claimedRows ?? [{ id: WINE_ID }]),
                 error: opts.claimError ?? null,
@@ -426,6 +429,89 @@ describe("saveWineLabelPhoto — a bottle scan's own photo becomes the wine's pi
       "hero_image_url",
       `https://cdn.example/${RESTAURANT_ID}/${WINE_ID}.jpg`,
     ]);
+  });
+
+  it("rethrows an unexpected upload failure unchanged rather than dressing it as a storage error", async () => {
+    const { supabase, releases } = makeLabelPhotoSupabase({});
+    const unexpected = new TypeError("fetch is not defined");
+    mockUpload.mockRejectedValueOnce(unexpected);
+
+    await expect(
+      saveWineLabelPhoto({
+        supabase: supabase as never,
+        restaurantId: RESTAURANT_ID,
+        wineId: WINE_ID,
+        file: makeFile("image/jpeg", 1000),
+      }),
+    ).rejects.toBe(unexpected);
+
+    // The claim is still released: a wine must not keep a URL for an object
+    // that was never written, whatever kind of failure prevented it.
+    expect(releases).toHaveLength(1);
+  });
+
+  it("reports the storage error's own cause when it carries one", async () => {
+    const { supabase } = makeLabelPhotoSupabase({});
+    const cause = new Error("network reset");
+    mockUpload.mockRejectedValueOnce(new SupabaseStorageError("upload", { cause }));
+
+    await expect(
+      saveWineLabelPhoto({
+        supabase: supabase as never,
+        restaurantId: RESTAURANT_ID,
+        wineId: WINE_ID,
+        file: makeFile("image/jpeg", 1000),
+      }),
+    ).rejects.toBeInstanceOf(WineImageStorageError);
+
+    expect(mockCaptureException).toHaveBeenCalledWith(cause, expect.anything());
+  });
+
+  it("reports the storage error itself when it carries no cause", async () => {
+    const { supabase } = makeLabelPhotoSupabase({});
+    const bare = new SupabaseStorageError("upload");
+    mockUpload.mockRejectedValueOnce(bare);
+
+    await expect(
+      saveWineLabelPhoto({
+        supabase: supabase as never,
+        restaurantId: RESTAURANT_ID,
+        wineId: WINE_ID,
+        file: makeFile("image/jpeg", 1000),
+      }),
+    ).rejects.toBeInstanceOf(WineImageStorageError);
+
+    expect(mockCaptureException).toHaveBeenCalledWith(bare, expect.anything());
+  });
+
+  it("treats a claim that returns no rows and no error as a wine that already has one", async () => {
+    // PostgREST can answer a filtered update with null data rather than [].
+    const { supabase } = makeLabelPhotoSupabase({ claimReturnsNull: true });
+
+    const outcome = await saveWineLabelPhoto({
+      supabase: supabase as never,
+      restaurantId: RESTAURANT_ID,
+      wineId: WINE_ID,
+      file: makeFile("image/jpeg", 1000),
+    });
+
+    expect(outcome).toEqual({ applied: false, heroImageUrl: null });
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  it("names a webp label photo .webp, not the .jpg fallback", async () => {
+    const { supabase } = makeLabelPhotoSupabase({});
+
+    await saveWineLabelPhoto({
+      supabase: supabase as never,
+      restaurantId: RESTAURANT_ID,
+      wineId: WINE_ID,
+      file: makeFile("image/webp", 1000, "label.webp"),
+    });
+
+    expect(mockUpload).toHaveBeenCalledWith(
+      expect.objectContaining({ path: `${RESTAURANT_ID}/${WINE_ID}.webp` }),
+    );
   });
 
   it("surfaces a failed claim as a persistence error rather than uploading anyway", async () => {

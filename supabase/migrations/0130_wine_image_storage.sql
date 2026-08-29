@@ -32,9 +32,20 @@ create policy "members can upload wine images"
     and public.is_member((storage.foldername(name))[1]::uuid)
   );
 
+-- WITH CHECK is stated explicitly rather than left to Postgres's fallback.
+-- Omitting it is not exploitable — an UPDATE policy with no WITH CHECK reuses
+-- its USING expression for the new row, so moving an object into another
+-- restaurant's folder is already refused (verified directly against Postgres,
+-- 2026-08-29: "new row violates row-level security policy"). Stating it is
+-- still the right call for a tenant boundary: the guarantee then does not
+-- depend on a reader knowing that fallback rule.
 create policy "members can update wine images"
   on storage.objects for update to authenticated
   using (
+    bucket_id = 'wine-images'
+    and public.is_member((storage.foldername(name))[1]::uuid)
+  )
+  with check (
     bucket_id = 'wine-images'
     and public.is_member((storage.foldername(name))[1]::uuid)
   );
