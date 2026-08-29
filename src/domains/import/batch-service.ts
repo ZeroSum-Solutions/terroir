@@ -14,11 +14,37 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database";
 import { buildImportPreview, type PreviewRow, type RowOverrides } from "./preview-service";
 import {
+  OVERRIDES_DIGEST_STEM,
+  canonicalizeApprovedLwinRows,
+  canonicalizeConfirmExtras,
+  canonicalizeConfirmExtrasV3,
+  canonicalizeRejectedLwinRows,
+  canonicalizeRowOverrides,
+  extractFileDigestHex,
+  isWellFormedDigestForFile,
+} from "./confirm-digest";
+import {
+  applyLwinApprovalVeto,
+  applyLwinRejections,
+  checkApprovedLwinRows,
+  checkRejectedLwinRows,
+} from "./lwin-overrides";
+
+export { applyLwinApprovalVeto, applyLwinRejections };
+
+// Re-exported so this module's public surface is unchanged by the split: every
+// existing `from "./batch-service"` import keeps resolving exactly as before.
+export {
+  canonicalizeApprovedLwinRows,
+  canonicalizeConfirmExtras,
+  canonicalizeConfirmExtrasV3,
+  canonicalizeRejectedLwinRows,
+  canonicalizeRowOverrides,
+};
+import {
   APPLY_CHUNK_SIZE,
-  CANONICAL_HEADERS,
   CLEANUP_BUDGET_FROM_ENTRY_MS,
   LWIN_APPLY_MIN_SCORE,
-  type CanonicalHeader,
 } from "./constants";
 
 // Round-4 audit finding 4 / round-5 audit finding 6: how many candidate rows
@@ -59,119 +85,11 @@ const LIVE_BATCH_LOOKUP_LIMIT = 20;
 // construction, so a v3 digest is recognized everywhere a v1 or v2 one
 // already is, with zero additional changes to any of the sites listed
 // above.
-const OVERRIDES_DIGEST_STEM = "overrides-v";
 
-/** Stable-key-order JSON of a rowOverrides payload, or null when there is
- * nothing to fold into content_sha256 — undefined, or every row's
- * override is an empty field set (both must hash identically to "no
- * overrides at all" so a no-op override never changes a batch's
- * identity). Exported so batch-service.test.ts can pin its exact output
- * independent of the hash itself. */
-export function canonicalizeRowOverrides(overrides: RowOverrides | undefined): string | null {
-  if (!overrides) return null;
-  const rowNumbers = Object.keys(overrides)
-    .map(Number)
-    .filter((rowNumber) => {
-      const fields = overrides[String(rowNumber)];
-      return fields && Object.keys(fields).length > 0;
-    })
-    .sort((a, b) => a - b);
-  if (rowNumbers.length === 0) return null;
 
-  const canonical = rowNumbers.map((rowNumber) => {
-    const fields = overrides[String(rowNumber)] as Partial<Record<CanonicalHeader, string>>;
-    const orderedFields = CANONICAL_HEADERS.filter((field) => fields[field] !== undefined).map(
-      (field) => [field, fields[field]] as const,
-    );
-    return [rowNumber, orderedFields] as const;
-  });
-  return JSON.stringify(canonical);
-}
 
-/** Item 2 — the rejectedLwinRows counterpart to canonicalizeRowOverrides
- * above: stable-order JSON of the rejected-match row-number SET, or null
- * when there is nothing to fold into content_sha256 (undefined, or empty
- * after dedup) — mirroring canonicalizeRowOverrides' own "a no-op collapses
- * to null" contract, so a no-op rejection list never changes a batch's
- * identity either. Exported so batch-service.test.ts can pin its exact
- * output independent of the hash itself. */
-export function canonicalizeRejectedLwinRows(rejectedLwinRows: string[] | undefined): string | null {
-  if (!rejectedLwinRows) return null;
-  const rowNumbers = Array.from(new Set(rejectedLwinRows.map(Number)))
-    .filter((n) => Number.isSafeInteger(n) && n >= 1)
-    .sort((a, b) => a - b);
-  if (rowNumbers.length === 0) return null;
-  return JSON.stringify(rowNumbers);
-}
 
-/** Sol audit round 3, finding 2 (BLOCK 2) — the approvedLwinRows
- * counterpart to canonicalizeRejectedLwinRows above: stable-order JSON of
- * the operator-approved (row number -> lwin_id) map, or null when there is
- * nothing to fold into content_sha256 (undefined, or empty after
- * dropping malformed entries) — mirroring canonicalizeRowOverrides' and
- * canonicalizeRejectedLwinRows' own "a no-op collapses to null" contract.
- * Duplicate numeric row keys (e.g. "1" and "01" both present, if such a
- * malformed object ever arrived) resolve last-write-wins, matching
- * checkApprovedLwinRows' own Map.set semantics below — this and the bounds
- * check can never canonicalize a different winner for the same malformed
- * input. Exported so batch-service.test.ts can pin its exact output
- * independent of the hash itself. */
-export function canonicalizeApprovedLwinRows(approvedLwinRows: Record<string, string> | undefined): string | null {
-  if (!approvedLwinRows) return null;
-  const byRowNumber = new Map<number, string>();
-  for (const [key, lwinId] of Object.entries(approvedLwinRows)) {
-    const rowNumber = Number(key);
-    if (!Number.isSafeInteger(rowNumber) || rowNumber < 1) continue;
-    if (typeof lwinId !== "string" || lwinId.length === 0) continue;
-    byRowNumber.set(rowNumber, lwinId);
-  }
-  if (byRowNumber.size === 0) return null;
-  const canonical = Array.from(byRowNumber.entries()).sort(([a], [b]) => a - b);
-  return JSON.stringify(canonical);
-}
 
-/** Item 2 — folds BOTH canonicalized extras (row-fix overrides, possibly
- * absent, and the rejected-LWIN row set) into ONE deterministic JSON blob
- * for the v2 (rejections-bearing) content_sha256 namespace. Key order is
- * fixed by this object literal's own source order (never client-
- * controlled), so this hashes identically regardless of which extra
- * arrived first over the wire. Exported so batch-service.test.ts can pin
- * its exact output independent of the hash itself. */
-export function canonicalizeConfirmExtras(
-  overridesCanonicalJson: string | null,
-  rejectedLwinRowsCanonicalJson: string | null,
-): string {
-  return JSON.stringify({
-    overrides: overridesCanonicalJson === null ? null : (JSON.parse(overridesCanonicalJson) as unknown),
-    rejectedLwinRows:
-      rejectedLwinRowsCanonicalJson === null ? null : (JSON.parse(rejectedLwinRowsCanonicalJson) as unknown),
-  });
-}
-
-/** Sol audit round 3, finding 2 (BLOCK 2) — the v3 (approved-match-bearing)
- * counterpart to canonicalizeConfirmExtras above: folds ALL THREE
- * canonicalized extras into one deterministic JSON blob. A SEPARATE
- * function, not a 3rd optional argument on canonicalizeConfirmExtras —
- * that function's 2-key output shape is the v2 namespace's byte-for-byte
- * contract; adding a third (even null) key to it would change v2's own
- * hash retroactively for every already-existing v2 batch. v3 is only ever
- * used when approvedLwinRowsCanonicalJson is non-null (see
- * confirmImportBatch's own digest-construction comment) — a confirm with
- * no approved-match set at all still hashes via the bare/v1/v2 tiers,
- * completely unchanged. */
-export function canonicalizeConfirmExtrasV3(
-  overridesCanonicalJson: string | null,
-  rejectedLwinRowsCanonicalJson: string | null,
-  approvedLwinRowsCanonicalJson: string | null,
-): string {
-  return JSON.stringify({
-    overrides: overridesCanonicalJson === null ? null : (JSON.parse(overridesCanonicalJson) as unknown),
-    rejectedLwinRows:
-      rejectedLwinRowsCanonicalJson === null ? null : (JSON.parse(rejectedLwinRowsCanonicalJson) as unknown),
-    approvedLwinRows:
-      approvedLwinRowsCanonicalJson === null ? null : (JSON.parse(approvedLwinRowsCanonicalJson) as unknown),
-  });
-}
 
 function summarize(rows: PreviewRow[]) {
   return {
@@ -186,220 +104,11 @@ function summarize(rows: PreviewRow[]) {
   };
 }
 
-/** Item 2 (per-row LWIN match visibility/rejection) — a rejected match
- * behaves EXACTLY like a row that never matched at all: lwinStatus/lwinId/
- * lwinScore/lwinDisplayName null out, and resolution recomputes through
- * the SAME rule buildImportPreview itself uses (an unmatched row always
- * needs resolution) so the row goes through the ordinary "Include anyway"/
- * "Exclude" gate every unmatched row already goes through — never a
- * separate auto-apply path. No SQL change is needed for this: apply_
- * import_batch_chunk (0108) independently re-gates on `lwin_score is not
- * null and lwin_score >= 0.6`, so a nulled lwin_score alone already makes
- * this row un-appliable via the LWIN path.
- *
- * A row not currently 'matched' (never matched, or already excluded as an
- * error row) is a no-op — rejecting a match that isn't there has nothing
- * to undo. This also makes a REJECTION of a row an operator's override
- * happened to change into something else at confirm time (a different
- * effective producer/name re-matching, or matching nothing) harmless
- * rather than an error: rejection is about the row's CURRENT match, not a
- * promise the same match still exists.
- *
- * Pure — returns a NEW array, never mutates its input (this codebase's
- * immutability convention), and returns the SAME array reference when
- * there is nothing to reject so an empty rejection set costs nothing.
- * Exported so batch-service.test.ts can pin this transformation directly. */
-export function applyLwinRejections(rows: PreviewRow[], rejectedRowNumbers: Set<number>): PreviewRow[] {
-  if (rejectedRowNumbers.size === 0) return rows;
-  return rows.map((row) => {
-    if (row.lwinStatus !== "matched" || !rejectedRowNumbers.has(row.rowNumber)) return row;
-    return {
-      ...row,
-      lwinStatus: "unmatched",
-      lwinId: null,
-      lwinScore: null,
-      lwinDisplayName: null,
-      resolution: "pending",
-    };
-  });
-}
 
-/** Sol audit round 3, finding 2 (BLOCK 2) — match_lwin's catalogue
- * tie-break (0078_match_lwin_trgm_fastpath.sql) orders candidates by
- * `score desc limit 1` with no deterministic secondary key, so two
- * equally-scoring catalogue rows can legitimately resolve to a DIFFERENT
- * lwin_id between the preview the operator looked at and confirm's own
- * from-scratch re-match (buildImportPreview is called again, above, from
- * the raw file — it never trusts a client-supplied preview).
- *
- * That catalogue tie is now fixed at the source: migration 0127 adds
- * `order by score desc, lc.lwin_id asc`, and match_lwin_bulk inherits it by
- * delegation. This veto is NOT thereby redundant, and must not be deleted on
- * the strength of that migration — it defends against a strictly larger set
- * of causes than tie ordering. The catalogue itself can change between
- * preview and confirm (a row added, edited, removed, or newly crossing the
- * threshold), and the operator's approval is a statement about the specific
- * wine they were shown, not about whichever wine the RPC ranks first at
- * confirm time.
- *
- * BLOCK 1 (round 5 fix) — this used to be a PARTIAL fail-safe: a row with
- * NO entry in approvedByRowNumber was left completely untouched, on the
- * theory that "no entry" only ever meant "an older client, or a row the
- * operator's client never showed as matched." That reasoning was wrong for
- * the real client: buildApprovedLwinRows (import-client.tsx) only ever
- * includes a row that was shown as LINKING (score >= LWIN_APPLY_MIN_SCORE)
- * at preview — a row that was unmatched or below-threshold at preview has
- * NO entry either, for exactly the same "no entry" shape, even though the
- * operator explicitly did NOT see it as linking. If that row re-scores >=
- * LWIN_APPLY_MIN_SCORE at confirm (a catalogue update between preview and
- * confirm, or match_lwin's own non-deterministic tie-break landing on a
- * candidate this time), the old code stamped it — a catalogue link the
- * operator never saw, contradicting the UI's own promise that a
- * below-threshold/unmatched row imports with no link "no matter what you
- * do here" (import-client.tsx).
- *
- * Fixed by making "no entry" fail CLOSED instead of open, but only when the
- * client has actually communicated the full picture — `hasFullPicture`
- * (confirmImportBatch's own `options.approvedLwinRows !== undefined`,
- * threaded straight through, never re-derived from approvedByRowNumber's
- * size) is true whenever approvedLwinRows was sent AT ALL, even as `{}` for
- * a file with zero linking matches — see buildApprovedLwinRows'/
- * handleConfirm's own comment in import-client.tsx for why the client now
- * always sends it. When `hasFullPicture` is false (the field was never sent
- * — a genuinely older client, a bare API caller with no preview UI to show
- * anything through), the veto is a complete no-op, unchanged from before:
- * there is no signal to fail closed WITH, and "no data" must never be
- * treated as "operator saw this and rejected it."
- *
- * When `hasFullPicture` is true, EVERY row that would actually be stamped
- * (lwinStatus 'matched' AND score >= LWIN_APPLY_MIN_SCORE — a below-
- * threshold match is excluded from this gate entirely, since 0108's own SQL
- * already refuses to write one regardless, and vetoing it here would wrongly
- * flip its resolution from 'auto' to 'pending', a BLOCK-3 contract this fix
- * has no business touching) must have a MATCHING entry in
- * approvedByRowNumber to survive: no entry, or a disagreeing one, both
- * veto identically (stamped exactly like a rejected row — see
- * applyLwinRejections above). Only a row the operator saw as linking, whose
- * re-derived id still agrees, keeps its link.
- *
- * The client's data is still only ever a comparison target, never a
- * written value — confirm re-derives every match itself, exactly as
- * before — and this mechanism still can only ever cause LESS to be written
- * than the server's own re-match alone would, never more or different:
- * `hasFullPicture=false` reproduces the exact prior behavior, and
- * `hasFullPicture=true` can only turn an already-computed match INTO
- * "unmatched," never the reverse.
- *
- * Applied AFTER applyLwinRejections (confirmImportBatch's own call order)
- * — a row already nulled out by an explicit rejection has lwinStatus
- * 'unmatched' by the time this runs, so any approvedLwinRows entry for it
- * is naturally a no-op here, never double-processed.
- *
- * Pure — same immutability contract as applyLwinRejections: returns a NEW
- * array, and returns the SAME array reference when `hasFullPicture` is
- * false (the one case cheap enough, and common enough for a bare API
- * caller, to special-case). Exported so batch-service.test.ts can pin this
- * transformation directly. */
-export function applyLwinApprovalVeto(
-  rows: PreviewRow[],
-  approvedByRowNumber: Map<number, string>,
-  hasFullPicture: boolean,
-): PreviewRow[] {
-  if (!hasFullPicture) return rows;
-  return rows.map((row) => {
-    if (row.lwinStatus !== "matched") return row;
-    if (row.lwinScore === null || row.lwinScore < LWIN_APPLY_MIN_SCORE) return row;
-    const approvedLwinId = approvedByRowNumber.get(row.rowNumber);
-    if (approvedLwinId === row.lwinId) return row;
-    return {
-      ...row,
-      lwinStatus: "unmatched",
-      lwinId: null,
-      lwinScore: null,
-      lwinDisplayName: null,
-      resolution: "pending",
-    };
-  });
-}
 
-type RejectedLwinRowsCheck =
-  | { ok: true; rowNumbers: Set<number> }
-  | { ok: false; error: { code: string; message: string } };
 
-/** Item 2's dynamic bounds check — the rejectedLwinRows counterpart to
- * buildImportPreview's own rowOverrides bounds check (preview-service.ts).
- * Deliberately checked against the rowNumbers actually PRESENT in `rows`
- * (post intra-batch-duplicate-merge — see mergeIntraBatchDuplicates,
- * dedup-key.ts) rather than a static row-count ceiling: a merge-absorbed
- * row's number never appears standalone in the preview the operator saw
- * (it only ever shows survivor rows), so any well-formed operator
- * submission can only ever name a survivor's own rowNumber — an index
- * that no longer exists post-merge is either a stale/mismatched client
- * reference or a hand-crafted request, and either way is never silently
- * ignored (matching buildImportPreview's own rowOverrides discipline). */
-function checkRejectedLwinRows(rejectedLwinRows: string[] | undefined, rows: PreviewRow[]): RejectedLwinRowsCheck {
-  if (!rejectedLwinRows || rejectedLwinRows.length === 0) return { ok: true, rowNumbers: new Set() };
-  const validRowNumbers = new Set(rows.map((r) => r.rowNumber));
-  const rowNumbers = new Set<number>();
-  for (const key of rejectedLwinRows) {
-    const rowNumber = Number(key);
-    if (!Number.isInteger(rowNumber) || !validRowNumbers.has(rowNumber)) {
-      return {
-        ok: false,
-        error: {
-          code: "invalid_rejected_lwin_row",
-          message: `Row ${key} does not exist in this file's preview (it has ${rows.length} row(s) after merging duplicates).`,
-        },
-      };
-    }
-    rowNumbers.add(rowNumber);
-  }
-  return { ok: true, rowNumbers };
-}
 
-type ApprovedLwinRowsCheck =
-  | { ok: true; approvedByRowNumber: Map<number, string> }
-  | { ok: false; error: { code: string; message: string } };
 
-/** Sol audit round 3, finding 2 (BLOCK 2) — the approvedLwinRows
- * counterpart to checkRejectedLwinRows above: same "validated against the
- * rowNumbers actually PRESENT in `rows`, post intra-batch-duplicate-merge"
- * discipline (see checkRejectedLwinRows' own comment for why), and the
- * same "never silently ignored" failure mode for an out-of-range row
- * reference. The lwin_id VALUE is only shape-checked (a non-empty string)
- * — applyLwinApprovalVeto never trusts it as anything but a comparison
- * target, so there is nothing more to validate about it here. */
-function checkApprovedLwinRows(
-  approvedLwinRows: Record<string, string> | undefined,
-  rows: PreviewRow[],
-): ApprovedLwinRowsCheck {
-  if (!approvedLwinRows) return { ok: true, approvedByRowNumber: new Map() };
-  const validRowNumbers = new Set(rows.map((r) => r.rowNumber));
-  const approvedByRowNumber = new Map<number, string>();
-  for (const [key, lwinId] of Object.entries(approvedLwinRows)) {
-    const rowNumber = Number(key);
-    if (!Number.isInteger(rowNumber) || !validRowNumbers.has(rowNumber)) {
-      return {
-        ok: false,
-        error: {
-          code: "invalid_approved_lwin_row",
-          message: `Row ${key} does not exist in this file's preview (it has ${rows.length} row(s) after merging duplicates).`,
-        },
-      };
-    }
-    if (typeof lwinId !== "string" || lwinId.length === 0) {
-      return {
-        ok: false,
-        error: {
-          code: "invalid_approved_lwin_row",
-          message: `Row ${key}'s approved LWIN id must be a non-empty string.`,
-        },
-      };
-    }
-    approvedByRowNumber.set(rowNumber, lwinId);
-  }
-  return { ok: true, approvedByRowNumber };
-}
 
 export type ConfirmBatchOptions = {
   /** P3 §3.2: this chunk belongs to a multi-batch onboarding session. */
@@ -1410,25 +1119,6 @@ type FindLiveBatchResult =
   | { ok: true; match: LiveBatchMatch | null }
   | { ok: false; error: { code: string; message: string } };
 
-/** Sol round-3 audit (2026-08-27) finding 6: the DB query below can only
- * express "contains fileDigestHex as a LIKE match," which also matches a
- * malformed, multi-colon content_sha256 value engineered to contain the
- * file's own digest as a trailing substring in the right position. Every
- * candidate row is re-checked here against the EXACT formats
- * content_sha256 can ever legitimately hold (see confirmImportBatch's own
- * digest-construction comment) before being treated as a real match.
- *
- * Item 2: the regex's version segment (`[0-9]+`) recognizes ANY namespace
- * version after OVERRIDES_DIGEST_STEM, not just "1" — a hardcoded "1:"
- * here would silently stop recognizing a v2 (rejections-bearing) digest as
- * well-formed, which would fall through isWellFormedDigestForFile's own
- * callers to "not this file," making a rejection-bearing confirm invisible
- * to duplicate/race reconciliation entirely. */
-function isWellFormedDigestForFile(contentSha256: string | null, fileDigestHex: string): boolean {
-  if (!contentSha256) return false;
-  if (contentSha256 === fileDigestHex) return true;
-  return new RegExp(`^${OVERRIDES_DIGEST_STEM}[0-9]+:[0-9a-f]{64}:${fileDigestHex}$`).test(contentSha256);
-}
 
 /** Round-29 audit, BLOCK 2: whether a content_sha256 value's OWN namespace
  * tier folds LWIN state (rejectedLwinRows and/or the full-picture
@@ -1446,25 +1136,6 @@ function digestTierEncodesLwinState(contentSha256: string): boolean {
   return Number(match[1]) >= 2;
 }
 
-/** Round-7 audit finding 1: the trailing bare-file digest out of either a
- * bare content_sha256 (itself already the file digest) or a well-formed
- * overrides/rejections-namespaced one — the same shapes isWellFormedDigestForFile
- * recognizes, in reverse. Used by findDuplicateBatch's 23505 fallback to
- * recover the fileDigestHex needed to route through the same
- * reconcileLiveBatchesForFile logic the pre-check uses, from a
- * content_sha256 whose format isn't known upfront (unlike confirmImportBatch,
- * which always has fileDigestHex on hand directly from the raw file buffer).
- * Returns null only for a malformed value this product never actually
- * writes — the caller falls back to the pre-existing exact-match behavior
- * in that case, never throws.
- *
- * Item 2: generalized the same way as isWellFormedDigestForFile above —
- * `[0-9]+` recognizes any version, not just "1". */
-function extractFileDigestHex(contentSha256: string): string | null {
-  if (/^[0-9a-f]{64}$/.test(contentSha256)) return contentSha256;
-  const match = new RegExp(`^${OVERRIDES_DIGEST_STEM}[0-9]+:[0-9a-f]{64}:([0-9a-f]{64})$`).exec(contentSha256);
-  return match ? match[1] : null;
-}
 
 /** Sol round-2/3 audit (2026-08-27) findings 2/3/4/6: finds the OLDEST live
  * (non-reverted) batch for this restaurant whose content_sha256 refers to
