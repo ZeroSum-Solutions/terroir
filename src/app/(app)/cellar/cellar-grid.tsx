@@ -80,7 +80,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             onChange={(e) =>
               setSetupRows(Math.max(1, Math.min(26, +e.target.value)))
             }
-            className="tabular mt-xs w-full rounded-pill border border-ink/20 bg-surface px-md py-sm text-center text-[16px] text-ink"
+            className="tabular mt-xs w-full rounded-pill border border-edge bg-surface px-md py-sm text-center text-[16px] text-ink"
           />
         </div>
         <div>
@@ -99,7 +99,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             onChange={(e) =>
               setSetupCols(Math.max(1, Math.min(30, +e.target.value)))
             }
-            className="tabular mt-xs w-full rounded-pill border border-ink/20 bg-surface px-md py-sm text-center text-[16px] text-ink"
+            className="tabular mt-xs w-full rounded-pill border border-edge bg-surface px-md py-sm text-center text-[16px] text-ink"
           />
         </div>
       </div>
@@ -120,8 +120,8 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             }}
             className={`flex-1 rounded-pill border px-sm py-xs text-[13px] font-medium transition-colors ${
               setupRows === preset.r && setupCols === preset.c
-                ? "border-accent bg-blush-wash text-accent"
-                : "border-ink/20 bg-surface text-grey hover:border-beige-deep"
+                ? "border-risk-ink/40 bg-risk-wash text-risk-ink"
+                : "border-edge bg-surface text-grey hover:border-rule-strong"
             }`}
           >
             {preset.label}
@@ -133,7 +133,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
         type="button"
         onClick={createCellar}
         disabled={creating}
-        className="flex h-[38px] w-full items-center justify-center gap-xs rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+        className="flex h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-60"
       >
         {creating && (
           <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
@@ -202,12 +202,12 @@ export function CellarGridView({
                   // Contract tokens only: beige-deep (empty), amber (low), sage (in stock).
                   // --t-* runtime vars so both themes retint the SVG; the
                   // canvas color reads on amber and sage in both modes.
-                  let fill = "var(--t-hairline-strong)"; // empty — beige-deep alias
+                  let fill = "var(--t-rule-strong)"; // empty
                   const textFill = "var(--t-canvas)";
                   if (total > 0 && total <= 2) {
-                    fill = "var(--t-amber)"; // low
+                    fill = "var(--t-risk-ink)"; // low
                   } else if (total > 2) {
-                    fill = "var(--t-sage)"; // in stock
+                    fill = "var(--t-ready)"; // in stock
                   }
 
                   const isSelected = selectedBin === binId;
@@ -221,7 +221,7 @@ export function CellarGridView({
                         height={CELL_SIZE}
                         rx={4}
                         fill={fill}
-                        stroke={isSelected ? "var(--t-accent)" : "transparent"}
+                        stroke={isSelected ? "var(--t-mark)" : "transparent"}
                         strokeWidth={isSelected ? 2 : 0}
                         role="button"
                         tabIndex={0}
@@ -280,7 +280,7 @@ export function CellarGridView({
                 type="button"
                 onClick={() => setSelectedBin(null)}
                 aria-label="Close bin detail"
-                className="flex h-8 w-8 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
+                className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-wash focus-ring"
               >
                 <X className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               </button>
@@ -296,7 +296,7 @@ export function CellarGridView({
                   {selectedData.wines.map((w, i) => (
                     <div
                       key={`${w.wineId}-${i}`}
-                      className="rounded-lg border border-hairline px-sm py-sm"
+                      className="rounded-md border border-rule px-sm py-sm"
                     >
                       <div className="font-serif text-[17px] font-medium leading-snug text-ink">
                         {w.producer}, {w.name}
@@ -327,18 +327,22 @@ export function CellarGridView({
         )}
       </div>
 
-      {/* Legend */}
+      {/* Legend — the same runtime vars the cells are filled with. It used to
+          carry three hardcoded Cantina hexes, so after any palette change the
+          legend quietly described a map that no longer existed. One of them
+          was a brown, which is exactly what check-design-palette now catches
+          in source as well as in DESIGN.md. */}
       <div className="mt-lg flex items-center gap-lg text-[12px] text-grey">
         <div className="flex items-center gap-xs">
-          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#ADAA8A" }} />
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "var(--t-ready)" }} />
           In stock (3+)
         </div>
         <div className="flex items-center gap-xs">
-          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#8B6914" }} />
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "var(--t-risk-ink)" }} />
           Low (1-2)
         </div>
         <div className="flex items-center gap-xs">
-          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#E3D9CB" }} />
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "var(--t-rule-strong)" }} />
           Empty
         </div>
       </div>

@@ -10,7 +10,7 @@ export default function ScanLoading() {
         <Skeleton className="h-[28px] w-48 mb-xs" />
         <Skeleton className="h-[15px] w-64" />
       </header>
-      <div className="rounded-card border-2 border-dashed border-beige-deep bg-bridge-surface p-xl">
+      <div className="rounded-card border-2 border-dashed border-rule-strong bg-wash p-xl">
         <div className="flex flex-col items-center gap-md">
           <Skeleton className="h-14 w-14 rounded-full" />
           <Skeleton className="h-[20px] w-40" />
@@ -28,7 +28,7 @@ export default function ScanLoading() {
         </div>
         <div className="grid grid-cols-1 gap-sm md:grid-cols-3 md:gap-md">
           {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="rounded-lg card-surface p-md">
+            <div key={i} className="rounded-card card-surface p-md">
               <div className="mb-sm flex items-center justify-between">
                 <Skeleton className="h-[12px] w-16" />
                 <Skeleton className="h-[12px] w-8" />

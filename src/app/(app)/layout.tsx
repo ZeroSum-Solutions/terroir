@@ -23,13 +23,21 @@ export default async function AppLayout({
     <RestaurantProvider restaurantId={restaurantId} restaurantName={restaurantName} userRole={userRole}>
       <ToastWrapper>
     <div className="flex min-h-screen flex-col overflow-x-hidden bg-canvas">
-      {/* Top bar — minimal on mobile, full nav on md+. Glass Nav per DESIGN.md. */}
-      <header className="glass sticky top-0 z-10 flex h-[54px] items-center px-md md:px-lg">
+      {/* Top bar — minimal on mobile, full nav on md+. Glass Nav per DESIGN.md.
+          The top safe area is RESERVED, not ignored: viewportFit is "cover",
+          so without this the brand mark and the settings control sit under a
+          notched iPhone's Dynamic Island when Terroir is installed as a PWA.
+          Geometry comes from the chrome tokens in globals.css, never from a
+          hand-written 54px in one file and 56px in another. */}
+      <header
+        className="glass sticky top-0 z-[var(--z-sticky)] flex items-center px-md md:px-lg"
+        style={{ height: "var(--chrome-header-total)", paddingTop: "var(--safe-top)" }}
+      >
         <Link
           href="/"
           className="inline-flex min-h-11 shrink-0 items-center font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink"
         >
-          TERR<span className="text-accent">OIR</span>
+          TERR<span className="text-mark">OIR</span>
         </Link>
 
         <ShellContext restaurantName={restaurantName} role={userRole} />
@@ -53,7 +61,7 @@ export default async function AppLayout({
           (Kimi audit 2026-08-26). */}
       {/* Content cap ~1160px (Kimi audit D4): the mobile stack stretched
           full-width to 1440px read as an unfinished desktop. */}
-      <main className="mx-auto w-full max-w-[1160px] flex-1 px-md py-lg pb-[152px] md:px-lg md:py-xl md:pb-xl">
+      <main className="mx-auto w-full max-w-[1160px] flex-1 px-md py-lg pb-[calc(var(--chrome-tabbar-total)+var(--chrome-fab)+var(--spacing-2xl))] md:px-lg md:py-xl md:pb-xl">
         {children}
       </main>
 
@@ -62,8 +70,8 @@ export default async function AppLayout({
           Was 6-7 tabs (truncating at ~55px on a 390px phone); now ~97px
           per tab. */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-20 flex border-t border-hairline bg-canvas/95 backdrop-blur-sm md:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        className="fixed inset-x-0 bottom-0 z-[var(--z-chrome)] flex border-t border-rule bg-canvas/95 backdrop-blur-sm md:hidden"
+        style={{ paddingBottom: "var(--safe-bottom)" }}
         aria-label="Primary mobile"
       >
         <MobileNavLinks role={userRole} />

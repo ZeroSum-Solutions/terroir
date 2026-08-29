@@ -12,10 +12,10 @@ const KIND_LABELS: Record<ReconcileQueueKind, string> = {
 };
 
 const KIND_STYLES: Record<ReconcileQueueKind, string> = {
-  unplaced: "bg-amber-wash text-amber",
-  unmatched_scan: "bg-powder-wash text-powder-ink",
-  duplicate_suspect: "bg-blush-wash text-accent",
-  ambiguous_lineage: "bg-amber-wash text-amber",
+  unplaced: "bg-risk-wash text-risk-ink",
+  unmatched_scan: "bg-hold-wash text-hold-ink",
+  duplicate_suspect: "bg-risk-wash text-risk-ink",
+  ambiguous_lineage: "bg-risk-wash text-risk-ink",
 };
 
 type Props = {
@@ -36,7 +36,7 @@ export function QueueIssueRow(props: Props) {
       data-queue-row
       data-queue-kind={row.kind}
       data-risk={row.atRisk}
-      className="grid gap-sm border-t border-hairline px-md py-md first:border-t-0 md:grid-cols-[44px_minmax(0,1fr)_minmax(180px,auto)_100px] md:items-center"
+      className="grid gap-sm border-t border-rule px-md py-md first:border-t-0 md:grid-cols-[44px_minmax(0,1fr)_minmax(180px,auto)_100px] md:items-center"
     >
       <label className="flex h-11 w-11 items-center justify-center">
         <span className="sr-only">Select {row.title}</span>
@@ -46,7 +46,7 @@ export function QueueIssueRow(props: Props) {
           checked={checked}
           disabled={disabled || !actionable}
           onChange={onToggle}
-          className="h-4 w-4 rounded-sm border-beige-deep text-accent focus:ring-accent disabled:opacity-35"
+          className="h-4 w-4 rounded-sm border-rule-strong text-accent focus-ring disabled:opacity-35"
         />
       </label>
       <IssueIdentity row={row} />
@@ -91,7 +91,7 @@ function BasisChip({ row }: { row: ReconcileQueueRow }) {
   const label = basis.kind === "lwin" ? "LWIN" : "Field match";
   const detail = basis.kind === "lwin" ? basis.lwin : basis.fields.join(" · ");
   return (
-    <span data-basis={basis.kind} className="rounded-pill bg-sage-wash px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide text-sage-ink">
+    <span data-basis={basis.kind} className="rounded-pill bg-ready-wash px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide text-ready-ink">
       <span>{label}</span><span className="sr-only">{detail}</span>
       <span aria-hidden className="ml-2xs opacity-75">{detail}</span>
     </span>
@@ -102,7 +102,7 @@ function IssueControl({ row, bins, binId, onBinChange }: Pick<Props, "row" | "bi
   if (row.kind !== "unplaced") {
     return <p className="text-[12px] text-grey">{row.action?.label ?? "Review in cellar"}</p>;
   }
-  if (bins.length === 0) return <p className="text-[12px] text-amber">Create an active bin first</p>;
+  if (bins.length === 0) return <p className="text-[12px] text-risk-ink">Create an active bin first</p>;
   return (
     <label className="block">
       <span className="sr-only">Bin for {row.title}</span>
@@ -110,7 +110,7 @@ function IssueControl({ row, bins, binId, onBinChange }: Pick<Props, "row" | "bi
         aria-label={`Bin for ${row.title}`}
         value={binId ?? ""}
         onChange={(event) => onBinChange(event.target.value)}
-        className="h-11 w-full rounded-pill border border-beige-deep bg-surface px-md text-[13px] text-ink focus:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+        className="h-11 w-full rounded-pill border border-rule-strong bg-surface px-md text-[13px] text-ink focus:border-accent focus-ring"
       >
         <option value="">Choose bin</option>
         {bins.map((bin) => <option key={bin.id} value={bin.id}>{bin.zone ? `${bin.zone} · ` : ""}{bin.code}</option>)}

@@ -166,20 +166,20 @@ export function ScanReview({
       <header className="mb-lg">
         <Link
           href="/scan"
-          className="mb-md inline-flex min-h-11 items-center gap-xs text-[13px] text-grey hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          className="mb-md inline-flex min-h-11 items-center gap-xs text-[13px] text-grey hover:text-ink focus-ring"
         >
           <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
           Back to scanner
         </Link>
         <div className="flex items-center justify-between gap-md">
-          <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
+          <h1 className="font-serif text-heading-sm text-ink md:text-heading">
             Review scan
           </h1>
           {items.length > 0 && (
             <button
               type="button"
               onClick={handleExportCsv}
-              className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+              className="flex h-11 items-center justify-center gap-sm rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
               title="Download line items as CSV"
             >
               <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -212,7 +212,7 @@ export function ScanReview({
               </div>
             </div>
           </div>
-          <div className="mt-md flex flex-wrap items-center gap-md border-t border-dashed border-hairline pt-md text-[13px] text-grey">
+          <div className="mt-md flex flex-wrap items-center gap-md border-t border-dashed border-rule pt-md text-[13px] text-grey">
             <span>{itemCount} wines</span>
             <span aria-hidden className="text-grey">·</span>
             <span>{bottles} bottles</span>
@@ -221,7 +221,7 @@ export function ScanReview({
             {lowC > 0 && (
               <>
                 <span aria-hidden className="text-grey">·</span>
-                <span className="inline-flex items-center gap-xs rounded-pill bg-blush-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-accent">
+                <span className="inline-flex items-center gap-xs rounded-pill bg-risk-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-risk-ink">
                   <AlertTriangle className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" />
                   {lowC} to review
                 </span>
@@ -234,7 +234,7 @@ export function ScanReview({
           <div className="rounded-card card-surface p-md md:sticky md:top-[72px] md:self-start">
             <div className="mb-sm text-caption font-medium uppercase tracking-[0.18em] text-grey">Original invoice</div>
             {imageLoading ? (
-              <div className="flex h-[200px] items-center justify-center rounded-lg bg-bridge-surface">
+              <div className="flex h-[200px] items-center justify-center rounded-lg bg-wash">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               </div>
             ) : imageUrl ? (
@@ -244,7 +244,7 @@ export function ScanReview({
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Open full-resolution invoice from ${distributor} in a new tab`}
-                  className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  className="block rounded-lg focus-ring"
                 >
                   <Image
                     src={imageUrl}
@@ -259,14 +259,14 @@ export function ScanReview({
                   href={imageUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-sm inline-flex items-center gap-xs text-[12px] text-grey hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  className="mt-sm inline-flex items-center gap-xs text-[12px] text-grey hover:text-accent focus-ring"
                 >
                   <ExternalLink className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                   Open full size
                 </a>
               </>
             ) : (
-              <div className="flex h-[200px] items-center justify-center rounded-lg bg-bridge-surface text-[13px] text-grey">Image unavailable</div>
+              <div className="flex h-[200px] items-center justify-center rounded-lg bg-wash text-[13px] text-grey">Image unavailable</div>
             )}
           </div>
         )}
@@ -279,10 +279,10 @@ export function ScanReview({
 
           {/* Desktop editable table */}
           <div className="hidden md:block">
-            <div className="overflow-hidden rounded-card border border-hairline">
+            <div className="overflow-hidden rounded-card card-surface">
               <table className="w-full border-collapse text-[14px]">
                 <thead>
-                  <tr className="bg-bridge-surface">
+                  <tr className="bg-wash">
                     <th className="px-sm py-sm text-left text-caption font-medium uppercase tracking-[0.18em] text-grey w-[32%]">Wine</th>
                     <th className="px-sm py-sm text-left text-caption font-medium uppercase tracking-[0.18em] text-grey w-[14%]">Varietal</th>
                     <th className="px-sm py-sm text-left text-caption font-medium uppercase tracking-[0.18em] text-grey w-[9%]">Vintage</th>
@@ -294,7 +294,7 @@ export function ScanReview({
                 </thead>
                 <tbody>
                   {items.map((it) => (
-                    <tr key={it.id} className="border-t border-hairline align-middle hover:bg-bridge-surface">
+                    <tr key={it.id} className="border-t border-rule align-middle hover:bg-wash">
                       <td className="p-sm">
                         <TextInput value={it.name} low={isLow(it, "name")} edited={isEdited(it, "name")} onCommit={(v) => updateField(it.id, "name", v)} className="font-serif text-[17px] font-medium" label="Wine name" />
                         <div className="mt-2xs">
@@ -307,7 +307,7 @@ export function ScanReview({
                       <td className="p-sm"><div className="flex justify-center"><QtyStepper value={it.qty} onChange={(v) => updateField(it.id, "qty", v)} /></div></td>
                       <td className="p-sm"><MoneyInput value={it.unitCost} low={isLow(it, "unitCost")} edited={isEdited(it, "unitCost")} onCommit={(v) => updateField(it.id, "unitCost", v)} /></td>
                       <td className="p-sm text-center">
-                        <IconButton label={`Remove ${it.name}`} onClick={() => removeItem(it.id)} className="rounded-pill text-grey hover:bg-surface hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25">
+                        <IconButton label={`Remove ${it.name}`} onClick={() => removeItem(it.id)} className="rounded-pill text-grey hover:bg-surface hover:text-accent focus-ring">
                           <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                         </IconButton>
                       </td>
@@ -332,7 +332,7 @@ export function ScanReview({
           </div>
 
           {/* Action bar */}
-          <div className="sticky bottom-[64px] z-10 mt-md flex flex-col gap-sm rounded-card card-surface p-md md:static md:bottom-auto md:mt-lg md:flex-row md:items-center md:justify-between" style={{ marginBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}>
+          <div className="sticky bottom-[var(--chrome-tabbar-total)] z-[var(--z-sticky)] mt-md flex flex-col gap-sm rounded-card card-surface p-md md:static md:bottom-auto md:mt-lg md:flex-row md:items-center md:justify-between" style={{ marginBottom: "calc(var(--safe-bottom) + var(--spacing-xs))" }}>
             <div className="text-[13px] text-grey md:text-[14px]">
               <span className="font-medium text-ink">{items.length} wines</span>
               <span className="mx-xs text-grey">·</span>
@@ -343,7 +343,7 @@ export function ScanReview({
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
+                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-wash focus-ring disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
               >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : <Save className="h-4 w-4" strokeWidth={2} aria-hidden="true" />}
                 <span>{isSaving ? "Saving..." : "Save Edits"}</span>
@@ -352,7 +352,7 @@ export function ScanReview({
                 type="button"
                 onClick={handleCommit}
                 disabled={isCommitting || commitOk}
-                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
+                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
               >
                 {isCommitting ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : null}
                 <span>{isCommitting ? "Committing..." : commitOk ? "Committed ✓" : "Commit to Inventory"}</span>
@@ -364,7 +364,7 @@ export function ScanReview({
 
       {/* Toast */}
       {saveMsg && (
-        <div role="alert" aria-live="assertive" className="glass fixed inset-x-md bottom-[88px] z-30 mx-auto max-w-[420px] rounded-card px-md py-sm text-[14px] text-ink md:bottom-lg">
+        <div role="alert" aria-live="assertive" className="glass fixed inset-x-md bottom-[calc(var(--chrome-tabbar-total)+var(--spacing-lg))] z-[var(--z-toast)] mx-auto max-w-[420px] rounded-card px-md py-sm text-[14px] text-ink md:bottom-lg">
           {saveMsg}
         </div>
       )}

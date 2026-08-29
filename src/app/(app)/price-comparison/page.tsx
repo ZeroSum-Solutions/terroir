@@ -294,7 +294,7 @@ export default async function PriceComparisonPage({
           <h1 className="font-serif text-heading-sm text-ink">
             Distributor Pricing
           </h1>
-          <p className="mt-xs text-[15px] text-ink-muted">
+          <p className="mt-xs text-[15px] text-grey">
             Compare prices across suppliers
           </p>
         </header>
@@ -305,7 +305,7 @@ export default async function PriceComparisonPage({
           action={
             <Link
               href="/scan"
-              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               <ScanLine className="h-4 w-4" strokeWidth={2} />
               Go to scanner
@@ -318,13 +318,13 @@ export default async function PriceComparisonPage({
 
   return (
     <section>
-      <header className="mb-lg md:mb-xl">
+      <header className="mb-xl md:mb-3xl">
         <div className="flex items-start justify-between gap-md">
           <div>
             <h1 className="font-serif text-heading-sm text-ink">
               Distributor Pricing
             </h1>
-            <p className="mt-xs text-[15px] text-ink-muted">
+            <p className="mt-xs text-[15px] text-grey">
               Compare prices across suppliers
             </p>
           </div>
@@ -336,7 +336,7 @@ export default async function PriceComparisonPage({
         <div
           role="status"
           aria-live="polite"
-          className="mb-lg rounded-card border border-hairline bg-bridge-surface px-md py-sm text-[13px] text-ink-muted"
+          className="mb-lg rounded-card card-surface px-md py-sm text-[13px] text-grey"
         >
           Market benchmarks are temporarily unavailable. Distributor pricing
           remains available.
@@ -360,7 +360,7 @@ export default async function PriceComparisonPage({
                 <div className="text-caption font-medium uppercase text-grey">
                   Potential savings
                 </div>
-                <div className="mt-xs font-mono tabular text-[20px] font-medium text-sage-ink">
+                <div className="mt-xs font-mono tabular text-[20px] font-medium text-ready-ink">
                   {formatPrice(totalSavings)}
                 </div>
               </div>
@@ -370,7 +370,7 @@ export default async function PriceComparisonPage({
                 <div className="text-caption font-medium uppercase text-grey">
                   Overpaid vs market
                 </div>
-                <div className="mt-xs font-mono tabular text-[20px] font-medium text-accent">
+                <div className="mt-xs font-mono tabular text-[20px] font-medium text-risk-ink">
                   {comparable.filter((c) => c.variancePct != null && c.variancePct > 0).length}
                 </div>
               </div>
@@ -379,15 +379,15 @@ export default async function PriceComparisonPage({
               <Link
                 href={`/cellar?wine=${comparable[0].wine.id}`}
                 aria-label={`View top savings opportunity: ${comparable[0].wine.producer} ${comparable[0].wine.name} in cellar`}
-                className="group min-w-0 max-w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                className="group min-w-0 max-w-full rounded-md focus-ring"
               >
                 <div className="text-caption font-medium uppercase text-grey">
                   Top opportunity
                 </div>
-                <div className="mt-xs font-mono tabular text-[20px] font-medium text-sage-ink group-hover:text-accent">
+                <div className="mt-xs font-mono tabular text-[20px] font-medium text-ready-ink group-hover:text-accent">
                   Save {formatPrice(comparable[0].potentialSavings)}
                 </div>
-                <div className="mt-2xs truncate text-[12px] text-ink-muted group-hover:text-accent">
+                <div className="mt-2xs truncate text-[12px] text-grey group-hover:text-accent">
                   {comparable[0].wine.producer} · {comparable[0].wine.name}
                   {comparable[0].wine.vintage
                     ? ` ${comparable[0].wine.vintage}`
@@ -401,17 +401,17 @@ export default async function PriceComparisonPage({
 
       {/* Comparable wines — multi-distributor */}
       {comparable.length > 0 && (
-        <div className="mb-xl">
+        <div className="mb-xl md:mb-3xl">
           <div className="mb-md flex items-center justify-between">
             <h2 className="text-[15px] font-semibold text-ink">Price comparisons</h2>
             <SortControls current={{ field: sf, dir: so }} />
           </div>
 
           {/* Desktop table */}
-          <div className="hidden md:block overflow-hidden rounded-card border border-hairline">
+          <div className="hidden md:block overflow-hidden rounded-card card-surface">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="bg-bridge-surface text-caption font-medium uppercase text-grey">
+                <tr className="bg-wash text-caption font-medium uppercase text-grey">
                   <th scope="col" className="px-md py-sm text-left font-medium">Wine</th>
                   <th scope="col" className="px-md py-sm text-left font-medium">Distributor</th>
                   <th scope="col" className="px-md py-sm text-right font-medium">Unit cost</th>
@@ -444,13 +444,13 @@ export default async function PriceComparisonPage({
                   return distPrices.map((price, i) => (
                     <tr
                       key={`${comp.wine.id}-${price.distributor}-${i}`}
-                      className={`border-t border-dashed border-hairline ${
+                      className={`border-t border-dashed border-rule ${
                         price.unitCost === comp.cheapest
-                          ? "bg-sage-wash/40"
+                          ? "bg-ready-wash/40"
                           : comp.variancePct != null && comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD
-                            ? "bg-blush-wash/25"
+                            ? "bg-risk-wash/25"
                             : comp.variancePct != null && comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD
-                              ? "bg-sage-wash/15"
+                              ? "bg-ready-wash/15"
                               : ""
                       }`}
                     >
@@ -460,12 +460,12 @@ export default async function PriceComparisonPage({
                             <Link
                               href={`/cellar?wine=${comp.wine.id}`}
                               aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                              className="group block min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                              className="group block min-w-0 flex-1 rounded-md focus-ring"
                             >
                               <div className="font-serif text-[17px] font-medium text-ink group-hover:text-accent">
                                 {comp.wine.producer}
                               </div>
-                              <div className="text-ink-muted group-hover:text-accent">
+                              <div className="text-grey group-hover:text-accent">
                                 {comp.wine.name}
                                 {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
                               </div>
@@ -477,7 +477,7 @@ export default async function PriceComparisonPage({
                       <td className="px-md py-sm text-ink">
                         <div>{price.distributor}</div>
                         {formatInvoiceDate(price.invoiceDate) && (
-                          <div className="mt-2xs font-mono text-[11px] text-ink-subtle">
+                          <div className="mt-2xs font-mono text-[11px] text-grey">
                             {formatInvoiceDate(price.invoiceDate)}
                           </div>
                         )}
@@ -485,37 +485,37 @@ export default async function PriceComparisonPage({
                       <td className="px-md py-sm text-right font-mono tabular text-ink">
                         {formatPrice(price.unitCost)}
                         {price.unitCost === comp.cheapest && distPrices.length > 1 && (
-                          <span className="ml-xs inline-flex items-center text-sage-ink">
+                          <span className="ml-xs inline-flex items-center text-ready-ink">
                             <ArrowDown className="h-3 w-3" strokeWidth={2.5} />
                           </span>
                         )}
                         {price.unitCost === comp.mostExpensive && distPrices.length > 1 && (
-                          <span className="ml-xs inline-flex items-center text-accent">
+                          <span className="ml-xs inline-flex items-center text-risk-ink">
                             <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
                           </span>
                         )}
                       </td>
-                      <td className="px-md py-sm text-right font-mono tabular text-ink-muted">
+                      <td className="px-md py-sm text-right font-mono tabular text-grey">
                         {price.quantity}
                       </td>
                       {i === 0 ? (
                         <td className="px-md py-sm text-right align-top" rowSpan={distPrices.length}>
                           {comp.spread >= 0.1 ? (
-                            <span className="inline-flex items-center gap-xs rounded-pill bg-amber-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-amber">
+                            <span className="inline-flex items-center gap-xs rounded-pill bg-risk-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-risk-ink">
                               {Math.round(comp.spread * 100)}% spread
                             </span>
                           ) : (
-                            <span className="font-mono tabular text-[12px] text-ink-subtle">
+                            <span className="font-mono tabular text-[12px] text-grey">
                               {Math.round(comp.spread * 100)}%
                             </span>
                           )}
                         </td>
                       ) : null}
                       {i === 0 ? (
-                        <td className="px-md py-sm text-right align-top font-mono tabular text-sage-ink" rowSpan={distPrices.length}>
+                        <td className="px-md py-sm text-right align-top font-mono tabular text-ready-ink" rowSpan={distPrices.length}>
                           {comp.potentialSavings > 0
                             ? formatPrice(comp.potentialSavings)
-                            : <span className="text-ink-subtle">—</span>}
+                            : <span className="text-grey">—</span>}
                         </td>
                       ) : null}
                       {/* BND-138: Last Paid */}
@@ -523,7 +523,7 @@ export default async function PriceComparisonPage({
                         <td className="px-md py-sm text-right align-top font-mono tabular text-ink" rowSpan={distPrices.length}>
                           {comp.lastPaid > 0
                             ? formatPrice(comp.lastPaid)
-                            : <span className="text-ink-subtle">—</span>}
+                            : <span className="text-grey">—</span>}
                         </td>
                       ) : null}
                       {/* BND-138: Market Price */}
@@ -531,7 +531,7 @@ export default async function PriceComparisonPage({
                         <td className="px-md py-sm text-right align-top font-mono tabular text-ink" rowSpan={distPrices.length}>
                           {comp.marketPrice != null
                             ? formatPrice(comp.marketPrice)
-                            : <span className="text-ink-subtle">—</span>}
+                            : <span className="text-grey">—</span>}
                         </td>
                       ) : null}
                       {/* BND-138: Variance */}
@@ -539,20 +539,20 @@ export default async function PriceComparisonPage({
                         <td className="px-md py-sm text-right align-top font-mono" rowSpan={distPrices.length}>
                           {comp.variancePct != null ? (
                             comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD ? (
-                              <span className="inline-flex items-center gap-xs rounded-pill bg-blush-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-accent">
+                              <span className="inline-flex items-center gap-xs rounded-pill bg-risk-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-risk-ink">
                                 <TrendingUp className="h-3 w-3" strokeWidth={2.5} />
                                 +{formatPct(comp.variancePct)}
                               </span>
                             ) : comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD ? (
-                              <span className="inline-flex items-center gap-xs rounded-pill bg-sage-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-sage-ink">
+                              <span className="inline-flex items-center gap-xs rounded-pill bg-ready-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-ready-ink">
                                 <TrendingDown className="h-3 w-3" strokeWidth={2.5} />
                                 {formatPct(comp.variancePct)}
                               </span>
                             ) : (
-                              <span className="tabular text-ink-subtle">{formatPct(comp.variancePct)}</span>
+                              <span className="tabular text-grey">{formatPct(comp.variancePct)}</span>
                             )
                           ) : (
-                            <span className="text-ink-subtle">—</span>
+                            <span className="text-grey">—</span>
                           )}
                         </td>
                       ) : null}
@@ -587,9 +587,9 @@ export default async function PriceComparisonPage({
                   key={comp.wine.id}
                   className={`rounded-card p-md ${
                     comp.variancePct != null && comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD
-                      ? "border border-accent/30 bg-blush-wash/20"
+                      ? "border border-risk-ink/30 bg-risk-wash/20"
                       : comp.variancePct != null && comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD
-                        ? "border border-sage/30 bg-sage-wash/10"
+                        ? "border border-ready/30 bg-ready-wash/10"
                         : "card-surface"
                   }`}
                 >
@@ -598,13 +598,13 @@ export default async function PriceComparisonPage({
                       <Link
                         href={`/cellar?wine=${comp.wine.id}`}
                         aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                        className="group min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                        className="group min-w-0 flex-1 rounded-md focus-ring"
                       >
                         <div className="font-serif text-[17px] font-medium text-ink group-hover:text-accent">
                           {comp.wine.name}
                           {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
                         </div>
-                        <div className="text-[13px] text-ink-muted group-hover:text-accent">
+                        <div className="text-[13px] text-grey group-hover:text-accent">
                           {comp.wine.producer}
                         </div>
                       </Link>
@@ -612,12 +612,12 @@ export default async function PriceComparisonPage({
                     </div>
                     <div className="flex flex-col items-end gap-xs">
                       {comp.spread >= 0.1 && (
-                        <span className="inline-flex items-center gap-xs rounded-pill bg-amber-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-amber">
+                        <span className="inline-flex items-center gap-xs rounded-pill bg-risk-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-risk-ink">
                           {Math.round(comp.spread * 100)}%
                         </span>
                       )}
                       {comp.potentialSavings > 0 && (
-                        <span className="font-mono tabular text-[11px] font-medium text-sage-ink">
+                        <span className="font-mono tabular text-[11px] font-medium text-ready-ink">
                           Save {formatPrice(comp.potentialSavings)}
                         </span>
                       )}
@@ -625,7 +625,7 @@ export default async function PriceComparisonPage({
                   </div>
 
                   {/* BND-138: Market comparison row */}
-                  <div className="mb-sm flex items-center justify-between rounded-md bg-bridge-surface px-sm py-sm">
+                  <div className="mb-sm flex items-center justify-between rounded-md bg-wash px-sm py-sm">
                     <span className="text-caption font-medium uppercase text-grey">
                       Last paid
                     </span>
@@ -634,16 +634,16 @@ export default async function PriceComparisonPage({
                     </span>
                     {comp.marketPrice != null && (
                       <>
-                        <span className="mx-xs text-ink-subtle">vs</span>
-                        <span className="font-mono text-[14px] font-medium text-ink-subtle tabular-nums">
+                        <span className="mx-xs text-grey">vs</span>
+                        <span className="font-mono text-[14px] font-medium text-grey tabular-nums">
                           {formatPrice(comp.marketPrice)}
                         </span>
                         {comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD && (
                           <span
                             className={`ml-sm rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide ${
                               comp.variancePct > 0
-                                ? "bg-blush-wash text-accent"
-                                : "bg-sage-wash text-sage-ink"
+                                ? "bg-risk-wash text-risk-ink"
+                                : "bg-ready-wash text-ready-ink"
                             }`}
                           >
                             {comp.variancePct > 0 ? "+" : ""}
@@ -660,14 +660,14 @@ export default async function PriceComparisonPage({
                         key={price.distributor}
                         className={`flex items-center justify-between rounded-pill px-sm py-xs ${
                           price.unitCost === comp.cheapest
-                            ? "bg-sage-wash/40"
+                            ? "bg-ready-wash/40"
                             : ""
                         }`}
                       >
                         <span className="min-w-0 text-[13px] text-ink">
                           <span className="block truncate">{price.distributor}</span>
                           {formatInvoiceDate(price.invoiceDate) && (
-                            <span className="mt-2xs block font-mono text-[11px] text-ink-subtle">
+                            <span className="mt-2xs block font-mono text-[11px] text-grey">
                               {formatInvoiceDate(price.invoiceDate)}
                             </span>
                           )}
@@ -675,7 +675,7 @@ export default async function PriceComparisonPage({
                         <span className="font-mono tabular text-[13px] font-medium text-ink">
                           {formatPrice(price.unitCost)}
                           {price.unitCost === comp.cheapest && distPrices.length > 1 && (
-                            <ArrowDown className="ml-xs inline h-3 w-3 text-sage-ink" strokeWidth={2.5} />
+                            <ArrowDown className="ml-xs inline h-3 w-3 text-ready-ink" strokeWidth={2.5} />
                           )}
                         </span>
                       </div>
@@ -691,7 +691,7 @@ export default async function PriceComparisonPage({
       {/* Single-source wines */}
       {singleSource.length > 0 && (
         <div>
-          <h2 className="mb-md text-[15px] font-medium text-ink-muted">
+          <h2 className="mb-md text-[15px] font-medium text-grey">
             Single source ({singleSource.length})
           </h2>
 
@@ -699,7 +699,7 @@ export default async function PriceComparisonPage({
           <div className="hidden overflow-hidden rounded-card card-surface md:block">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="bg-bridge-surface text-caption font-medium uppercase text-grey">
+                <tr className="bg-wash text-caption font-medium uppercase text-grey">
                   <th scope="col" className="px-md py-sm text-left font-medium">Wine</th>
                   <th scope="col" className="px-md py-sm text-left font-medium">Distributor</th>
                   <th scope="col" className="px-md py-sm text-right font-medium">Unit cost</th>
@@ -714,11 +714,11 @@ export default async function PriceComparisonPage({
                   return (
                     <tr
                       key={comp.wine.id}
-                      className={`border-t border-dashed border-hairline ${
+                      className={`border-t border-dashed border-rule ${
                         comp.variancePct != null && comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD
-                          ? "bg-blush-wash/25"
+                          ? "bg-risk-wash/25"
                           : comp.variancePct != null && comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD
-                            ? "bg-sage-wash/15"
+                            ? "bg-ready-wash/15"
                             : ""
                       }`}
                     >
@@ -727,12 +727,12 @@ export default async function PriceComparisonPage({
                           <Link
                             href={`/cellar?wine=${comp.wine.id}`}
                             aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                            className="group inline-block min-w-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                            className="group inline-block min-w-0 rounded-md focus-ring"
                           >
                             <span className="font-serif text-[17px] font-medium text-ink group-hover:text-accent">
                               {comp.wine.producer}
                             </span>
-                            <span className="font-serif text-[17px] text-ink-muted group-hover:text-accent">
+                            <span className="font-serif text-[17px] text-grey group-hover:text-accent">
                               {" "}
                               {comp.wine.name}
                               {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
@@ -741,10 +741,10 @@ export default async function PriceComparisonPage({
                           <OverpaidFlagButton wineId={comp.wine.id} flagged={comp.flagged} />
                         </div>
                       </td>
-                      <td className="px-md py-sm text-ink-muted">
+                      <td className="px-md py-sm text-grey">
                         <div>{latest?.distributor ?? "—"}</div>
                         {latestDate && (
-                          <div className="mt-2xs font-mono text-[11px] text-ink-subtle">
+                          <div className="mt-2xs font-mono text-[11px] text-grey">
                             {latestDate}
                           </div>
                         )}
@@ -756,24 +756,24 @@ export default async function PriceComparisonPage({
                       <td className="px-md py-sm text-right font-mono tabular text-ink">
                         {comp.marketPrice != null
                           ? formatPrice(comp.marketPrice)
-                          : <span className="text-ink-subtle">—</span>}
+                          : <span className="text-grey">—</span>}
                       </td>
                       {/* BND-138: Variance */}
                       <td className="px-md py-sm text-right font-mono">
                         {comp.variancePct != null ? (
                           comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD ? (
-                            <span className="inline-flex items-center gap-xs rounded-pill bg-blush-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-accent">
+                            <span className="inline-flex items-center gap-xs rounded-pill bg-risk-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-risk-ink">
                               +{formatPct(comp.variancePct)}
                             </span>
                           ) : comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD ? (
-                            <span className="inline-flex items-center gap-xs rounded-pill bg-sage-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-sage-ink">
+                            <span className="inline-flex items-center gap-xs rounded-pill bg-ready-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-ready-ink">
                               {formatPct(comp.variancePct)}
                             </span>
                           ) : (
-                            <span className="tabular text-ink-subtle">{formatPct(comp.variancePct)}</span>
+                            <span className="tabular text-grey">{formatPct(comp.variancePct)}</span>
                           )
                         ) : (
-                          <span className="text-ink-subtle">—</span>
+                          <span className="text-grey">—</span>
                         )}
                       </td>
                     </tr>
@@ -793,9 +793,9 @@ export default async function PriceComparisonPage({
                   key={comp.wine.id}
                   className={`rounded-card p-md ${
                     comp.variancePct != null && comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD
-                      ? "border border-accent/30 bg-blush-wash/20"
+                      ? "border border-risk-ink/30 bg-risk-wash/20"
                       : comp.variancePct != null && comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD
-                        ? "border border-sage/30 bg-sage-wash/10"
+                        ? "border border-ready/30 bg-ready-wash/10"
                         : "card-surface"
                   }`}
                 >
@@ -804,13 +804,13 @@ export default async function PriceComparisonPage({
                       <Link
                         href={`/cellar?wine=${comp.wine.id}`}
                         aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                        className="group min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                        className="group min-w-0 flex-1 rounded-md focus-ring"
                       >
                         <div className="font-serif text-[17px] font-medium text-ink group-hover:text-accent">
                           {comp.wine.name}
                           {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
                         </div>
-                        <div className="text-[13px] text-ink-muted group-hover:text-accent">
+                        <div className="text-[13px] text-grey group-hover:text-accent">
                           {comp.wine.producer}
                         </div>
                       </Link>
@@ -822,20 +822,20 @@ export default async function PriceComparisonPage({
                   </div>
                   {/* BND-138: Market comparison for single-source mobile */}
                   {comp.marketPrice != null && (
-                    <div className="mt-sm flex items-center justify-between border-t border-dashed border-hairline pt-sm">
+                    <div className="mt-sm flex items-center justify-between border-t border-dashed border-rule pt-sm">
                       <span className="text-caption font-medium uppercase text-grey">
                         Market
                       </span>
                       <div className="flex items-center gap-sm">
-                        <span className="font-mono text-[13px] text-ink-subtle tabular-nums">
+                        <span className="font-mono text-[13px] text-grey tabular-nums">
                           {formatPrice(comp.marketPrice)}
                         </span>
                         {comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD && (
                           <span
                             className={`rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide ${
                               comp.variancePct > 0
-                                ? "bg-blush-wash text-accent"
-                                : "bg-sage-wash text-sage-ink"
+                                ? "bg-risk-wash text-risk-ink"
+                                : "bg-ready-wash text-ready-ink"
                             }`}
                           >
                             {comp.variancePct > 0 ? "+" : ""}
@@ -845,12 +845,12 @@ export default async function PriceComparisonPage({
                       </div>
                     </div>
                   )}
-                  <div className="mt-sm flex items-baseline justify-between border-t border-dashed border-hairline pt-sm text-[13px] text-ink-muted">
+                  <div className="mt-sm flex items-baseline justify-between border-t border-dashed border-rule pt-sm text-[13px] text-grey">
                     <span className="min-w-0 truncate">
                       {latest?.distributor ?? "—"}
                     </span>
                     {latestDate && (
-                      <span className="ml-sm shrink-0 font-mono text-[11px] text-ink-subtle">
+                      <span className="ml-sm shrink-0 font-mono text-[11px] text-grey">
                         {latestDate}
                       </span>
                     )}
@@ -864,7 +864,7 @@ export default async function PriceComparisonPage({
       {hasMoreComparisons && (
         <Link
           href={`/price-comparison?${showMoreParams.toString()}`}
-          className="mt-lg inline-flex min-h-11 w-full items-center justify-center rounded-pill border border-hairline bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          className="mt-lg inline-flex min-h-11 w-full items-center justify-center rounded-pill border border-rule bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
         >
           Show {Math.min(25, comparisons.length - visibleComparisonCount)} more ·{" "}
           {visibleComparisonCount} of {comparisons.length}

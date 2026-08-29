@@ -39,12 +39,12 @@ export function AtlasShell({
 
   return (
     <section className="min-w-0 max-w-full overflow-x-hidden">
-      <div className="-mx-md -mt-lg dawn-gradient px-md pb-lg pt-lg md:-mx-lg md:-mt-xl md:px-lg md:pb-xl md:pt-xl">
+      <div className="-mx-md -mt-lg dawn-gradient px-md pb-lg pt-lg md:-mx-lg md:-mt-xl md:px-lg md:pb-2xl md:pt-xl">
         <p className="truncate text-caption font-medium uppercase text-grey">
           {restaurantName} · Atlas
         </p>
-        <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink md:text-heading">
-          Every bottle has a <em className="italic font-normal text-accent">home</em>
+        <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink md:text-heading lg:max-w-[820px] lg:text-display">
+          Every bottle has a <em className="italic font-normal text-mark">home</em>
         </h1>
       </div>
 
@@ -73,7 +73,7 @@ export function AtlasShell({
           <p className="mt-2xs text-body-sm text-grey">
             These country labels on your wines didn&apos;t match a place on the map.
           </p>
-          <ul className="mt-sm flex flex-col divide-y divide-hairline rounded-card card-surface">
+          <ul className="mt-sm flex flex-col divide-y divide-rule rounded-card card-surface">
             {unmatched.map((entry) => (
               <li key={entry.label} className="flex items-center justify-between px-md py-sm">
                 <span className="text-body-sm text-ink">{entry.label}</span>
@@ -136,10 +136,10 @@ function AtlasCountryList({
                     : "open bottle only"
                 }`}
                 className={cn(
-                  "inline-flex min-h-11 items-center gap-xs whitespace-nowrap rounded-pill border px-md transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                  "inline-flex min-h-11 items-center gap-xs whitespace-nowrap rounded-pill border px-md transition-colors focus-ring",
                   selected
-                    ? "border-accent bg-accent/10 text-accent"
-                    : "border-hairline bg-surface text-ink hover:bg-bridge-surface",
+                    ? "border-mark bg-mark/10 text-mark"
+                    : "border-rule bg-surface text-ink hover:bg-wash",
                 )}
               >
                 <span className="text-body-sm">{country.label}</span>
@@ -188,7 +188,7 @@ function AtlasRegionSheet({
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; the dialog below already has full keyboard access via useFocusTrap (Escape + a visible Close button).
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim md:items-center"
+      className="fixed inset-0 z-[var(--z-dialog)] flex items-end justify-center bg-scrim md:items-center"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -198,9 +198,9 @@ function AtlasRegionSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}
-        className="flex max-h-[75vh] w-full flex-col overflow-hidden rounded-t-card bg-surface md:max-w-[440px] md:rounded-card md:border md:border-hairline"
+        className="flex max-h-[75vh] w-full flex-col overflow-hidden rounded-t-card bg-surface md:max-w-[440px] md:rounded-card md:border md:border-rule"
       >
-        <header className="flex items-center justify-between border-b border-hairline px-md py-sm">
+        <header className="flex items-center justify-between border-b border-rule px-md py-sm">
           <h2 id={headingId} className="font-serif text-subheading font-medium text-ink">
             {country.label}
           </h2>
@@ -208,17 +208,17 @@ function AtlasRegionSheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-wash focus-ring"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-md py-md">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-md py-md">
           {namedRegions.length === 0 && !unknownRegion ? (
             <p className="py-md text-center text-body-sm text-grey">No regions recorded.</p>
           ) : (
-            <ul className="flex flex-col divide-y divide-hairline">
+            <ul className="flex flex-col divide-y divide-rule">
               {namedRegions.map((region) => (
                 <li key={region.value}>
                   <Link
@@ -240,7 +240,7 @@ function AtlasRegionSheet({
           )}
         </div>
 
-        <footer className="border-t border-hairline px-md py-sm">
+        <footer className="border-t border-rule px-md py-sm">
           <Link
             href={`/cellar?country=${encodeURIComponent(countryParam)}`}
             className="flex min-h-11 items-center justify-center rounded-pill text-body-sm font-medium text-accent hover:underline"

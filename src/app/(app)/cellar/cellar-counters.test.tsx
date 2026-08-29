@@ -133,8 +133,8 @@ describe("CellarCounters", () => {
     const unselected = tabs.find((tab) => tab.getAttribute("aria-selected") === "false")!;
     for (const tab of [selected, unselected]) {
       const classes = tab.className.split(/\s+/);
-      expect(classes).toContain("focus-visible:outline-accent");
-      expect(classes).not.toContain("focus-visible:outline-beige");
+      expect(classes).toContain("focus-ring");
+      expect(tab.className).not.toMatch(/focus(-visible)?:(ring|outline)/);
     }
   });
 });

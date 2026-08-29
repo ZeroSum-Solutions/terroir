@@ -54,7 +54,7 @@ export function TodayStrip({ exceptions }: { exceptions: TodayException[] }) {
           >
             <Link
               href={metricHref("wine", exception.wineId)}
-              className="group flex h-full min-w-0 items-start justify-between gap-md rounded-lg border border-hairline bg-bridge-surface p-md transition-colors hover:bg-beige"
+              className="group flex h-full min-w-0 items-start justify-between gap-md rounded-card card-surface p-md transition-colors hover:bg-surface-sunken"
             >
               <span className="min-w-0">
                 <span
@@ -125,7 +125,7 @@ export function OwnerMetricGrid({ metrics }: { metrics: OwnerMetrics }) {
             // it always wins over Tailwind's layered ring-* utilities on the
             // same element — never combine it with one of those. Focus goes
             // through `outline`, which glass never touches.
-            className="glass group block rounded-lg p-md transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="glass group block rounded-lg p-md transition-transform hover:-translate-y-0.5 focus-ring"
           >
             <span className="flex items-center gap-xs text-caption font-medium uppercase text-grey">
               {item.label}
@@ -158,17 +158,17 @@ function exceptionLabel(kind: TodayException["kind"]): string {
   }
 }
 
-// Wax & Counter (DESIGN.md 2026-08-26): one urgency scale — window
-// closing and pricing review are burgundy attention steps, past-window
-// is the filled seal.
+// One urgency scale (DESIGN.md — Status), and the same two weights
+// StatusChip uses: a closing window is outlined claret, a past window is the
+// filled seal, a pricing review is a routine ledger stamp.
 function exceptionBadgeClass(kind: TodayException["kind"]): string {
   switch (kind) {
     case "drink-window":
-      return "border border-accent/40 bg-accent/10 text-accent";
+      return "border border-risk-ink/40 bg-risk-wash text-risk-ink";
     case "past-window":
       return "border border-primary bg-primary text-seal-ink";
     case "pricing":
-      return "border border-ink/15 bg-transparent text-ink-soft";
+      return "border border-edge bg-transparent text-ink-soft";
   }
 }
 

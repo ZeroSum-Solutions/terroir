@@ -88,14 +88,14 @@ export function CellarCounters({
               // separate (non-glass) class branch, and focus goes through
               // `outline`, which glass never touches.
               selected
-                ? "border border-ink bg-ink text-beige focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                : "glass text-ink hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                ? "border border-ink bg-ink text-on-inverse focus-ring"
+                : "glass text-ink hover:opacity-80 focus-ring",
             )}
           >
             <span
               className={cn(
                 "text-[10.5px] font-medium uppercase tracking-[0.14em]",
-                selected ? "text-beige/70" : "text-grey",
+                selected ? "text-on-inverse/70" : "text-grey",
               )}
             >
               {counter.label}
@@ -105,7 +105,7 @@ export function CellarCounters({
                 // Courier is the ledger voice — data speaks mono, Bodoni is
                 // reserved for display headlines (DESIGN.md type roles).
                 "font-mono text-[16px] font-medium leading-none tabular",
-                selected ? "text-beige" : "text-ink",
+                selected ? "text-on-inverse" : "text-ink",
               )}
             >
               {counter.value}

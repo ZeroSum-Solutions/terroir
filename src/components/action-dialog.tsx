@@ -85,7 +85,7 @@ export function ActionDialog({
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; this dialog already has full keyboard access via useFocusTrap (Escape + explicit action buttons).
     <div
       data-action-dialog-backdrop="true"
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-scrim p-md sm:items-center"
+      className="fixed inset-0 z-[var(--z-dialog)] flex items-end justify-center bg-scrim p-md sm:items-center"
       onMouseDown={handleBackdrop}
     >
       <div
@@ -95,7 +95,7 @@ export function ActionDialog({
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         aria-busy={busy || undefined}
-        className="w-full rounded-t-card card-surface p-lg sm:max-w-[420px] sm:rounded-card"
+        className="w-full rounded-t-card card-surface p-lg pb-[calc(var(--safe-bottom)+var(--spacing-lg))] sm:max-w-[420px] sm:rounded-card sm:pb-lg"
       >
         <h2 id={titleId} className="font-serif text-[24px] font-normal leading-tight text-ink">
           {title}
@@ -115,7 +115,7 @@ export function ActionDialog({
             type="button"
             aria-disabled={busy || undefined}
             onClick={closeWhenIdle}
-            className="min-h-11 rounded-pill border border-hairline bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+            className="min-h-11 rounded-pill border border-rule bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-wash focus-ring"
           >
             {cancelLabel}
           </button>
@@ -124,9 +124,9 @@ export function ActionDialog({
             disabled={busy}
             onClick={onConfirm}
             className={cn(
-              "min-h-11 rounded-pill px-lg text-[14px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
+              "min-h-11 rounded-pill px-lg text-[14px] font-medium transition-colors focus-ring disabled:cursor-not-allowed disabled:opacity-60",
               tone === "danger"
-                ? "bg-primary text-white hover:bg-primary-hover"
+                ? "bg-primary text-seal-ink hover:bg-primary-hover"
                 : "bg-surface-inverse text-on-inverse hover:bg-ink-soft",
             )}
           >

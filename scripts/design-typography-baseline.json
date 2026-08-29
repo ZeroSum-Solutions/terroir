@@ -1,0 +1,626 @@
+{
+  "src/app/(app)/atlas/atlas-shell.tsx": {
+    "class:font-mono": 4
+  },
+  "src/app/(app)/bins/bin-form.tsx": {
+    "class:font-mono": 1,
+    "text-[13px]": 2,
+    "text-[14px]": 1
+  },
+  "src/app/(app)/bins/bin-manager.tsx": {
+    "class:font-mono": 2,
+    "text-[11px]": 1,
+    "text-[12px]": 3,
+    "text-[13px]": 6,
+    "text-[14px]": 1,
+    "text-[15px]": 1,
+    "text-[17px]": 1
+  },
+  "src/app/(app)/cellar/[wineId]/wine-detail-view.tsx": {
+    "class:font-mono": 3
+  },
+  "src/app/(app)/cellar/auto-eightysix-modal.tsx": {
+    "text-[14px]": 1,
+    "text-[18px]": 1
+  },
+  "src/app/(app)/cellar/auto-eightysix-panel.tsx": {
+    "class:font-mono": 1,
+    "text-[11px]": 2,
+    "text-[12px]": 1,
+    "text-[13px]": 8,
+    "text-[14px]": 1,
+    "text-[16px]": 1
+  },
+  "src/app/(app)/cellar/cellar-counters.tsx": {
+    "class:font-mono": 1,
+    "text-[10.5px]": 1,
+    "text-[16px]": 1
+  },
+  "src/app/(app)/cellar/cellar-facet-bar.tsx": {
+    "text-[10px]": 1,
+    "text-[11.5px]": 2,
+    "text-[12px]": 2
+  },
+  "src/app/(app)/cellar/cellar-filter-sheet.tsx": {
+    "text-[11px]": 3,
+    "text-[13px]": 3,
+    "text-[19px]": 1
+  },
+  "src/app/(app)/cellar/cellar-grid.tsx": {
+    "inline:fontSize": 3,
+    "text-[12px]": 3,
+    "text-[13px]": 3,
+    "text-[14px]": 1,
+    "text-[16px]": 2,
+    "text-[17px]": 1,
+    "text-[18px]": 2
+  },
+  "src/app/(app)/cellar/cellar-list.tsx": {
+    "class:font-mono": 5,
+    "text-[10.5px]": 4,
+    "text-[10px]": 6,
+    "text-[11px]": 4,
+    "text-[12px]": 12,
+    "text-[13px]": 9,
+    "text-[14px]": 2,
+    "text-[17px]": 4
+  },
+  "src/app/(app)/cellar/cellar-shell.tsx": {
+    "class:font-mono": 1,
+    "text-[11.5px]": 2,
+    "text-[11px]": 1,
+    "text-[12.5px]": 2,
+    "text-[12px]": 2,
+    "text-[13px]": 2,
+    "text-[14px]": 1,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/cellar/config/page.tsx": {
+    "text-[13px]": 2,
+    "text-[14px]": 8,
+    "text-[18px]": 1
+  },
+  "src/app/(app)/cellar/edit-metadata-modal.tsx": {
+    "text-[11px]": 1,
+    "text-[12px]": 2,
+    "text-[13px]": 5,
+    "text-[14px]": 9,
+    "text-[17px]": 1
+  },
+  "src/app/(app)/cellar/note-modal.tsx": {
+    "text-[13px]": 1,
+    "text-[14px]": 1
+  },
+  "src/app/(app)/cellar/open/close-button.tsx": {
+    "text-[11px]": 3
+  },
+  "src/app/(app)/cellar/open/page.tsx": {
+    "class:font-mono": 2,
+    "text-[12px]": 3,
+    "text-[13px]": 4,
+    "text-[14px]": 1,
+    "text-[17px]": 2
+  },
+  "src/app/(app)/cellar/partial-bottle-closeout.tsx": {
+    "class:font-mono": 1,
+    "text-[12px]": 5,
+    "text-[13px]": 3
+  },
+  "src/app/(app)/cellar/pour-picker-modal.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 2,
+    "text-[14px]": 4,
+    "text-[18px]": 1
+  },
+  "src/app/(app)/cellar/pricing-target-override.tsx": {
+    "class:font-mono": 2,
+    "text-[10px]": 3,
+    "text-[11px]": 4,
+    "text-[12px]": 1,
+    "text-[13px]": 2
+  },
+  "src/app/(app)/cellar/pricing-targets-panel.tsx": {
+    "class:font-mono": 2,
+    "text-[11px]": 3,
+    "text-[12px]": 2,
+    "text-[13px]": 2,
+    "text-[14px]": 2,
+    "text-[16px]": 1
+  },
+  "src/app/(app)/cellar/reconcile-list.tsx": {
+    "class:font-mono": 3,
+    "text-[10.5px]": 1,
+    "text-[12px]": 6,
+    "text-[13px]": 5,
+    "text-[14px]": 1,
+    "text-[15px]": 1,
+    "text-[17px]": 1
+  },
+  "src/app/(app)/cellar/reconcile-modal.tsx": {
+    "text-[13px]": 1,
+    "text-[20px]": 1,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/cellar/reconcile/history/page.tsx": {
+    "class:font-mono": 10,
+    "text-[10px]": 1,
+    "text-[11px]": 7,
+    "text-[12px]": 3,
+    "text-[13px]": 5,
+    "text-[14px]": 1,
+    "text-[16px]": 1,
+    "text-[18px]": 1,
+    "text-[20px]": 3,
+    "text-[28px]": 1,
+    "text-[9px]": 1
+  },
+  "src/app/(app)/cellar/reconcile/page.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 1
+  },
+  "src/app/(app)/cellar/stock-adjustment-form.tsx": {
+    "class:font-mono": 1,
+    "text-[12px]": 6,
+    "text-[13px]": 6
+  },
+  "src/app/(app)/cellar/voice-cellar-control.tsx": {
+    "text-[11.5px]": 1,
+    "text-[12px]": 1,
+    "text-[14px]": 2,
+    "text-[19px]": 1
+  },
+  "src/app/(app)/cellar/wine-detail-drawer.tsx": {
+    "class:font-mono": 4,
+    "text-[11px]": 4,
+    "text-[12px]": 13,
+    "text-[13px]": 15,
+    "text-[14px]": 7,
+    "text-[15px]": 1,
+    "text-[19px]": 1
+  },
+  "src/app/(app)/fab.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 1
+  },
+  "src/app/(app)/import/import-client.tsx": {
+    "text-[13px]": 25,
+    "text-[14px]": 12,
+    "text-[20px]": 5
+  },
+  "src/app/(app)/import/session-step.tsx": {
+    "text-[13px]": 9,
+    "text-[14px]": 10,
+    "text-[20px]": 2
+  },
+  "src/app/(app)/insights/briefing-alert-card.tsx": {
+    "text-[11px]": 2,
+    "text-[12px]": 2,
+    "text-[13px]": 2,
+    "text-[17px]": 1,
+    "text-[18px]": 1,
+    "text-[20px]": 1
+  },
+  "src/app/(app)/insights/cellar-health-panel.tsx": {
+    "class:font-mono": 4,
+    "text-[10px]": 2,
+    "text-[12px]": 3,
+    "text-[16px]": 2
+  },
+  "src/app/(app)/insights/date-range-selector.tsx": {
+    "text-[12px]": 5
+  },
+  "src/app/(app)/insights/enrich-cellar-button.tsx": {
+    "text-[12px]": 2,
+    "text-[13px]": 1
+  },
+  "src/app/(app)/insights/insight-scope.tsx": {
+    "text-[11px]": 1
+  },
+  "src/app/(app)/insights/insights-drilldown.tsx": {
+    "class:font-mono": 1,
+    "text-[10.5px]": 1,
+    "text-[12px]": 2,
+    "text-[14px]": 1,
+    "text-[26px]": 1
+  },
+  "src/app/(app)/insights/page.tsx": {
+    "class:font-mono": 3,
+    "text-[11px]": 2,
+    "text-[12px]": 15,
+    "text-[13px]": 15,
+    "text-[14px]": 3,
+    "text-[15px]": 6,
+    "text-[17px]": 1,
+    "text-[28px]": 2,
+    "text-[9px]": 1
+  },
+  "src/app/(app)/insights/pour-analytics-section.tsx": {
+    "text-[11px]": 2,
+    "text-[12px]": 4,
+    "text-[13px]": 12,
+    "text-[15px]": 4
+  },
+  "src/app/(app)/insights/pricing-plays-section.tsx": {
+    "text-[11px]": 4,
+    "text-[12px]": 1,
+    "text-[13px]": 2,
+    "text-[17px]": 1
+  },
+  "src/app/(app)/insights/pricing-review-card.tsx": {
+    "text-[11px]": 3,
+    "text-[12px]": 5,
+    "text-[17px]": 1,
+    "text-[18px]": 1,
+    "text-[20px]": 1
+  },
+  "src/app/(app)/insights/recompute-cellar-health-button.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 1
+  },
+  "src/app/(app)/insights/recompute-pricing-recommendations-button.tsx": {
+    "text-[11px]": 1,
+    "text-[12px]": 1,
+    "text-[13px]": 1
+  },
+  "src/app/(app)/insights/reconcile-queue-metric.tsx": {
+    "class:font-mono": 1,
+    "text-[12px]": 1,
+    "text-[20px]": 1
+  },
+  "src/app/(app)/insights/refresh-retail-button.tsx": {
+    "text-[12px]": 2,
+    "text-[13px]": 1
+  },
+  "src/app/(app)/insights/snoozed-alerts-card.tsx": {
+    "text-[11px]": 2,
+    "text-[12px]": 3,
+    "text-[17px]": 1,
+    "text-[18px]": 1
+  },
+  "src/app/(app)/insights/yield-report-section.tsx": {
+    "text-[12px]": 3,
+    "text-[14px]": 1
+  },
+  "src/app/(app)/layout.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 1
+  },
+  "src/app/(app)/lists/[id]/components/add-wine-modal.tsx": {
+    "class:font-mono": 7,
+    "text-[10px]": 3,
+    "text-[11px]": 3,
+    "text-[12px]": 6,
+    "text-[13px]": 5,
+    "text-[14px]": 9,
+    "text-[16px]": 5,
+    "text-[17px]": 3,
+    "text-[20px]": 1
+  },
+  "src/app/(app)/lists/[id]/components/brand-kit-panel.tsx": {
+    "text-[12px]": 4,
+    "text-[13px]": 4,
+    "text-[17px]": 1,
+    "text-[20px]": 2
+  },
+  "src/app/(app)/lists/[id]/components/publish-modal.tsx": {
+    "class:font-mono": 1,
+    "text-[12px]": 7,
+    "text-[13px]": 8,
+    "text-[14px]": 6,
+    "text-[22px]": 2
+  },
+  "src/app/(app)/lists/[id]/components/template-picker.tsx": {
+    "text-[13px]": 1
+  },
+  "src/app/(app)/lists/[id]/components/wine-row.tsx": {
+    "class:font-mono": 8,
+    "text-[10.5px]": 2,
+    "text-[11px]": 4,
+    "text-[12px]": 7,
+    "text-[14px]": 5,
+    "text-[17px]": 2
+  },
+  "src/app/(app)/lists/[id]/preview/page.tsx": {
+    "class:font-mono": 3,
+    "text-[10.5px]": 1,
+    "text-[12px]": 4,
+    "text-[13px]": 6,
+    "text-[14px]": 1,
+    "text-[17px]": 1,
+    "text-[18px]": 1,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/lists/[id]/print/page.tsx": {
+    "class:font-mono": 2,
+    "text-[10px]": 2,
+    "text-[11px]": 2,
+    "text-[12px]": 4,
+    "text-[14px]": 3,
+    "text-[17px]": 2,
+    "text-[20px]": 1,
+    "text-[26px]": 1,
+    "text-[32px]": 1
+  },
+  "src/app/(app)/lists/[id]/print/print-controls.tsx": {
+    "text-[13px]": 2
+  },
+  "src/app/(app)/lists/[id]/wine-list-editor.tsx": {
+    "text-[10.5px]": 2,
+    "text-[12px]": 1,
+    "text-[13px]": 20,
+    "text-[14px]": 6,
+    "text-[18px]": 1,
+    "text-[22px]": 2,
+    "text-[26px]": 1
+  },
+  "src/app/(app)/lists/wine-list-landing.tsx": {
+    "text-[12px]": 5,
+    "text-[13px]": 8,
+    "text-[14px]": 7,
+    "text-[15px]": 2,
+    "text-[18px]": 1,
+    "text-[20px]": 1,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/nav-links.tsx": {
+    "text-[11px]": 1,
+    "text-[13px]": 1
+  },
+  "src/app/(app)/onboarding-modal.tsx": {
+    "text-[13px]": 1,
+    "text-[14px]": 2,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/price-comparison/export-csv-button.tsx": {
+    "text-[13px]": 1
+  },
+  "src/app/(app)/price-comparison/page.tsx": {
+    "class:font-mono": 24,
+    "text-[10.5px]": 8,
+    "text-[11px]": 5,
+    "text-[12px]": 2,
+    "text-[13px]": 10,
+    "text-[14px]": 4,
+    "text-[15px]": 4,
+    "text-[17px]": 5,
+    "text-[20px]": 4
+  },
+  "src/app/(app)/price-comparison/sort-controls.tsx": {
+    "text-[10px]": 1,
+    "text-[11px]": 1
+  },
+  "src/app/(app)/reconcile-queue/error.tsx": {
+    "text-[13px]": 1
+  },
+  "src/app/(app)/reconcile-queue/issue-row.tsx": {
+    "class:font-mono": 1,
+    "text-[10.5px]": 2,
+    "text-[11px]": 1,
+    "text-[12px]": 3,
+    "text-[13px]": 1,
+    "text-[14px]": 1,
+    "text-[17px]": 2
+  },
+  "src/app/(app)/reconcile-queue/reconcile-queue-client.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 7,
+    "text-[14px]": 1,
+    "text-[18px]": 1
+  },
+  "src/app/(app)/scan-bottle/page.tsx": {
+    "class:font-mono": 2,
+    "text-[10.5px]": 1,
+    "text-[11px]": 2,
+    "text-[12px]": 6,
+    "text-[13px]": 10,
+    "text-[14px]": 22,
+    "text-[15px]": 1,
+    "text-[17px]": 3,
+    "text-[18px]": 2,
+    "text-[20px]": 2,
+    "text-[22px]": 5,
+    "text-[28px]": 1
+  },
+  "src/app/(app)/scan/[id]/components/re-extract-button.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 1
+  },
+  "src/app/(app)/scan/[id]/scan-detail-view.tsx": {
+    "class:font-mono": 23,
+    "text-[10.5px]": 1,
+    "text-[12px]": 4,
+    "text-[13px]": 13,
+    "text-[14px]": 6,
+    "text-[17px]": 4
+  },
+  "src/app/(app)/scan/components/field-inputs.tsx": {
+    "class:font-mono": 4,
+    "text-[13px]": 3,
+    "text-[14px]": 2
+  },
+  "src/app/(app)/scan/components/line-item-card.tsx": {
+    "class:font-mono": 1,
+    "text-[12px]": 1,
+    "text-[13px]": 1,
+    "text-[14px]": 1,
+    "text-[17px]": 1
+  },
+  "src/app/(app)/scan/components/scan-review.tsx": {
+    "class:font-mono": 4,
+    "text-[10.5px]": 1,
+    "text-[12px]": 3,
+    "text-[13px]": 5,
+    "text-[14px]": 9,
+    "text-[17px]": 1
+  },
+  "src/app/(app)/scan/scanner.tsx": {
+    "text-[14px]": 1
+  },
+  "src/app/(app)/scan/views/bottle-results-view.tsx": {
+    "text-[10.5px]": 1,
+    "text-[10px]": 1,
+    "text-[11px]": 1,
+    "text-[13px]": 5,
+    "text-[14px]": 4,
+    "text-[15px]": 1,
+    "text-[17px]": 2
+  },
+  "src/app/(app)/scan/views/confidence-gate.tsx": {
+    "text-[14px]": 3,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/scan/views/error-view.tsx": {
+    "text-[14px]": 4,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/scan/views/processing-view.tsx": {
+    "text-[11px]": 1,
+    "text-[14px]": 3,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/scan/views/ready-view.tsx": {
+    "text-[11px]": 1,
+    "text-[12px]": 4,
+    "text-[13px]": 7,
+    "text-[14px]": 5,
+    "text-[15px]": 1,
+    "text-[20px]": 2,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/scan/views/results-view.tsx": {
+    "class:font-mono": 2,
+    "text-[11px]": 2,
+    "text-[12px]": 5,
+    "text-[13px]": 3,
+    "text-[14px]": 10,
+    "text-[15px]": 1,
+    "text-[17px]": 1,
+    "text-[20px]": 1
+  },
+  "src/app/(app)/scans/export-csv-button.tsx": {
+    "text-[12px]": 1
+  },
+  "src/app/(app)/scans/page.tsx": {
+    "class:font-mono": 7,
+    "text-[10.5px]": 1,
+    "text-[10px]": 1,
+    "text-[11px]": 2,
+    "text-[12px]": 2,
+    "text-[13px]": 9,
+    "text-[14px]": 5
+  },
+  "src/app/(app)/settings-dropdown.tsx": {
+    "text-[14px]": 5
+  },
+  "src/app/(app)/shell-context.tsx": {
+    "text-[10px]": 1,
+    "text-[11px]": 1,
+    "text-[12px]": 1
+  },
+  "src/app/(app)/team/member-analytics-section.tsx": {
+    "text-[10.5px]": 1,
+    "text-[11px]": 1,
+    "text-[12px]": 2,
+    "text-[13px]": 1,
+    "text-[15px]": 1
+  },
+  "src/app/(app)/team/team-actions.tsx": {
+    "class:font-mono": 4,
+    "text-[11px]": 3,
+    "text-[12px]": 5,
+    "text-[13px]": 12,
+    "text-[14px]": 6,
+    "text-[15px]": 2,
+    "text-[18px]": 1
+  },
+  "src/app/(app)/theme-toggle.tsx": {
+    "text-[11px]": 1,
+    "text-[12px]": 1
+  },
+  "src/app/auth/reset-password/page.tsx": {
+    "text-[13px]": 2,
+    "text-[14px]": 1,
+    "text-[16px]": 1
+  },
+  "src/app/global-error.tsx": {
+    "inline:fontSize": 4
+  },
+  "src/app/invite/[token]/page.tsx": {
+    "text-[13px]": 2,
+    "text-[14px]": 1,
+    "text-[15px]": 2,
+    "text-[19px]": 1
+  },
+  "src/app/list/[slug]/not-found.tsx": {
+    "text-[12px]": 1,
+    "text-[15px]": 1
+  },
+  "src/app/list/[slug]/page.tsx": {
+    "class:font-mono": 5,
+    "text-[11px]": 2,
+    "text-[12px]": 3,
+    "text-[13px]": 4,
+    "text-[14px]": 1,
+    "text-[17px]": 1,
+    "text-[18px]": 2,
+    "text-[22px]": 1,
+    "text-[24px]": 1
+  },
+  "src/app/list/[slug]/print/page.tsx": {
+    "class:font-mono": 6,
+    "text-[11px]": 2,
+    "text-[12px]": 2,
+    "text-[13px]": 3,
+    "text-[14px]": 3,
+    "text-[15px]": 1,
+    "text-[17px]": 1,
+    "text-[18px]": 1,
+    "text-[24px]": 1,
+    "text-[32px]": 1
+  },
+  "src/app/list/[slug]/public-menu-share.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 1
+  },
+  "src/app/login/magic-link-submit.tsx": {
+    "text-[14px]": 4
+  },
+  "src/app/login/page.tsx": {
+    "text-[11px]": 1,
+    "text-[13px]": 5,
+    "text-[14px]": 2,
+    "text-[16px]": 1
+  },
+  "src/components/action-dialog.tsx": {
+    "text-[14px]": 3,
+    "text-[24px]": 1
+  },
+  "src/components/drink-window-timeline.tsx": {
+    "class:font-mono": 2,
+    "text-[10px]": 2,
+    "text-[11px]": 1,
+    "text-[9px]": 1
+  },
+  "src/components/field.tsx": {
+    "text-[12px]": 1
+  },
+  "src/components/price-band.tsx": {
+    "class:font-mono": 3,
+    "text-[10px]": 1,
+    "text-[11px]": 1,
+    "text-[9px]": 2
+  },
+  "src/components/route-data-state.tsx": {
+    "text-[14px]": 4,
+    "text-[16px]": 2
+  },
+  "src/components/status-chip.tsx": {
+    "text-[10px]": 1
+  },
+  "src/components/wine-thumb.tsx": {
+    "inline:fontSize": 1
+  },
+  "src/lib/toast.tsx": {
+    "text-[14px]": 1
+  }
+}

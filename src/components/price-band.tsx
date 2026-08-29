@@ -85,17 +85,16 @@ export function PriceBand({
         </div>
       )}
 
-      {/* 3-zone track on the one accent (Wax & Counter, DESIGN.md
-          2026-08-26) — burgundy tint (below band, risk) → gold tint
-          (target, healthy) → quiet wash (above band). Same grammar as the
-          drink-window ramp: urgency in burgundy, "at its best" in gold. */}
+      {/* 3-zone track — risk wash (below band, money left on the table) →
+          the mark, tinted (the target, healthy) → quiet wash (above band).
+          Same grammar as the drink-window ramp. */}
       <div
         className={`absolute inset-x-0 ${trackTopOffset} ${trackHeight} overflow-hidden rounded-full`}
         style={{
           // --t-* runtime vars, not --color-*: @theme inline only emits
           // custom properties for tokens the scanner sees referenced.
           background:
-            "linear-gradient(90deg, var(--t-blush-wash) 0%, var(--t-blush-wash) 18%, color-mix(in srgb, var(--t-gold) 14%, transparent) 18%, color-mix(in srgb, var(--t-gold) 14%, transparent) 82%, var(--t-wash) 82%, var(--t-wash) 100%)",
+            "linear-gradient(90deg, var(--t-risk-wash) 0%, var(--t-risk-wash) 18%, color-mix(in srgb, var(--t-mark) 14%, transparent) 18%, color-mix(in srgb, var(--t-mark) 14%, transparent) 82%, var(--t-wash) 82%, var(--t-wash) 100%)",
         }}
       />
 

@@ -41,7 +41,7 @@ export function LineItemCard({
   onRemove,
 }: LineItemCardProps) {
   return (
-    <article className="rounded-lg card-surface p-md">
+    <article className="rounded-card card-surface p-md">
       <header className="mb-md flex items-start justify-between gap-sm">
         <div className="min-w-0 flex-1">
           <TextInput
@@ -60,7 +60,7 @@ export function LineItemCard({
               low={isLow(item, "producer")}
               edited={isEdited(item, "producer")}
               onCommit={(v) => onUpdate(item.id, "producer", v)}
-              className="text-[13px] text-ink-muted"
+              className="text-[13px] text-grey"
               label="Producer"
             />
           </div>
@@ -68,7 +68,7 @@ export function LineItemCard({
         <IconButton
           label={`Remove ${item.name}`}
           onClick={() => onRemove(item.id)}
-          className="shrink-0 rounded-pill text-grey hover:bg-bridge-surface hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          className="shrink-0 rounded-pill text-grey hover:bg-wash hover:text-accent focus-ring"
         >
           <Trash2 className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
         </IconButton>
@@ -128,7 +128,7 @@ export function LineItemCard({
         </MobileField>
       </div>
 
-      <footer className="mt-md flex items-center justify-between border-t border-hairline pt-sm">
+      <footer className="mt-md flex items-center justify-between border-t border-rule pt-sm">
         <span className="text-[12px] text-grey">Line total</span>
         <span className="font-mono text-[14px] font-medium text-ink tabular">
           ${formatMoney(item.qty * item.unitCost)}

@@ -233,12 +233,12 @@ export function CellarShell({
   return (
     <section className="min-w-0 max-w-full overflow-x-hidden">
       {/* Dawn Hero */}
-      <div className="-mx-md -mt-lg dawn-gradient px-md pb-lg pt-lg max-[359px]:pb-xs max-[359px]:pt-xs md:-mx-lg md:-mt-xl md:px-lg md:pb-xl md:pt-xl">
+      <div className="-mx-md -mt-lg dawn-gradient px-md pb-lg pt-lg max-[359px]:pb-xs max-[359px]:pt-xs md:-mx-lg md:-mt-xl md:px-lg md:pb-2xl md:pt-xl">
         <p className="truncate text-caption font-medium uppercase text-grey">
           {restaurantName} · Cellar
         </p>
-        <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink max-[359px]:mt-2xs max-[359px]:text-[22px] md:text-heading">
-          A cellar beyond the <em className="italic font-normal text-accent">ordinary</em>
+        <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink max-[359px]:mt-2xs max-[359px]:text-[22px] md:text-heading lg:max-w-[820px] lg:text-display">
+          A cellar beyond the <em className="italic font-normal text-mark">ordinary</em>
         </h1>
 
         {/* Counters-as-navigation — one compact row is both the hero's KPI
@@ -253,11 +253,11 @@ export function CellarShell({
       </div>
 
       {/* Bridge Band */}
-      <div className="-mx-md mb-md flex flex-wrap items-center gap-sm bg-beige px-md py-sm md:-mx-lg md:px-lg">
+      <div className="-mx-md mb-md flex flex-wrap items-center gap-sm bg-surface-sunken px-md py-sm md:-mx-lg md:px-lg">
         <div className="flex w-full flex-wrap items-center gap-xs md:ml-auto md:w-auto md:flex-nowrap">
           <Link
             href="/cellar/open"
-            className="inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill border border-ink/25 px-md text-[12.5px] font-medium text-ink hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+            className="inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill border border-edge px-md text-[12.5px] font-medium text-ink hover:bg-surface/60 focus-ring"
           >
             Open bottles {alerts.openCount}
           </Link>
@@ -274,7 +274,7 @@ export function CellarShell({
             type="button"
             onClick={() => setSearchOpen(true)}
             aria-label="Search wines"
-            className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 md:hidden"
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-ring md:hidden"
           >
             <Search className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
@@ -307,7 +307,7 @@ export function CellarShell({
           )}
 
           {cellarConfig && (
-            <div className="hidden items-center overflow-hidden rounded-pill border border-ink/25 md:inline-flex">
+            <div className="hidden items-center overflow-hidden rounded-pill border border-edge md:inline-flex">
               <ViewToggleButton
                 active={view === "list"}
                 onClick={() => setView("list")}
@@ -328,7 +328,7 @@ export function CellarShell({
               type="button"
               onClick={() => setSettingsOpen(true)}
               aria-label="Cellar settings"
-              className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+              className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-ring"
             >
               {/* Sliders, not a second gear — the header's gear is app
                   settings; two identical gears on one screen were
@@ -341,7 +341,7 @@ export function CellarShell({
             <button
               type="button"
               onClick={() => setReconcileOpen(true)}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill bg-primary px-md text-[12.5px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill bg-primary px-md text-[12.5px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               Reconcile {reconcileItems.length} open bottle
               {reconcileItems.length === 1 ? "" : "s"} →
@@ -357,7 +357,7 @@ export function CellarShell({
 
       {/* Compact sticky masthead (D2) */}
       {view === "list" && stuck && (
-        <div className="glass fixed inset-x-0 top-[54px] z-20">
+        <div className="glass fixed inset-x-0 top-[var(--chrome-header-total)] z-[var(--z-chrome)]">
           <div className="mx-auto flex w-full max-w-[1160px] items-center gap-sm px-md py-xs md:px-lg">
             <p className="min-w-0 flex-1 truncate text-[12px] text-grey">
               <span className="font-mono text-[14px] font-medium tabular text-ink">
@@ -371,7 +371,7 @@ export function CellarShell({
               <button
                 type="button"
                 onClick={() => replaceUrlState({ filter: "all" })}
-                className="inline-flex h-9 shrink-0 items-center gap-2xs whitespace-nowrap rounded-pill border border-ink/20 px-sm text-[11.5px] font-medium text-ink hover:bg-surface/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="inline-flex h-11 shrink-0 items-center gap-2xs whitespace-nowrap rounded-pill border border-edge px-sm text-[11.5px] font-medium text-ink hover:bg-surface/60 focus-ring"
               >
                 {FILTER_LABELS[urlState.filter]}
                 <X className="h-3 w-3" strokeWidth={2} aria-hidden />
@@ -381,7 +381,7 @@ export function CellarShell({
               type="button"
               onClick={() => setSearchOpen(true)}
               aria-label="Search wines"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:hidden"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-ring md:hidden"
             >
               <Search className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
@@ -395,7 +395,6 @@ export function CellarShell({
             <SortSelect
               value={urlState.sort}
               onChange={(sort) => replaceUrlState({ sort })}
-              compact
             />
           </div>
         </div>
@@ -405,7 +404,7 @@ export function CellarShell({
       {alerts.lowCount > 0 && view === "list" && (
         <div
           role="status"
-          className="mb-md flex items-center justify-between gap-md rounded-md border border-hairline bg-amber-wash px-md py-sm text-body-sm text-amber"
+          className="mb-md flex items-center justify-between gap-md rounded-md border border-rule bg-risk-wash px-md py-sm text-body-sm text-risk-ink"
         >
           <span>
             {alerts.lowCount} wine{alerts.lowCount === 1 ? "" : "s"} low on stock
@@ -413,7 +412,7 @@ export function CellarShell({
           <button
             type="button"
             onClick={() => replaceUrlState({ filter: "low" })}
-            className="inline-flex min-h-11 items-center rounded-pill border border-amber/30 px-sm text-[11.5px] font-medium text-amber hover:bg-surface/60"
+            className="inline-flex min-h-11 items-center rounded-pill border border-risk-ink/30 px-sm text-[11.5px] font-medium text-risk-ink hover:bg-surface/60"
           >
             Show
           </button>
@@ -467,7 +466,7 @@ export function CellarShell({
 
       {/* Mobile search overlay — floating chrome, carries the glass recipe */}
       {searchOpen && (
-        <div className="glass fixed inset-x-0 top-14 z-30 px-md py-sm md:hidden">
+        <div className="glass fixed inset-x-0 top-[var(--chrome-header-total)] z-[var(--z-overlay)] px-md py-sm md:hidden">
           <div className="flex items-center gap-sm">
             <SearchInput
               value={qDraft}
@@ -566,7 +565,7 @@ function SearchInput({
         }}
         placeholder="Search name, producer, region…"
         autoFocus={autoFocus}
-        className="h-11 w-full rounded-pill border border-ink/20 bg-surface/70 pl-[32px] pr-[36px] text-[13px] text-ink outline-none placeholder:text-grey focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/15"
+        className="h-11 w-full rounded-pill border border-edge bg-surface/70 pl-[32px] pr-[36px] text-[13px] text-ink outline-none placeholder:text-grey focus-visible:border-accent focus-ring"
       />
       {value ? (
         <button
@@ -576,7 +575,7 @@ function SearchInput({
             onChange("");
             inputRef.current?.focus();
           }}
-          className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-pill text-grey hover:bg-surface/60 hover:text-ink-soft focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent/20"
+          className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-pill text-grey hover:bg-surface/60 hover:text-ink-soft focus-ring"
         >
           <X className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>
@@ -584,7 +583,7 @@ function SearchInput({
         showHint && (
           <kbd
             aria-hidden
-            className="pointer-events-none absolute right-sm top-1/2 hidden h-[20px] -translate-y-1/2 items-center rounded-md border border-hairline bg-surface/60 px-2xs font-sans text-[11px] text-grey md:inline-flex"
+            className="pointer-events-none absolute right-sm top-1/2 hidden h-[20px] -translate-y-1/2 items-center rounded-md border border-rule bg-surface/60 px-2xs font-sans text-[11px] text-grey md:inline-flex"
           >
             /
           </kbd>
@@ -597,11 +596,9 @@ function SearchInput({
 function SortSelect({
   value,
   onChange,
-  compact,
 }: {
   value: CellarSort | null;
   onChange: (sort: CellarSort | null) => void;
-  compact?: boolean;
 }) {
   return (
     <label className="relative inline-flex min-w-0 shrink items-center">
@@ -612,8 +609,11 @@ function SortSelect({
         className={cn(
           // max-w keeps a long selected label from pushing the control
           // off a 320px masthead (Sol audit, 2026-08-27).
-          "max-w-[44vw] appearance-none truncate rounded-pill border border-ink/20 bg-surface/70 pl-sm pr-[28px] text-[12px] font-medium text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 md:max-w-none",
-          compact ? "h-9" : "h-11",
+          // 44px is the touch floor and the compact masthead is not exempt:
+          // the sticky row used to drop this select to 36px (DESIGN.md —
+          // Mobile). Eight pixels of a 692px scroll band is not worth a
+          // control a sommelier holding a bottle can miss.
+          "h-11 max-w-[44vw] appearance-none truncate rounded-pill border border-edge bg-surface/70 pl-sm pr-[28px] text-[12px] font-medium text-ink focus-ring md:max-w-none",
         )}
       >
         <option value="">Name A–Z</option>
@@ -651,8 +651,8 @@ function ViewToggleButton({
       aria-label={`${label} view`}
       className={cn(
         "flex h-11 w-11 items-center justify-center text-ink-soft transition-colors",
-        active && "bg-ink text-beige",
-        !active && "hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25",
+        active && "bg-ink text-on-inverse",
+        !active && "hover:bg-surface/60 focus-ring",
       )}
     >
       <Icon className="h-4 w-4" strokeWidth={2} aria-hidden />

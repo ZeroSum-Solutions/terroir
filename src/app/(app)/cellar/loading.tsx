@@ -15,12 +15,12 @@ export default function CellarLoading() {
           ))}
         </div>
       </div>
-      <div className="-mx-md mb-md flex gap-2xs bg-beige px-md py-sm md:-mx-lg md:px-lg">
+      <div className="-mx-md mb-md flex gap-2xs bg-surface-sunken px-md py-sm md:-mx-lg md:px-lg">
         {Array.from({ length: 4 }, (_, i) => (
           <Skeleton key={i} className="h-[32px] w-20 rounded-pill" />
         ))}
       </div>
-      <div className="flex flex-col divide-y divide-hairline rounded-card card-surface">
+      <div className="flex flex-col divide-y divide-rule rounded-card card-surface">
         {Array.from({ length: 10 }, (_, i) => (
           <div key={i} className="px-md py-md">
             <div className="flex items-start justify-between gap-md">

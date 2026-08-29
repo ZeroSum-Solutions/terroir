@@ -57,13 +57,13 @@ export default async function ReconcilePage() {
       <header className="mb-lg flex items-center gap-sm">
         <Link
           href="/cellar"
-          className="flex h-[44px] w-[44px] items-center justify-center rounded-pill text-grey hover:bg-bridge-surface transition-colors"
+          className="flex h-[44px] w-[44px] items-center justify-center rounded-pill text-grey hover:bg-wash transition-colors"
           aria-label="Back to cellar"
         >
           <ArrowLeft className="h-5 w-5" strokeWidth={2} />
         </Link>
         <div className="min-w-0 flex-1">
-          <h1 className="font-serif text-[28px] font-medium text-ink">Reconcile</h1>
+          <h1 className="font-serif text-heading-sm md:text-heading font-medium text-ink">Reconcile</h1>
           <p className="text-[12px] text-grey tabular">
             {reconcileItems.length} open bottle
             {reconcileItems.length !== 1 ? "s" : ""} to verify
@@ -71,7 +71,7 @@ export default async function ReconcilePage() {
         </div>
         <Link
           href="/cellar/reconcile/history"
-          className="flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-surface px-sm text-[13px] font-medium text-grey transition-colors hover:bg-bridge-surface hover:text-ink"
+          className="flex min-h-11 items-center gap-xs rounded-pill border border-edge bg-surface px-sm text-[13px] font-medium text-grey transition-colors hover:bg-wash hover:text-ink"
         >
           <History className="h-4 w-4" strokeWidth={1.5} />
           <span className="hidden sm:inline">History</span>

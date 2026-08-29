@@ -44,8 +44,10 @@ describe("Fab", () => {
       'button[aria-label="Open actions"]',
     );
 
+    // The offset clears the tab bar AND its safe area, and reads that from
+    // the chrome tokens rather than restating the geometry here.
     expect(trigger?.getAttribute("style")).toContain(
-      "bottom:calc(env(safe-area-inset-bottom) + 80px)",
+      "bottom:calc(var(--chrome-tabbar-total) + var(--spacing-md))",
     );
   });
 
@@ -58,12 +60,14 @@ describe("Fab", () => {
       ...document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
     ];
 
-    expect(trigger.className).toContain("focus-visible:outline-accent");
-    expect(trigger.className).toContain("focus-visible:outline-offset-2");
-    expect(trigger.className).not.toMatch(/focus:ring/);
+    // DESIGN.md — Focus: one solid token, one recipe, :focus-visible only.
+    // The ring idiom this replaced measured 1.54:1 on light and 1.59:1 on
+    // dark — not a weaker indicator, a WCAG 2.2 SC 2.4.11 failure.
+    expect(trigger.className).toContain("focus-ring");
+    expect(trigger.className).not.toMatch(/focus(-visible)?:(ring|outline)/);
     for (const action of actions) {
-      expect(action.className).toContain("focus-visible:outline-accent");
-      expect(action.className).not.toMatch(/focus:ring/);
+      expect(action.className).toContain("focus-ring");
+      expect(action.className).not.toMatch(/focus(-visible)?:(ring|outline)/);
     }
   });
 

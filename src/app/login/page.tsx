@@ -35,11 +35,11 @@ function loginHref(mode: LoginMode, next: string): string {
 }
 
 const inputClassName =
-  "min-h-11 rounded-pill border border-hairline bg-surface px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/25";
+  "min-h-11 rounded-pill border border-rule bg-surface px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-accent focus-ring";
 const choiceClassName =
-  "inline-flex min-h-11 flex-1 items-center justify-center rounded-pill px-sm text-center text-[13px] font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/25";
+  "inline-flex min-h-11 flex-1 items-center justify-center rounded-pill px-sm text-center text-[13px] font-medium outline-none transition-colors focus-ring";
 const textLinkClassName =
-  "inline-flex min-h-11 items-center justify-center rounded-pill px-sm text-center text-[13px] text-grey outline-none transition-colors hover:text-ink focus-visible:ring-[3px] focus-visible:ring-accent/25";
+  "inline-flex min-h-11 items-center justify-center rounded-pill px-sm text-center text-[13px] text-grey outline-none transition-colors hover:text-ink focus-ring";
 
 function EmailField({ error }: { error?: string }) {
   return (
@@ -159,7 +159,7 @@ export default async function LoginPage({
       <div className="glass w-full max-w-[420px] rounded-card p-lg sm:p-xl">
         <div className="mb-lg text-center">
           <div className="mb-sm font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink">
-            TERR<span className="text-accent">OIR</span>
+            TERR<span className="text-mark">OIR</span>
           </div>
           <h1 className="font-serif text-heading-sm leading-tight text-ink">
             {title}
@@ -176,7 +176,7 @@ export default async function LoginPage({
           reset_done !== "1" && (
             <nav
               aria-label="Sign-in method"
-              className="mb-lg flex gap-xs rounded-pill border border-hairline bg-bridge-surface p-1"
+              className="mb-lg flex gap-xs rounded-pill border border-rule bg-wash p-1"
             >
               {([
                 ["magic", "Magic link"],
@@ -189,7 +189,7 @@ export default async function LoginPage({
                   aria-current={loginMode === value ? "page" : undefined}
                   className={`${choiceClassName} ${
                     loginMode === value
-                      ? "bg-primary text-white"
+                      ? "bg-primary text-seal-ink"
                       : "text-grey hover:bg-surface hover:text-ink"
                   }`}
                 >
@@ -285,13 +285,13 @@ export default async function LoginPage({
           !signup &&
           reset !== "1" &&
           reset_done !== "1" && (
-            <div className="mt-lg border-t border-hairline pt-lg">
+            <div className="mt-lg border-t border-rule pt-lg">
               <p className="mb-sm text-caption font-medium uppercase text-grey">
                 Dev only
               </p>
               <a
                 href="/api/dev-login"
-                className="flex min-h-11 items-center justify-center rounded-pill border border-beige-deep bg-surface px-md text-center text-[13px] font-medium text-ink outline-none hover:bg-bridge-surface focus-visible:ring-[3px] focus-visible:ring-accent/25"
+                className="flex min-h-11 items-center justify-center rounded-pill border border-rule-strong bg-surface px-md text-center text-[13px] font-medium text-ink outline-none hover:bg-wash focus-ring"
               >
                 Sign in as {devBypassEmail}
               </a>
@@ -311,7 +311,7 @@ function ErrorMessage({ error }: { error?: string }) {
       id="login-error"
       role="alert"
       aria-live="assertive"
-      className="rounded-md border border-accent/30 bg-blush-wash p-md text-[13px] text-accent"
+      className="rounded-md border border-risk-ink/30 bg-risk-wash p-md text-[13px] text-risk-ink"
     >
       {error}
     </div>
@@ -323,7 +323,7 @@ function StatusMessage({ children }: { children: React.ReactNode }) {
     <div
       role="status"
       aria-live="polite"
-      className="rounded-md border border-sage-ink/30 bg-sage-wash p-lg text-[14px] text-sage-ink"
+      className="rounded-md border border-ready-ink/30 bg-ready-wash p-lg text-[14px] text-ready-ink"
     >
       {children}
       <a href="/login" className={`${textLinkClassName} mt-md w-full`}>

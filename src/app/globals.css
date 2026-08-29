@@ -2,103 +2,137 @@
 
 /*
  * Terroir Design System — token layer
- * Source: DESIGN.md ("Terroir — Cantina", 2026-08-26).
- * Do not edit values here without updating DESIGN.md first.
+ * Source: DESIGN.md ("Terroir — Nocturne", revised 2026-08-29).
+ * Do not edit values here without updating DESIGN.md first — the two are held
+ * in agreement by `scripts/check-design-token-sync.mjs`.
  *
  * Architecture:
- *  1. Runtime theme variables (--t-*) — the light "Tasting Room" values on
- *     :root, swapped to the dark "Cellar" set under [data-theme="dark"], and
- *     under prefers-color-scheme: dark when no explicit choice is stored.
+ *  1. Runtime theme variables (--t-*) — the light "Daylight" values on :root,
+ *     swapped to the dark "Nocturne" set under [data-theme="dark"], and under
+ *     prefers-color-scheme: dark when no explicit choice is stored.
  *  2. @theme inline — maps Tailwind tokens onto the runtime variables, so
- *     every token utility (bg-canvas, text-ink, border-hairline…) retints
- *     per mode with zero component changes.
- *  3. Legacy aliases — pre-redesign semantic names still used across
- *     components, remapped onto the runtime variables. New/touched code uses
- *     contract tokens; aliases shrink as surfaces migrate.
+ *     every token utility (bg-canvas, text-ink, border-rule…) retints per mode
+ *     with zero component changes.
+ *  The Cantina alias shim (hairline, beige, bridge-surface, sage, powder,
+ *  amber, blush-wash, gold, success/warning/danger) is GONE. Every call site
+ *  was migrated to the contract vocabulary, so there is exactly one name for
+ *  each role and no second spelling for a reviewer to reach for.
+ *
+ * Two rules govern the boundary tokens and they are not interchangeable:
+ *   `rule` — decorative. Alpha is fine. Exempt under WCAG 1.4.11.
+ *   `edge` — load-bearing. Solid, >= 3:1, never alpha, because an alpha border
+ *            changes ratio with whatever is composited behind it.
  */
 
-/* ── Light — "Tasting Room" (default) ─────────────────────────── */
+/* ── Light — "Daylight" (default) ─────────────────────────────── */
 :root {
-  --t-primary: #722f37;
-  --t-primary-hover: #5a252c;
-  --t-accent: #722f37; /* interactive/text accent: burgundy by day, gold by night */
-  --t-canvas: #f2ede3;
-  --t-surface: #fbf9f4;
-  --t-surface-sunken: #eae3d5;
-  --t-wash: #efe9dc; /* quietest tint: table headers, hover washes */
-  --t-ink: #1d1b16;
-  --t-ink-soft: #343226;
-  --t-grey: #666459;
-  --t-hairline: #ded5c4;
-  --t-hairline-strong: #d3c8b2;
-  --t-window-ramp-start: #d9d2c4; /* drink-window ramp start: warm neutral by day, candle gold by night */
-  --t-window-marker: #722f37; /* drink-window today marker: burgundy by day, gold by night */
-  --t-card-highlight: transparent; /* inner top light on raised cards — dark mode only */
-  --t-seal-ink: #f6f0e3; /* text on a filled wax seal (urgent status chip) */
-  --t-gold: #786218;
-  --t-sage: #5e6b4b;
-  --t-sage-wash: #e7e6d6;
-  --t-sage-ink: #4c573c;
-  --t-powder: #b2d7e7;
-  --t-powder-wash: #e3ecf2;
-  --t-powder-ink: #3f586c;
-  --t-amber: #7f5f12;
-  --t-amber-wash: #f7efd9;
-  --t-blush-wash: #f0e2dc;
-  --t-surface-inverse: #14120d;
-  --t-on-inverse: #f2ede3;
-  --t-scrim: rgba(22, 19, 12, 0.4);
-  --t-glass: rgba(251, 249, 244, 0.7);
-  --t-glass-solid: rgba(251, 249, 244, 0.94);
-  --t-glass-edge: rgba(255, 253, 247, 0.75);
-  --t-glass-shadow: rgba(30, 26, 16, 0.08);
-  --t-shadow-card: 0 1px 2px rgba(30, 26, 16, 0.05), 0 6px 20px rgba(30, 26, 16, 0.07);
-  --t-shadow-glass: 0 8px 32px rgba(30, 26, 16, 0.08);
+  --t-primary: #96122a;
+  --t-primary-hover: #b01230;
+  --t-accent: #96122a;
+  /* The "you are here" mark: champagne in Nocturne, claret in Daylight, which
+     has no champagne and must never be given one (#E6DCAE on white is 1.26:1). */
+  --t-mark: #96122a;
+  --t-focus: #96122a;
+
+  --t-canvas: #f4f5f6;
+  --t-surface: #ffffff;
+  --t-surface-raised: #f1f3f5; /* hover / selection — a step DOWN from white */
+  --t-surface-sunken: #e8eaec;
+  --t-wash: #edeff1;
+
+  --t-ink: #0b0d10;
+  --t-ink-soft: #33383d;
+  --t-grey: #626b72;
+  --t-ink-disabled: #8a939b;
+
+  --t-rule: #dcdfe2;
+  --t-rule-strong: #c6cbd0;
+  --t-edge: #7c8893;
+
+  --t-seal-ink: #f7f8f9;
+
+  --t-ready: #2c774e;
+  --t-ready-wash: #e4f0ea;
+  --t-ready-ink: #215c3c;
+  --t-hold: #2d6a9f;
+  --t-hold-wash: #e3eef6;
+  --t-hold-ink: #22506f;
+  --t-peak-wash: #e8eaec;
+  --t-peak-ink: #0b0d10;
+  --t-risk-wash: #f7e4e8;
+  --t-risk-ink: #96122a;
+
+  --t-window-ramp-start: #dcdfe2;
+  --t-window-marker: #96122a;
+  --t-card-highlight: transparent; /* inner top light on raised cards — Nocturne only */
+
+  --t-surface-inverse: #0b0d10; /* the primary action: an ink fill at 17:1 */
+  --t-on-inverse: #f4f5f6;
+
+  --t-scrim: rgba(11, 13, 16, 0.4);
+  --t-glass: rgba(255, 255, 255, 0.72);
+  --t-glass-solid: rgba(255, 255, 255, 0.94);
+  --t-glass-edge: rgba(11, 13, 16, 0.1);
+  --t-glass-shadow: rgba(11, 13, 16, 0.08);
+  --t-shadow-card: 0 1px 2px rgba(11, 13, 16, 0.05), 0 6px 20px rgba(11, 13, 16, 0.08);
+  --t-shadow-glass: 0 8px 32px rgba(11, 13, 16, 0.1);
   color-scheme: light;
 }
 
-/* ── Dark — "Cellar": silky gold-black lacquer, NEVER brown ────── */
-/* Brown ban (Devin, 2026-08-26): every near-black keeps R within ~2
-   of G (gold undertone), never R clearly above G above B (brown). */
+/* ── Dark — "Nocturne": cold near-black, NEVER brown ───────────── */
+/* Brown ban: every near-black keeps B >= R, so a warm dark neutral — which is
+   what brown is — cannot be expressed. Enforced by check-design-palette.mjs. */
 [data-theme="dark"] {
-  --t-primary: #8a3a44;
-  --t-primary-hover: #a04751;
-  --t-accent: #c7a165; /* candle gold — the dark room's accent */
-  --t-canvas: #0d0c09;
-  --t-surface: #171512;
-  --t-surface-sunken: #060504;
-  --t-wash: #11100c;
-  --t-ink: #ede3ce;
-  --t-ink-soft: #d8c9b0;
-  --t-grey: #aea68f;
-  /* Champagne-alpha hairlines: opaque near-blacks (#29271e) vanished on the
-     lacquer ground (~1.1:1) — cards fused into one field. Alpha keeps the
-     gold undertone on any surface. (Kimi audit 2026-08-26.) */
-  --t-hairline: rgba(237, 227, 206, 0.1);
-  --t-hairline-strong: rgba(237, 227, 206, 0.16);
-  --t-window-ramp-start: #c7a165;
-  --t-window-marker: #c7a165;
-  --t-card-highlight: rgba(237, 227, 206, 0.05);
-  --t-seal-ink: #f2e7cf;
-  --t-gold: #c7a165;
-  --t-sage: #8fa06e;
-  --t-sage-wash: #2c3325;
-  --t-sage-ink: #c3cdaa;
-  --t-powder: #7fa8c0;
-  --t-powder-wash: #23303a;
-  --t-powder-ink: #a8c8dc;
-  --t-amber: #d9b45c;
-  --t-amber-wash: #302a12;
-  --t-blush-wash: #3b2226;
-  --t-surface-inverse: #ede3ce;
-  --t-on-inverse: #12100b;
-  --t-scrim: rgba(0, 0, 0, 0.6);
-  --t-glass: rgba(13, 12, 9, 0.65);
-  --t-glass-solid: rgba(13, 12, 9, 0.94);
-  --t-glass-edge: rgba(199, 161, 101, 0.28);
+  --t-primary: #d01a3c; /* claret FILLS on dark: 3.24:1 on the worst ground */
+  --t-primary-hover: #e23b58;
+  --t-accent: #eef1f4;
+  --t-mark: #e6dcae; /* champagne */
+  --t-focus: #e6dcae;
+
+  --t-canvas: #07080a;
+  --t-surface: #0e1013;
+  --t-surface-raised: #161a1e;
+  --t-surface-sunken: #030405;
+  --t-wash: #101317;
+
+  --t-ink: #eef1f4;
+  --t-ink-soft: #aeb7bf;
+  --t-grey: #79838b;
+  --t-ink-disabled: #5a6169;
+
+  /* Bone-alpha rules: an opaque near-black hairline vanishes on the Nocturne
+     ground (~1.1:1) and cards fuse into one field. Decorative by contract. */
+  --t-rule: rgba(238, 241, 244, 0.09);
+  --t-rule-strong: rgba(238, 241, 244, 0.17);
+  --t-edge: #757f88; /* load-bearing, solid: 4.29–5.03:1 */
+
+  --t-seal-ink: #ffffff; /* on a #D01A3C fill: 5.39:1 */
+
+  --t-ready: #4fb07a;
+  --t-ready-wash: #0f2419;
+  --t-ready-ink: #8fd9af;
+  --t-hold: #6ba8d6;
+  --t-hold-wash: #0d1d2a;
+  --t-hold-ink: #a9cfea;
+  --t-peak-wash: #1f242a;
+  --t-peak-ink: #eef1f4;
+  --t-risk-wash: #2a0a11;
+  --t-risk-ink: #f2879c; /* claret SPEAKS as pink on dark: 7.26:1 at worst */
+
+  --t-window-ramp-start: #1f242a;
+  --t-window-marker: #e6dcae;
+  --t-card-highlight: rgba(238, 241, 244, 0.05);
+
+  --t-surface-inverse: #eef1f4;
+  --t-on-inverse: #07080a;
+
+  --t-scrim: rgba(0, 0, 0, 0.72);
+  --t-glass: rgba(7, 8, 10, 0.68);
+  --t-glass-solid: rgba(7, 8, 10, 0.94);
+  --t-glass-edge: rgba(238, 241, 244, 0.14);
   --t-glass-shadow: rgba(0, 0, 0, 0.5);
   --t-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
-  --t-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --t-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.55);
   color-scheme: dark;
 }
 
@@ -106,43 +140,87 @@
    [data-theme="dark"] block exactly. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="dark"]) {
-    --t-primary: #8a3a44;
-    --t-primary-hover: #a04751;
-    --t-accent: #c7a165;
-    --t-canvas: #0d0c09;
-    --t-surface: #171512;
-    --t-surface-sunken: #060504;
-    --t-wash: #11100c;
-    --t-ink: #ede3ce;
-    --t-ink-soft: #d8c9b0;
-    --t-grey: #aea68f;
-    --t-hairline: rgba(237, 227, 206, 0.1);
-    --t-hairline-strong: rgba(237, 227, 206, 0.16);
-    --t-window-ramp-start: #c7a165;
-    --t-window-marker: #c7a165;
-    --t-card-highlight: rgba(237, 227, 206, 0.05);
-    --t-seal-ink: #f2e7cf;
-    --t-gold: #c7a165;
-    --t-sage: #8fa06e;
-    --t-sage-wash: #2c3325;
-    --t-sage-ink: #c3cdaa;
-    --t-powder: #7fa8c0;
-    --t-powder-wash: #23303a;
-    --t-powder-ink: #a8c8dc;
-    --t-amber: #d9b45c;
-    --t-amber-wash: #302a12;
-    --t-blush-wash: #3b2226;
-    --t-surface-inverse: #ede3ce;
-    --t-on-inverse: #12100b;
-    --t-scrim: rgba(0, 0, 0, 0.6);
-    --t-glass: rgba(13, 12, 9, 0.65);
-    --t-glass-solid: rgba(13, 12, 9, 0.94);
-    --t-glass-edge: rgba(199, 161, 101, 0.28);
+    --t-primary: #d01a3c;
+    --t-primary-hover: #e23b58;
+    --t-accent: #eef1f4;
+    --t-mark: #e6dcae;
+    --t-focus: #e6dcae;
+
+    --t-canvas: #07080a;
+    --t-surface: #0e1013;
+    --t-surface-raised: #161a1e;
+    --t-surface-sunken: #030405;
+    --t-wash: #101317;
+
+    --t-ink: #eef1f4;
+    --t-ink-soft: #aeb7bf;
+    --t-grey: #79838b;
+    --t-ink-disabled: #5a6169;
+
+    --t-rule: rgba(238, 241, 244, 0.09);
+    --t-rule-strong: rgba(238, 241, 244, 0.17);
+    --t-edge: #757f88;
+
+    --t-seal-ink: #ffffff;
+
+    --t-ready: #4fb07a;
+    --t-ready-wash: #0f2419;
+    --t-ready-ink: #8fd9af;
+    --t-hold: #6ba8d6;
+    --t-hold-wash: #0d1d2a;
+    --t-hold-ink: #a9cfea;
+    --t-peak-wash: #1f242a;
+    --t-peak-ink: #eef1f4;
+    --t-risk-wash: #2a0a11;
+    --t-risk-ink: #f2879c;
+
+    --t-window-ramp-start: #1f242a;
+    --t-window-marker: #e6dcae;
+    --t-card-highlight: rgba(238, 241, 244, 0.05);
+
+    --t-surface-inverse: #eef1f4;
+    --t-on-inverse: #07080a;
+
+    --t-scrim: rgba(0, 0, 0, 0.72);
+    --t-glass: rgba(7, 8, 10, 0.68);
+    --t-glass-solid: rgba(7, 8, 10, 0.94);
+    --t-glass-edge: rgba(238, 241, 244, 0.14);
     --t-glass-shadow: rgba(0, 0, 0, 0.5);
     --t-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.45);
-    --t-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.5);
+    --t-shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.55);
     color-scheme: dark;
   }
+}
+
+/*
+ * Layers (DESIGN.md — Layers). Named because `z-50` used to mean both "toast"
+ * and "modal", so whether feedback landed above or below a dialog depended on
+ * DOM order. Nothing outside this ladder.
+ *
+ * Chrome geometry and the safe areas it reserves live here too: there were six
+ * hand-written safe-area formulas in the tree and two different header heights.
+ */
+:root {
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-chrome: 20;
+  --z-drag: 30;
+  --z-overlay: 40;
+  --z-dialog: 50;
+  --z-toast: 60;
+
+  --chrome-header: 54px;
+  --chrome-tabbar: 64px;
+  --chrome-fab: 56px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --chrome-header-total: calc(var(--chrome-header) + var(--safe-top));
+  --chrome-tabbar-total: calc(var(--chrome-tabbar) + var(--safe-bottom));
+
+  /* Motion (DESIGN.md — Motion). Nothing animates without a token. */
+  --motion-fast: 120ms;
+  --motion-normal: 200ms;
+  --motion-slow: 320ms;
 }
 
 @theme inline {
@@ -150,77 +228,82 @@
   --color-primary: var(--t-primary);
   --color-primary-hover: var(--t-primary-hover);
   --color-accent: var(--t-accent);
+  --color-mark: var(--t-mark);
+  --color-focus: var(--t-focus);
+
   --color-canvas: var(--t-canvas);
   --color-surface: var(--t-surface);
+  --color-surface-raised: var(--t-surface-raised);
   --color-surface-sunken: var(--t-surface-sunken);
+  --color-wash: var(--t-wash);
+
   --color-ink: var(--t-ink);
   --color-ink-soft: var(--t-ink-soft);
   --color-grey: var(--t-grey);
-  --color-hairline: var(--t-hairline);
-  --color-gold: var(--t-gold);
-  --color-sage: var(--t-sage);
-  --color-sage-wash: var(--t-sage-wash);
-  --color-sage-ink: var(--t-sage-ink);
-  --color-powder: var(--t-powder);
-  --color-powder-wash: var(--t-powder-wash);
-  --color-powder-ink: var(--t-powder-ink);
-  --color-amber: var(--t-amber);
-  --color-amber-wash: var(--t-amber-wash);
-  --color-blush-wash: var(--t-blush-wash);
+  --color-ink-disabled: var(--t-ink-disabled);
+
+  --color-rule: var(--t-rule);
+  --color-rule-strong: var(--t-rule-strong);
+  --color-edge: var(--t-edge);
+
   --color-seal-ink: var(--t-seal-ink);
+
+  --color-ready: var(--t-ready);
+  --color-ready-wash: var(--t-ready-wash);
+  --color-ready-ink: var(--t-ready-ink);
+  --color-hold: var(--t-hold);
+  --color-hold-wash: var(--t-hold-wash);
+  --color-hold-ink: var(--t-hold-ink);
+  --color-peak-wash: var(--t-peak-wash);
+  --color-peak-ink: var(--t-peak-ink);
+  --color-risk-wash: var(--t-risk-wash);
+  --color-risk-ink: var(--t-risk-ink);
+
+  --color-surface-inverse: var(--t-surface-inverse);
+  --color-on-inverse: var(--t-on-inverse);
   --color-scrim: var(--t-scrim);
   --color-glass-white: var(--t-glass);
   --color-glass-edge: var(--t-glass-edge);
   --color-glass-shadow: var(--t-glass-shadow);
 
-  /* ── Legacy aliases (remapped onto runtime vars) ─────────── */
-  --color-beige: var(--t-surface-sunken);
-  --color-beige-deep: var(--t-hairline-strong);
-  --color-bridge-surface: var(--t-wash);
-  --color-surface-muted: var(--t-wash);
-  --color-surface-inverse: var(--t-surface-inverse);
-  --color-on-inverse: var(--t-on-inverse);
-  --color-ink-muted: var(--t-grey);
-  --color-ink-subtle: var(--t-grey);
-  --color-accent-hover: var(--t-primary-hover);
-  --color-accent-soft: var(--t-blush-wash);
-  --color-success: var(--t-sage-ink);
-  --color-success-soft: var(--t-sage-wash);
-  --color-warning: var(--t-amber);
-  --color-warning-soft: var(--t-amber-wash);
-  --color-danger: var(--t-primary);
-  --color-border: var(--t-hairline);
-  --color-border-strong: var(--t-hairline-strong);
-
   /* Typography — fonts injected via next/font in layout.tsx */
-  --font-serif: var(--font-bodoni), "Bodoni Moda", Didot, "Playfair Display", Georgia, serif;
-  --font-sans: var(--font-archivo), Archivo, ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-courier), "Courier Prime", ui-monospace, SFMono-Regular, monospace;
+  --font-serif: var(--font-source-serif), "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  --font-sans: var(--font-source-sans), "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-source-code), "Source Code Pro", ui-monospace, SFMono-Regular, monospace;
+  --font-signature: var(--font-ephesis), Ephesis, "Snell Roundhand", cursive;
 
-  /* Type scale (contract) */
+  /* Type scale (contract — DESIGN.md typography frontmatter) */
+  --text-micro: 10px;
+  --text-micro--line-height: 1.4;
+  --text-micro--letter-spacing: 0.06em;
   --text-caption: 11px;
   --text-caption--line-height: 1.5;
   --text-caption--letter-spacing: 0.18em;
   --text-ledger: 12px;
   --text-ledger--line-height: 1.4;
-  --text-ledger--letter-spacing: 0.04em;
   --text-body-sm: 13px;
   --text-body-sm--line-height: 1.55;
+  --text-control: 14px;
+  --text-control--line-height: 1.45;
   --text-body: 15px;
   --text-body--line-height: 1.6;
-  --text-body-light: 16px;
-  --text-body-light--line-height: 1.6;
-  --text-subheading: 19px;
-  --text-subheading--line-height: 1.45;
-  --text-heading-sm: 26px;
-  --text-heading-sm--line-height: 1.25;
-  --text-heading: 40px;
-  --text-heading--line-height: 1.12;
-  --text-display: 76px;
-  --text-display--line-height: 1.02;
-  --text-display--letter-spacing: 0.01em;
+  --text-body-lg: 17px;
+  --text-body-lg--line-height: 1.5;
+  --text-subheading: 20px;
+  --text-subheading--line-height: 1.4;
+  --text-heading-sm: 27px;
+  --text-heading-sm--line-height: 1.22;
+  --text-heading: 42px;
+  --text-heading--line-height: 1.1;
+  --text-heading--letter-spacing: -0.01em;
+  --text-display: 72px;
+  --text-display--line-height: 1.04;
+  --text-display--letter-spacing: -0.015em;
+  --text-signature: 44px;
+  --text-signature--line-height: 1.2;
 
-  /* Spacing scale (named tokens alongside default numeric scale) */
+  /* Spacing scale (named tokens alongside the default numeric scale) */
+  --spacing-3xs: 4px;
   --spacing-2xs: 2px;
   --spacing-xs: 8px;
   --spacing-sm: 14px;
@@ -228,21 +311,25 @@
   --spacing-lg: 24px;
   --spacing-xl: 36px;
   --spacing-2xl: 48px;
-  --spacing-3xl: 72px;
+  --spacing-3xl: 80px;
 
-  /* Radii — control 10 / tile 18 / card 20 / pill. Nothing between 10 and 18. */
-  --radius-sm: 8px;
+  /* Radii */
+  --radius-sm: 6px;
   --radius-md: 10px; /* control */
-  --radius-lg: 18px; /* tile */
-  --radius-card: 20px;
+  --radius-lg: 14px; /* tile */
+  --radius-card: 16px;
   --radius-pill: 999px;
 
-  /* Shadows — cards carry the soft warm lift; glass carries the float. */
+  /* Shadows — depth comes from ground value first, shadow second. */
   --shadow-card: var(--t-shadow-card);
   --shadow-glass: var(--t-shadow-glass);
-  --shadow-sm: 0 1px 2px rgba(25, 25, 25, 0.03);
-  --shadow-md: 0 2px 8px rgba(25, 25, 25, 0.04);
+  --shadow-sm: 0 1px 2px var(--t-glass-shadow);
+  --shadow-md: 0 2px 8px var(--t-glass-shadow);
   --shadow-lg: var(--t-shadow-glass);
+
+  /* Motion easings */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.3, 0, 1, 1);
 
   /* Layout */
   --container-prose: 720px;
@@ -254,7 +341,6 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -264,6 +350,13 @@ body {
   line-height: 1.6;
 }
 
+/* Source Serif 4 carries a variable optical-size axis; let it redraw itself
+   per size rather than scaling one drawing across 13px and 72px. */
+.font-serif,
+[class*="font-serif"] {
+  font-optical-sizing: auto;
+}
+
 /* Tabular numerals for prices, quantities, timestamps */
 .tabular,
 [data-tabular] {
@@ -271,50 +364,78 @@ body {
 }
 
 /*
- * Card recipe (DESIGN.md — Elevation & Depth, level 1).
- * A card is lighter than the ground and carries BOTH a hairline and the soft
- * warm shadow — all three, always. Replaces the flat white-on-white recipe.
+ * The focus recipe (DESIGN.md — Focus). One token, solid, 2px at 2px offset,
+ * on :focus-visible only.
+ *
+ * This replaces `focus:ring-2 focus:ring-accent/25`, which measured 1.54:1 on
+ * light and 1.59:1 on dark — not a weaker indicator, effectively no indicator,
+ * and a WCAG 2.2 SC 2.4.11 failure. It also fired on :focus, so it appeared on
+ * mouse clicks. Never reintroduce an alpha focus ring: an alpha indicator's
+ * ratio depends on whatever is composited behind it and cannot be guaranteed.
+ */
+.focus-ring:focus-visible,
+/* A wrapper (a label around a select, a bordered row around an input) shows
+   the ring for the control it owns — but stands down when the focused control
+   carries its own .focus-ring, so a nested pair never draws two outlines. */
+.focus-ring:has(:focus-visible):not(:has(.focus-ring:focus-visible)) {
+  outline: 2px solid var(--t-focus);
+  outline-offset: 2px;
+}
+.focus-ring:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/*
+ * Same recipe, drawn inward. An outline at a positive offset is clipped by an
+ * `overflow: hidden` ancestor, which is exactly the shape of a segmented
+ * control or a stepper — a rounded pill with its buttons flush inside it. The
+ * indicator has to sit within the control's own box there.
+ */
+.focus-ring-inset:focus-visible {
+  outline: 2px solid var(--t-focus);
+  outline-offset: -2px;
+}
+.focus-ring-inset:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/*
+ * Card recipe (DESIGN.md — Elevation and depth, level 1).
+ * A card is separated from the ground and carries a decorative rule plus the
+ * soft shadow.
  */
 .card-surface {
   background: var(--color-surface);
-  border: 1px solid var(--color-hairline);
-  /* The inset line is the "raised lacquer" top light — transparent in the
-     Tasting Room, faint champagne in the Cellar (--t-card-highlight). */
+  border: 1px solid var(--color-rule);
+  /* The inset line is the raised top light — transparent in Daylight, faint
+     bone in Nocturne (--t-card-highlight). */
   box-shadow: inset 0 1px 0 var(--t-card-highlight), var(--shadow-card);
 }
 
 /*
- * Glass recipe (DESIGN.md — Elevation & Depth, level 3).
- * Only for elements that float above other content: sticky nav, drawers,
- * modals, command palette, toasts. Never glass-on-glass.
+ * Glass recipe (DESIGN.md — Elevation and depth, level 3).
+ * Floating chrome only: sticky header, drawers, dialogs, toasts. Never glass
+ * on glass, and never more than two composited at once.
  */
 .glass {
   background: var(--t-glass-solid); /* fallback when backdrop-filter unsupported */
   border: 1px solid var(--color-glass-edge);
   box-shadow: var(--shadow-glass);
 }
-@supports (backdrop-filter: blur(18px)) or (-webkit-backdrop-filter: blur(18px)) {
+@supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
   .glass {
     background: var(--color-glass-white);
-    -webkit-backdrop-filter: blur(18px) saturate(1.3);
-    backdrop-filter: blur(18px) saturate(1.3);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    backdrop-filter: blur(20px) saturate(1.2);
   }
 }
 
 /*
- * Hero wash (level 0+). The dawn gradient is retired (DESIGN.md 2026-08-26);
- * the class remains for unswept call sites and now renders a quiet warm
- * vignette on the room's own ground in both modes.
+ * Hero wash (level 0+). Warmth comes from pictures, never from paint, so this
+ * is a value gradient across the room's own neutrals — no hue is introduced.
  */
 .dawn-gradient {
-  /* Flattened 2026-08-26: the sunken third stop read as a tan edge vignette
-     in the Tasting Room (brown-adjacent — hard law). Paper resolves to the
-     room's own canvas and stops there. */
-  background: linear-gradient(
-    172deg,
-    var(--t-surface) 0%,
-    var(--t-canvas) 60%
-  );
+  background: linear-gradient(172deg, var(--t-surface) 0%, var(--t-canvas) 60%);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -327,7 +448,6 @@ body {
   }
 }
 
-
 /*
  * Skeleton shimmer animation for loading states.
  */
@@ -337,13 +457,10 @@ body {
   }
 }
 
-
 /*
- * Print defaults — half-inch margins so paper menus don't waste a page
- * on padding, and a forced white surface so cellar/UI hover effects
- * don't print as grey blocks. The public wine-list page layers
- * print:-prefixed Tailwind utilities on top of this baseline; other
- * surfaces inherit only the page geometry. Print is always light.
+ * Print defaults — half-inch margins so paper menus don't waste a page on
+ * padding, and a forced white surface so hover effects don't print as grey
+ * blocks. Print is always Daylight.
  */
 @media print {
   @page {
@@ -356,7 +473,6 @@ body {
     color: #000000;
   }
 }
-
 
 /* Toast slide-in animation. */
 @keyframes toast-in {

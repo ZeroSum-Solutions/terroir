@@ -18,7 +18,7 @@ export default function ListEditorLoading() {
           {Array.from({ length: 8 }, (_, i) => (
             <div
               key={i}
-              className="grid grid-cols-[28px_1fr_80px_80px_36px] items-center gap-md border-b border-hairline px-lg py-sm last:border-b-0"
+              className="grid grid-cols-[28px_1fr_80px_80px_36px] items-center gap-md border-b border-rule px-lg py-sm last:border-b-0"
             >
               <div />
               <div className="space-y-xs">

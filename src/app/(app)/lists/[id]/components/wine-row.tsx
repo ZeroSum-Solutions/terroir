@@ -99,8 +99,8 @@ export function PriceInput({ value, onChange, muted }: PriceInputProps) {
           setEditing(true);
         }}
         className={cn(
-          "min-h-11 w-full rounded-md border border-transparent px-xs py-2xs text-right font-mono text-[14px] transition-colors hover:border-hairline hover:bg-surface",
-          muted ? "text-ink-muted" : "text-ink",
+          "min-h-11 w-full rounded-md border border-transparent px-xs py-2xs text-right font-mono text-[14px] transition-colors hover:border-rule hover:bg-surface",
+          muted ? "text-grey" : "text-ink",
         )}
       >
         {formatPrice(value)}
@@ -110,7 +110,7 @@ export function PriceInput({ value, onChange, muted }: PriceInputProps) {
 
   return (
     <div className="relative">
-      <span className="pointer-events-none absolute left-xs top-1/2 -translate-y-1/2 font-mono text-[14px] text-ink-subtle">
+      <span className="pointer-events-none absolute left-xs top-1/2 -translate-y-1/2 font-mono text-[14px] text-grey">
         $
       </span>
       <input
@@ -124,7 +124,7 @@ export function PriceInput({ value, onChange, muted }: PriceInputProps) {
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setEditing(false);
         }}
-        className="min-h-11 w-full rounded-md border border-accent bg-surface py-2xs pl-md pr-xs text-right font-mono text-[14px] text-ink outline-none ring-2 ring-accent/25"
+        className="min-h-11 w-full rounded-md border-2 border-mark bg-surface py-2xs pl-md pr-xs text-right font-mono text-[14px] text-ink focus-ring"
       />
     </div>
   );
@@ -167,7 +167,7 @@ function NameEdit({
           setEditing(true);
         }}
         className={cn(
-          "min-h-11 rounded-md border border-transparent px-xs py-2xs text-left transition-colors hover:border-hairline hover:bg-surface",
+          "min-h-11 rounded-md border border-transparent px-xs py-2xs text-left transition-colors hover:border-rule hover:bg-surface",
           "font-serif text-[17px] font-medium",
           isOverridden ? "text-accent italic" : "text-ink",
         )}
@@ -175,7 +175,7 @@ function NameEdit({
       >
         {isOverridden ? (
           <>
-            <span className="line-through text-ink-muted mr-xs text-[12px]">{item.wines.name}</span>
+            <span className="line-through text-grey mr-xs text-[12px]">{item.wines.name}</span>
             {displayName}
           </>
         ) : (
@@ -197,7 +197,7 @@ function NameEdit({
         if (e.key === "Escape") setEditing(false);
       }}
       placeholder={item.wines.name}
-      className="min-h-11 w-full rounded-md border border-accent bg-surface px-xs py-2xs font-serif text-[17px] font-medium text-ink outline-none ring-2 ring-accent/25"
+      className="min-h-11 w-full rounded-md border-2 border-mark bg-surface px-xs py-2xs font-serif text-[17px] font-medium text-ink focus-ring"
     />
   );
 }
@@ -221,7 +221,7 @@ function PourConfigRow({
   const nameRadio = `pour-mode-${item.id}`;
 
   return (
-    <div className="flex flex-wrap items-center gap-sm text-[12px] text-ink-muted">
+    <div className="flex flex-wrap items-center gap-sm text-[12px] text-grey">
       <label className="flex min-h-11 items-center gap-xs">
         <span className="shrink-0">Pour</span>
         <input
@@ -245,11 +245,11 @@ function PourConfigRow({
           }}
           placeholder="148"
           aria-label={`Pour size in ml for ${item.wines.name}`}
-          className="h-11 w-[64px] rounded-md border border-hairline bg-surface px-xs text-right font-mono text-[12px] text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
+          className="h-11 w-[64px] rounded-md border border-rule bg-surface px-xs text-right font-mono text-[12px] text-ink outline-none focus:border-accent focus-ring"
         />
-        <span className="shrink-0 text-[11px] text-ink-subtle">ml</span>
+        <span className="shrink-0 text-[11px] text-grey">ml</span>
         {ozHint && (
-          <span className="shrink-0 text-[11px] text-ink-subtle">{ozHint}</span>
+          <span className="shrink-0 text-[11px] text-grey">{ozHint}</span>
         )}
       </label>
       <fieldset
@@ -299,37 +299,37 @@ export function WineRow({
   return (
     <>
       {/* Desktop row — grid + compact pour-config sub-row stacked below. */}
-      <div className="group hidden border-b border-hairline transition-colors last:border-b-0 hover:bg-bridge-surface md:block">
+      <div className="group hidden border-b border-rule transition-colors last:border-b-0 hover:bg-wash md:block">
       <div className="grid grid-cols-[28px_1fr_80px_80px_36px] items-center px-lg py-sm">
         <div
           aria-label="Drag to reorder"
-          className="flex min-h-11 min-w-11 cursor-grab items-center justify-center text-ink-subtle opacity-0 transition-opacity group-hover:opacity-100"
+          className="flex min-h-11 min-w-11 cursor-grab items-center justify-center text-grey opacity-0 transition-opacity group-hover:opacity-100"
           {...dragHandleProps}
         >
           <GripVertical className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
         </div>
         <div>
           <NameEdit item={item} onNameChange={onNameChange} />
-          <div className="mt-2xs flex items-center gap-xs text-[12px] text-ink-muted">
-            <span className="font-mono text-ink-subtle">
+          <div className="mt-2xs flex items-center gap-xs text-[12px] text-grey">
+            <span className="font-mono text-grey">
               {wine.vintage ?? "NV"}
             </span>
             {wine.region && (
               <>
-                <span className="text-ink-subtle">·</span>
+                <span className="text-grey">·</span>
                 <span>{wine.region}</span>
               </>
             )}
             {wine.serving_temp_label && (
               <>
-                <span className="text-ink-subtle">·</span>
-                <span className="text-ink-subtle">{wine.serving_temp_min}–{wine.serving_temp_max}°F</span>
+                <span className="text-grey">·</span>
+                <span className="text-grey">{wine.serving_temp_min}–{wine.serving_temp_max}°F</span>
               </>
             )}
             {wine.drink_window_start && wine.drink_window_end && (
               <>
-                <span className="text-ink-subtle">·</span>
-                <span className="text-ink-subtle">Drink {wine.drink_window_start}–{wine.drink_window_end}</span>
+                <span className="text-grey">·</span>
+                <span className="text-grey">Drink {wine.drink_window_start}–{wine.drink_window_end}</span>
               </>
             )}
           </div>
@@ -347,13 +347,13 @@ export function WineRow({
           type="button"
           aria-label={`Remove ${item.wines.name}`}
           onClick={() => onDelete(item.id)}
-          className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-subtle opacity-0 transition-opacity hover:bg-blush-wash hover:text-accent group-hover:opacity-100"
+          className="flex h-11 w-11 items-center justify-center rounded-pill text-grey opacity-0 transition-opacity hover:bg-risk-wash hover:text-risk-ink group-hover:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
       {/* Desktop pour-config sub-row (offset to match the wine-name column). */}
-      <div className="hidden border-t border-hairline/40 bg-bridge-surface/30 px-lg pb-sm pt-xs md:grid md:grid-cols-[28px_1fr]">
+      <div className="hidden border-t border-rule/40 bg-wash/30 px-lg pb-sm pt-xs md:grid md:grid-cols-[28px_1fr]">
         <div />
         <div className="min-w-0 space-y-xs">
           <PourConfigRow item={item} onPourChange={onPourChange} />
@@ -365,7 +365,7 @@ export function WineRow({
               onBlur={(e) => { if (!e.target.value.trim()) onBlurbChange(item.id, null); }}
               placeholder="Add a note for guests (e.g., sommelier pick, pairing suggestion)"
               rows={2}
-              className="min-h-11 min-w-0 flex-1 resize-none rounded-md border border-hairline bg-surface px-xs py-1 text-[12px] text-ink outline-none placeholder:text-ink-muted/50 focus:border-accent focus:ring-2 focus:ring-accent/25"
+              className="min-h-11 min-w-0 flex-1 resize-none rounded-md border border-rule bg-surface px-xs py-1 text-[12px] text-ink outline-none placeholder:text-grey/50 focus:border-accent focus-ring"
             />
             {/* BND-171: hide toggle */}
             <button
@@ -373,7 +373,7 @@ export function WineRow({
               onClick={() => onHiddenChange(item.id, !item.hidden)}
               className={cn(
                 "min-h-11 shrink-0 rounded-pill px-sm py-1 text-[10.5px] font-medium uppercase tracking-wide transition-colors",
-                item.hidden ? "bg-amber-wash text-amber" : "bg-beige text-ink-soft hover:text-ink"
+                item.hidden ? "bg-risk-wash text-risk-ink" : "bg-surface-sunken text-ink-soft hover:text-ink"
               )}
               title={item.hidden ? "Hidden from public list" : "Visible on public list"}
             >
@@ -385,18 +385,18 @@ export function WineRow({
       </div>
 
       {/* Mobile card */}
-      <div className="border-b border-hairline px-md py-md last:border-b-0 md:hidden">
+      <div className="border-b border-rule px-md py-md last:border-b-0 md:hidden">
         <div className="flex items-start justify-between">
           <div className="min-w-0 flex-1">
             <NameEdit item={item} onNameChange={onNameChange} />
-            <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-ink-muted">
-              <span className="rounded-pill bg-beige px-sm py-2xs font-mono text-[11px] text-ink-soft">
+            <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-grey">
+              <span className="rounded-pill bg-surface-sunken px-sm py-2xs font-mono text-[11px] text-ink-soft">
                 {wine.vintage ?? "NV"}
               </span>
               {wine.region && <span>{wine.region}</span>}
             </div>
             {(wine.serving_temp_label || wine.drink_window_start) && (
-              <div className="mt-xs flex items-center gap-sm text-[11px] text-ink-subtle">
+              <div className="mt-xs flex items-center gap-sm text-[11px] text-grey">
                 {wine.serving_temp_label && (
                   <span>{wine.serving_temp_min}–{wine.serving_temp_max}°F</span>
                 )}
@@ -410,7 +410,7 @@ export function WineRow({
             type="button"
             aria-label={`Options for ${item.wines.name}`}
             onClick={() => onDelete(item.id)}
-            className="ml-sm flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-pill text-ink-subtle hover:text-accent"
+            className="ml-sm flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:text-accent"
           >
             <MoreHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           </button>
@@ -420,7 +420,7 @@ export function WineRow({
             <div className="text-caption uppercase text-grey">
               Glass
             </div>
-            <div className="font-mono text-[14px] text-ink-muted">
+            <div className="font-mono text-[14px] text-grey">
               {formatPrice(item.glass_price)}
             </div>
           </div>
@@ -434,7 +434,7 @@ export function WineRow({
           </div>
         </div>
         {/* BND-038: mobile pour-config block. */}
-        <div className="mt-sm border-t border-hairline/50 pt-sm">
+        <div className="mt-sm border-t border-rule/50 pt-sm">
           <div className="text-caption uppercase text-grey">
             Pour
           </div>
@@ -443,7 +443,7 @@ export function WineRow({
           </div>
         </div>
         {/* BND-170/171: blurb + hide toggle (mobile) */}
-        <div className="mt-sm border-t border-hairline/50 pt-sm">
+        <div className="mt-sm border-t border-rule/50 pt-sm">
           <div className="text-caption uppercase text-grey">
             Note
           </div>
@@ -453,14 +453,14 @@ export function WineRow({
             onBlur={(e) => { if (!e.target.value.trim()) onBlurbChange(item.id, null); }}
             placeholder="Sommelier pick, pairing suggestion..."
             rows={2}
-            className="mt-xs w-full rounded-md border border-hairline bg-surface px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-accent focus:ring-2 focus:ring-accent/25 placeholder:text-ink-muted/50"
+            className="mt-xs w-full rounded-md border border-rule bg-surface px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-accent focus-ring placeholder:text-grey/50"
           />
           <button
             type="button"
             onClick={() => onHiddenChange(item.id, !item.hidden)}
             className={cn(
               "mt-xs min-h-11 rounded-pill px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide transition-colors",
-              item.hidden ? "bg-amber-wash text-amber" : "bg-beige text-ink-soft hover:text-ink"
+              item.hidden ? "bg-risk-wash text-risk-ink" : "bg-surface-sunken text-ink-soft hover:text-ink"
             )}
             title={item.hidden ? "Hidden from public list" : "Visible on public list"}
           >

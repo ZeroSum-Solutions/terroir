@@ -43,7 +43,7 @@ describe("invoice correction field drafts", () => {
     expect(input!.getAttribute("aria-invalid")).toBe("true");
     expect(input!.getAttribute("aria-describedby")).toContain("line-1-vintage-error");
     expect(document.getElementById("line-1-vintage-error")?.textContent).toBe(
-      "Enter a year or NV.",
+      "Enter a four-digit year or NV.",
     );
     expect(onCommit).not.toHaveBeenCalled();
 
@@ -78,6 +78,66 @@ describe("invoice correction field drafts", () => {
     expect(input!.getAttribute("aria-invalid")).toBeNull();
     expect(container.querySelector("#line-1-unit-cost-error")).toBeNull();
     expect(onCommit).toHaveBeenCalledWith(14.25);
+  });
+
+  it("rejects a vintage with trailing characters instead of committing the digits", async () => {
+    // parseInt("2024abc", 10) is 2024. A scanned invoice is exactly where a
+    // half-parsed year becomes a wrong bottle.
+    const onCommit = vi.fn();
+    const { container } = await mount(
+      <VintageInput id="line-2-vintage" label="Vintage" value={2022} onCommit={onCommit} />,
+    );
+    const input = container.querySelector<HTMLInputElement>("#line-2-vintage")!;
+
+    await change(input, "2024abc");
+    await blur(input);
+
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("rejects a vintage outside the plausible range", async () => {
+    const onCommit = vi.fn();
+    const { container } = await mount(
+      <VintageInput id="line-3-vintage" label="Vintage" value={2022} onCommit={onCommit} />,
+    );
+    const input = container.querySelector<HTMLInputElement>("#line-3-vintage")!;
+
+    await change(input, "1099");
+    await blur(input);
+
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("rejects a unit cost with trailing characters instead of committing the digits", async () => {
+    const onCommit = vi.fn();
+    const { container } = await mount(
+      <MoneyInput id="line-2-unit-cost" label="Unit cost" value={12.5} onCommit={onCommit} />,
+    );
+    const input = container.querySelector<HTMLInputElement>("#line-2-unit-cost")!;
+
+    await change(input, "12abc");
+    await blur(input);
+
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("shows a bare field's error even with no id, as the desktop scan table has none", async () => {
+    // The desktop scan table passes neither id nor label. Validation used to
+    // be suppressed there, so an invalid vintage was silently coerced to NV
+    // on one viewport and rejected on the other.
+    const onCommit = vi.fn();
+    const { container } = await mount(<VintageInput value={2022} onCommit={onCommit} />);
+    const input = container.querySelector<HTMLInputElement>("input")!;
+
+    await change(input, "twenty-two");
+    await blur(input);
+
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(container.textContent).toContain("Enter a four-digit year or NV.");
+    expect(onCommit).not.toHaveBeenCalled();
   });
 });
 

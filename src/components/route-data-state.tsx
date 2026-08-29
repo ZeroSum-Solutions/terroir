@@ -14,7 +14,7 @@ export function RouteDataLoading({
       role="status"
       aria-live="polite"
       aria-busy="true"
-      className="rounded-card border border-hairline bg-bridge-surface p-lg text-grey"
+      className="rounded-card card-surface p-lg text-grey"
     >
       <p className="text-[14px]">{label}</p>
       {children}
@@ -34,14 +34,14 @@ export function RouteDataError({
   return (
     <section
       role="alert"
-      className="rounded-card border border-hairline bg-blush-wash p-lg text-ink"
+      className="rounded-card shadow-card border border-rule bg-risk-wash p-lg text-ink"
     >
       <h2 className="text-[16px] font-medium">{title}</h2>
       <p className="mt-xs text-[14px] text-grey">{description}</p>
       <button
         type="button"
         onClick={onRetry}
-        className="mt-md inline-flex h-11 items-center rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+        className="mt-md inline-flex h-11 items-center rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
       >
         Try again
       </button>
@@ -63,9 +63,9 @@ export function RouteDataEmpty({
   return (
     <section
       aria-label={title}
-      className="rounded-card border border-hairline bg-bridge-surface p-xl text-center text-ink"
+      className="rounded-card card-surface p-xl text-center text-ink"
     >
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blush-wash text-accent">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-risk-wash text-risk-ink">
         {icon}
       </div>
       <h2 className="mt-md text-[16px] font-medium">{title}</h2>

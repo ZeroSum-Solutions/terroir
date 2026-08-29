@@ -1090,7 +1090,7 @@ export function ChunkUploadProgress({
         {chunks.map((c) => (
           <li
             key={c.index}
-            className="flex items-center justify-between gap-sm rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink"
+            className="flex items-center justify-between gap-sm rounded-md bg-wash px-sm py-xs text-[13px] text-ink"
           >
             <span>Chunk {c.index}</span>
             <span className="flex items-center gap-xs text-caption text-grey">
@@ -1107,7 +1107,7 @@ export function ChunkUploadProgress({
                   onClick={() => onImportAnyway(c.index)}
                   disabled={frozen}
                   title="Imports this chunk's identical rows as a separate tracked upload."
-                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-11 rounded-pill border border-edge bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-wash focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Import anyway
                 </button>
@@ -1117,7 +1117,7 @@ export function ChunkUploadProgress({
                   type="button"
                   onClick={() => onSkipChunk(c.index)}
                   disabled={frozen}
-                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-11 rounded-pill border border-edge bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-wash focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Skip this chunk
                 </button>
@@ -1131,7 +1131,7 @@ export function ChunkUploadProgress({
                   type="button"
                   onClick={() => onUndoSkip(c.index)}
                   disabled={frozen}
-                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-11 rounded-pill border border-edge bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-wash focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Undo skip
                 </button>
@@ -1163,7 +1163,7 @@ function ChunkStatusChip({ status }: { status: string }) {
     reverted: "Reverted",
   };
   return (
-    <span className="inline-flex items-center gap-2xs rounded-pill bg-bridge-surface px-sm py-2xs text-caption font-medium text-ink">
+    <span className="inline-flex items-center gap-2xs rounded-pill bg-wash px-sm py-2xs text-caption font-medium text-ink">
       {status === "completed" && <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
       {label[status] ?? status}
     </span>
@@ -1397,7 +1397,7 @@ export function SessionStep({
         <button
           type="button"
           onClick={onDone}
-          className="mt-md min-h-11 rounded-pill px-lg text-[14px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink"
+          className="mt-md min-h-11 rounded-pill px-lg text-[14px] font-medium text-grey underline underline-offset-4 hover:text-ink"
         >
           Start a new import
         </button>
@@ -1408,14 +1408,14 @@ export function SessionStep({
   if (!progress && loadError) {
     return (
       <div className="rounded-card card-surface p-lg">
-        <p role="alert" className="flex items-start gap-xs text-[14px] text-accent">
+        <p role="alert" className="flex items-start gap-xs text-[14px] text-risk-ink">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {loadError}
         </p>
         <button
           type="button"
           onClick={() => void refresh()}
-          className="mt-md min-h-11 rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+          className="mt-md min-h-11 rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
         >
           Retry
         </button>
@@ -1441,7 +1441,7 @@ export function SessionStep({
     <div className="rounded-card card-surface p-lg">
       <div className="flex items-center justify-between">
         <h2 className="font-serif text-[20px] text-ink">{label}</h2>
-        <span className="inline-flex items-center gap-2xs rounded-pill bg-bridge-surface px-sm py-2xs text-caption font-medium text-ink">
+        <span className="inline-flex items-center gap-2xs rounded-pill bg-wash px-sm py-2xs text-caption font-medium text-ink">
           {progress.status === "completed" && <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
           {progress.status === "in_progress" ? "In progress" : progress.status === "completed" ? "Completed" : "Reverted"}
         </span>
@@ -1463,7 +1463,7 @@ export function SessionStep({
           {progress.chunks.map((chunk) => (
             <li
               key={chunk.batchId}
-              className="flex items-center justify-between rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink"
+              className="flex items-center justify-between rounded-md bg-wash px-sm py-xs text-[13px] text-ink"
             >
               <span>Chunk {chunk.chunkIndex ?? "—"} ({chunk.counts.applied}/{chunk.counts.total} applied)</span>
               <ChunkStatusChip status={chunk.status} />
@@ -1510,14 +1510,14 @@ export function SessionStep({
       </div>
 
       {actionError && (
-        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
+        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-risk-ink">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {actionError}
         </p>
       )}
 
       {progress.totals.pending > 1 && progress.status !== "reverted" && (
-        <div className="mt-lg rounded-lg bg-bridge-surface px-md py-sm">
+        <div className="mt-lg rounded-md bg-wash px-md py-sm">
           <p className="text-[13px] text-ink">
             {progress.totals.pending.toLocaleString()} rows need a decision — most are simply
             wines outside the LWIN catalog.
@@ -1527,7 +1527,7 @@ export function SessionStep({
               type="button"
               disabled={bulkResolving}
               onClick={() => void bulkResolve("include")}
-              className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
               {bulkResolving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
               Include all with a cost
@@ -1536,7 +1536,7 @@ export function SessionStep({
               type="button"
               disabled={bulkResolving}
               onClick={() => void bulkResolve("exclude")}
-              className="min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+              className="min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
               Exclude all pending
             </button>
@@ -1555,7 +1555,7 @@ export function SessionStep({
           </h3>
           <ul className="mt-xs space-y-sm">
             {allPendingRows.map(({ batchId, chunkIndex, row }) => (
-              <li key={row.id} className="rounded-lg card-surface p-sm">
+              <li key={row.id} className="rounded-card card-surface p-sm">
                 <p className="text-[14px] text-ink">
                   Chunk {chunkIndex ?? "—"}, row {row.row_number}: {row.raw.producer ? `${row.raw.producer} — ` : ""}{row.raw.name}
                 </p>
@@ -1572,7 +1572,7 @@ export function SessionStep({
                       placeholder="Unit cost"
                       value={manualCostDrafts[row.id] ?? ""}
                       onChange={(e) => setManualCostDrafts((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                      className="min-h-11 w-28 rounded-pill border border-hairline bg-surface px-sm text-[14px] focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
+                      className="min-h-11 w-28 rounded-pill border border-rule bg-surface px-sm text-[14px] focus:border-accent focus-ring"
                     />
                   )}
                   <button
@@ -1583,14 +1583,14 @@ export function SessionStep({
                       void resolveRow(batchId, row.id, "include", manualUnitCost);
                     }}
                     disabled={row.cost_status === "missing" && !manualCostDrafts[row.id]}
-                    className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Include anyway
                   </button>
                   <button
                     type="button"
                     onClick={() => void resolveRow(batchId, row.id, "exclude")}
-                    className="min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                    className="min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
                   >
                     Exclude
                   </button>
@@ -1607,7 +1607,7 @@ export function SessionStep({
             type="button"
             disabled={applying}
             onClick={() => void applyAllChunks()}
-            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
           >
             {applying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {applying
@@ -1620,7 +1620,7 @@ export function SessionStep({
           <button
             type="button"
             onClick={() => setRevertDialogOpen(true)}
-            className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-ink/25 bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-edge bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-wash focus-ring"
           >
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
             Revert this import
@@ -1630,7 +1630,7 @@ export function SessionStep({
         <button
           type="button"
           onClick={onDone}
-          className="min-h-11 rounded-pill px-lg text-[14px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          className="min-h-11 rounded-pill px-lg text-[14px] font-medium text-grey underline underline-offset-4 hover:text-ink focus-ring"
         >
           Start a new import
         </button>

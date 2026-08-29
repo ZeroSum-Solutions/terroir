@@ -53,10 +53,10 @@ export function ProcessingView({ progress, stage, mode, onCancel, previewUrl }: 
           <img
             src={previewUrl}
             alt="What you captured"
-            className="mx-auto mb-md h-20 w-20 rounded-lg border border-hairline object-cover"
+            className="mx-auto mb-md h-20 w-20 rounded-lg border border-rule object-cover"
           />
         ) : (
-          <div className="mx-auto mb-md flex h-16 w-16 items-center justify-center rounded-full bg-blush-wash text-accent">
+          <div className="mx-auto mb-md flex h-16 w-16 items-center justify-center rounded-full bg-risk-wash text-risk-ink">
             <Sparkles className="h-7 w-7" strokeWidth={1.5} aria-hidden="true" />
           </div>
         )}
@@ -74,7 +74,7 @@ export function ProcessingView({ progress, stage, mode, onCancel, previewUrl }: 
         </p>
 
         <div
-          className="relative mt-md h-1.5 overflow-hidden rounded-pill bg-beige"
+          className="relative mt-md h-1.5 overflow-hidden rounded-pill bg-surface-sunken"
           role="progressbar"
           aria-valuemin={0}
           aria-valuemax={100}
@@ -107,7 +107,7 @@ export function ProcessingView({ progress, stage, mode, onCancel, previewUrl }: 
                 className={cn(
                   "flex items-center gap-sm text-[14px]",
                   done && "text-ink",
-                  active && "text-accent",
+                  active && "text-mark",
                   !done && !active && "text-grey",
                 )}
               >
@@ -126,7 +126,7 @@ export function ProcessingView({ progress, stage, mode, onCancel, previewUrl }: 
         <button
           type="button"
           onClick={onCancel}
-          className="mt-lg h-11 rounded-pill border border-ink/25 bg-surface px-lg text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="mt-lg h-11 rounded-pill border border-edge bg-surface px-lg text-[14px] font-medium text-ink hover:bg-wash focus-ring"
         >
           Cancel scan
         </button>

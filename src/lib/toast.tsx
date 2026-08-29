@@ -58,10 +58,16 @@ function ToastContainer({ items }: { items: ToastItem[] }) {
   if (items.length === 0) return null;
   return (
     <div
-      aria-live="polite"
+      // No aria-live here: each toast carries its own role (status for
+      // success/info, alert for errors), and a live region nested inside
+      // another gets announced twice on some screen-reader pairings.
       className={cn(
-        "fixed inset-x-md z-50 mx-auto max-w-[420px]",
-        "bottom-[88px] md:bottom-lg",
+        // `toast` sits above `dialog` on purpose: feedback about an action
+        // must be visible over the surface that triggered it (DESIGN.md —
+        // Layers). It used to share z-[var(--z-dialog)] with modals, so whether a
+        // confirmation appeared depended on DOM order.
+        "fixed inset-x-md z-[var(--z-toast)] mx-auto max-w-[420px]",
+        "bottom-[calc(var(--chrome-tabbar-total)+var(--spacing-lg))] md:bottom-lg",
       )}
     >
       <div className="flex flex-col gap-xs">
@@ -69,17 +75,21 @@ function ToastContainer({ items }: { items: ToastItem[] }) {
           return (
             <div
               key={t.id}
-              role="alert"
+              // The container is aria-live="polite"; role="alert" is
+              // assertive and contradicts it, so a success confirmation used
+              // to interrupt a screen-reader user mid-sentence. Only errors
+              // are alerts (DESIGN.md — State).
+              role={t.tone === "error" ? "alert" : "status"}
               className={cn(
                 "glass flex items-center gap-sm rounded-lg px-md py-sm text-[14px] text-ink",
                 "animate-[toast-in_0.2s ease-out]",
               )}
             >
               {t.tone === "success" && (
-                <Check className="h-4 w-4 text-sage-ink shrink-0" strokeWidth={2.25} />
+                <Check className="h-4 w-4 text-ready-ink shrink-0" strokeWidth={2.25} />
               )}
               {t.tone === "error" && (
-                <AlertTriangle className="h-4 w-4 text-primary shrink-0" strokeWidth={2.25} />
+                <AlertTriangle className="h-4 w-4 text-risk-ink shrink-0" strokeWidth={2.25} />
               )}
               <span className="flex-1">{t.text}</span>
             </div>

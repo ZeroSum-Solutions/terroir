@@ -74,10 +74,8 @@ describe("public wine-list guest clarity", () => {
     expect(shareButton.className).toContain("min-h-11");
     expect(shareButton.className).toContain("rounded-pill");
     expect(shareButton.className).toContain("print:hidden");
-    expect(shareButton.className).toContain("focus-visible:outline-none");
-    expect(shareButton.className).toContain("focus-visible:ring-2");
-    expect(shareButton.className).toContain("focus-visible:ring-primary/30");
-    expect(shareButton.className).toContain("focus-visible:ring-offset-2");
+    expect(shareButton.className).toContain("focus-ring");
+    expect(shareButton.className).not.toMatch(/focus(-visible)?:(ring|outline)/);
     expect(shareButton.querySelector("svg")?.getAttribute("aria-hidden")).toBe(
       "true",
     );

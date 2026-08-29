@@ -91,7 +91,7 @@ export function CellarFilterSheet({
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; the dialog below already has full keyboard access via useFocusTrap (Escape + a visible Close button).
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim md:items-center"
+      className="fixed inset-0 z-[var(--z-dialog)] flex items-end justify-center bg-scrim md:items-center"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -101,9 +101,9 @@ export function CellarFilterSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}
-        className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-card bg-surface md:max-w-[440px] md:rounded-card md:border md:border-hairline"
+        className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-card bg-surface md:max-w-[440px] md:rounded-card md:border md:border-rule"
       >
-        <header className="flex items-center justify-between border-b border-hairline px-md py-sm">
+        <header className="flex items-center justify-between border-b border-rule px-md py-sm">
           <h2 id={headingId} className="font-serif text-[19px] font-medium text-ink">
             Filters
           </h2>
@@ -111,13 +111,13 @@ export function CellarFilterSheet({
             type="button"
             onClick={onClose}
             aria-label="Close filters"
-            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-wash focus-ring"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-md py-md">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-md py-md">
           <div className="flex flex-col gap-md">
             {showCountry && (
               <SheetField
@@ -192,18 +192,21 @@ export function CellarFilterSheet({
           </div>
         </div>
 
-        <footer className="flex items-center gap-sm border-t border-hairline px-md py-sm">
+        <footer
+          className="flex items-center gap-sm border-t border-rule px-md py-sm"
+          style={{ paddingBottom: "calc(var(--safe-bottom) + var(--spacing-sm))" }}
+        >
           <button
             type="button"
             onClick={handleReset}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill border border-ink/20 text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill border border-edge text-[13px] font-medium text-ink hover:bg-wash focus-ring"
           >
             Reset
           </button>
           <button
             type="button"
             onClick={handleApply}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill bg-primary text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
           >
             Apply
           </button>
@@ -214,7 +217,7 @@ export function CellarFilterSheet({
 }
 
 const fieldSelectClassName =
-  "h-11 w-full rounded-pill border border-ink/20 bg-surface px-sm text-[13px] text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "h-11 w-full rounded-pill border border-edge bg-surface px-sm text-[13px] text-ink hover:bg-wash focus-ring";
 
 function SheetField({
   label,

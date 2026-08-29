@@ -35,7 +35,7 @@ export function OnboardingModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim px-md"
+      className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center bg-scrim px-md"
       role="dialog"
       aria-modal="true"
       aria-labelledby="onboarding-title"
@@ -56,14 +56,14 @@ export function OnboardingModal({
             if (e.key === "Enter") submit();
           }}
           placeholder="Tartine Cellar…"
-          className="mt-lg h-[38px] w-full rounded-pill border border-hairline bg-canvas px-md text-[14px] text-ink placeholder:text-grey focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          className="mt-lg h-11 w-full rounded-pill border border-edge bg-canvas px-md text-[14px] text-ink placeholder:text-grey focus-visible:border-accent focus-ring"
         />
         <div className="mt-lg flex justify-end">
           <button
             type="button"
             onClick={submit}
             disabled={saving || !name.trim()}
-            className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:opacity-60"
+            className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink transition-colors hover:bg-primary-hover focus-ring disabled:opacity-60"
           >
             {saving ? "Saving..." : "Continue"}
           </button>

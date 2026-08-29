@@ -48,7 +48,7 @@ export function PricingPlaysSection({
       {recommendations.length === 0 ? (
         /* Two quiet lines, not a full-height dashed box — an empty module
            must never outweigh populated ones (Kimi audit 2026-08-26). */
-        <p className="rounded-card border border-hairline bg-bridge-surface px-md py-sm text-[13px] text-grey">
+        <p className="rounded-card card-surface px-md py-sm text-[13px] text-grey">
           No pricing plays yet — they appear once cellar health and pour data
           are current.
         </p>
@@ -84,9 +84,9 @@ function PricingGroup({
     <section
       data-pricing-class={recommendationClass}
       aria-labelledby={`pricing-class-${recommendationClass}`}
-      className="border-b border-hairline last:border-b-0"
+      className="border-b border-rule last:border-b-0"
     >
-      <div className="flex items-center justify-between bg-beige px-md py-sm">
+      <div className="flex items-center justify-between bg-surface-sunken px-md py-sm">
         <h3
           id={`pricing-class-${recommendationClass}`}
           className="text-caption font-medium uppercase text-ink-soft"
@@ -95,7 +95,7 @@ function PricingGroup({
         </h3>
         <span className="tabular text-[11px] text-grey">{rows.length}</span>
       </div>
-      <ul className="divide-y divide-hairline bg-surface">
+      <ul className="divide-y divide-rule bg-surface">
         {rows.map((row) => <PricingRow key={row.wineId} row={row} />)}
       </ul>
     </section>
@@ -110,7 +110,7 @@ function PricingRow({ row }: { row: PricingPlay }) {
     >
       <Link
         href={metricHref("wine", row.wineId)}
-        className="group min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+        className="group min-w-0 rounded-sm focus-ring"
       >
         <span className="block truncate font-serif text-[17px] font-medium text-ink group-hover:text-accent">
           {row.wine.producer}, {row.wine.name}

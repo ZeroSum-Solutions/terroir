@@ -31,10 +31,10 @@ export function TemplatePicker({
           disabled={disabled}
           aria-pressed={current === t}
           className={cn(
-            "flex min-h-11 items-center justify-between rounded-pill px-sm py-xs text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:pointer-events-none",
+            "flex min-h-11 items-center justify-between rounded-pill px-sm py-xs text-[13px] transition-colors focus-ring disabled:pointer-events-none",
             current === t
-              ? "bg-bridge-surface font-medium text-ink"
-              : "text-ink-muted hover:bg-bridge-surface hover:text-ink",
+              ? "bg-wash font-medium text-ink"
+              : "text-grey hover:bg-wash hover:text-ink",
           )}
         >
           <span>{t.charAt(0).toUpperCase() + t.slice(1)}</span>

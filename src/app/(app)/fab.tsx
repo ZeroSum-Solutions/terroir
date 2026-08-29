@@ -86,7 +86,7 @@ function FabInner() {
   return (
     <div
       ref={containerRef}
-      className="pointer-events-none fixed inset-0 z-30 md:hidden"
+      className="pointer-events-none fixed inset-0 z-[var(--z-chrome)] md:hidden"
       aria-hidden={false}
     >
       {/* Trigger button. */}
@@ -97,11 +97,11 @@ function FabInner() {
         aria-label={open ? "Close actions" : "Open actions"}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "pointer-events-auto absolute right-md grid h-14 w-14 place-items-center rounded-pill bg-primary text-white transition-transform duration-200",
-          "hover:bg-primary-hover active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+          "pointer-events-auto absolute right-md grid h-14 w-14 place-items-center rounded-pill bg-primary text-seal-ink transition-transform duration-200",
+          "hover:bg-primary-hover active:scale-95 focus-ring",
           open && "rotate-45",
         )}
-        style={{ bottom: "calc(env(safe-area-inset-bottom) + 80px)" }}
+        style={{ bottom: "calc(var(--chrome-tabbar-total) + var(--spacing-md))" }}
       >
         {/* Single icon that rotates 45° to become close. Avoids icon
             swap flicker. */}
@@ -118,7 +118,7 @@ function FabInner() {
           "pointer-events-none absolute right-md flex flex-col-reverse items-end gap-sm transition-opacity",
           open ? "opacity-100" : "opacity-0",
         )}
-        style={{ bottom: "calc(env(safe-area-inset-bottom) + 152px)" }}
+        style={{ bottom: "calc(var(--chrome-tabbar-total) + var(--chrome-fab) + var(--spacing-xl))" }}
         role="menu"
         aria-label="Primary actions"
         aria-hidden={!open}
@@ -168,7 +168,7 @@ function ActionPill({
       <span className="text-[12px] uppercase tracking-[0.06em] text-grey">
         {label}
       </span>
-      <span className="grid h-9 w-9 place-items-center rounded-pill bg-blush-wash text-accent">
+      <span className="grid h-9 w-9 place-items-center rounded-pill bg-risk-wash text-risk-ink">
         <Icon className="h-4 w-4" strokeWidth={2} />
       </span>
     </span>
@@ -180,7 +180,7 @@ function ActionPill({
       onClick={onActivate}
       aria-label={label}
       role="menuitem"
-      className="pointer-events-auto inline-flex rounded-pill focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="pointer-events-auto inline-flex rounded-pill focus-ring"
     >
       {inner}
     </Link>

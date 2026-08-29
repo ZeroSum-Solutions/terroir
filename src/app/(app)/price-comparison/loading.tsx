@@ -22,13 +22,13 @@ export default function PriceComparisonLoading() {
         </div>
 
         <div className="overflow-hidden rounded-card card-surface">
-          <div className="flex items-center gap-md bg-bridge-surface px-md py-sm">
+          <div className="flex items-center gap-md bg-wash px-md py-sm">
             <Skeleton className="h-[11px] w-24" />
             <Skeleton className="ml-auto h-[11px] w-14" />
             <Skeleton className="h-[11px] w-14" />
             <Skeleton className="h-[11px] w-14" />
           </div>
-          <div className="divide-y divide-hairline">
+          <div className="divide-y divide-rule">
             {Array.from({ length: 6 }, (_, i) => (
               <div key={i} className="flex items-center justify-between gap-md px-md py-md">
                 <div className="space-y-xs">

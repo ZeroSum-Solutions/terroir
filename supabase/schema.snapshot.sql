@@ -11620,3 +11620,339 @@ create policy "members can delete wine images"
     bucket_id = 'wine-images'
     and public.is_member((storage.foldername(name))[1]::uuid)
   );
+
+-- === 0131_xwines_catalog.sql ===
+-- X-Wines reference corpus.
+--
+-- The cellar has never had a column for how a wine TASTES. `wines` carries
+-- identity, stock, pricing, drink window and serving temperature, but nothing
+-- for body, acidity, alcohol, grape composition or what to eat with it — the
+-- facts a guest actually asks a sommelier about. This migration lands the
+-- reference corpus that supplies them.
+--
+-- Source: X-Wines (de Azambuja et al.), the Full 100K distribution, licensed
+-- CC0-1.0. Two grains arrive together because they answer two different
+-- questions:
+--
+--   xwines_catalog        one row per wine (100,646) — the attributes, plus the
+--                         wine's rating average and count.
+--   xwines_vintage_ratings one row per (wine, vintage) (1,008,593) — the grain
+--                         a "compare vintages" surface needs, since a 2015 and
+--                         a 2019 of the same wine are rated separately.
+--
+-- Both rating columns are AGGREGATES computed from the corpus's 21,013,536
+-- individual ratings, on the corpus's own 1.0–5.0 scale. The raw ratings are
+-- deliberately NOT imported: 21M rows would dwarf every other table here and
+-- nothing in the product reads an individual stranger's rating.
+--
+-- Shaped after lwin_catalog (0003_wine_intelligence.sql:20-45): a global,
+-- read-only reference table, authenticated-select RLS, trigram indexes on the
+-- two columns matching joins against. It is NOT restaurant-scoped and holds no
+-- tenant data, so there is no is_member() predicate to write.
+-------------------------------------------------------------------------------
+
+create table public.xwines_catalog (
+  wine_id       integer     primary key,
+  name          text        not null,
+  type          text,
+  elaborate     text,
+  grapes        text[]      not null default '{}',
+  harmonize     text[]      not null default '{}',
+  abv           numeric(4,1),
+  body          text,
+  acidity       text,
+  country_code  text,
+  country       text,
+  region_id     integer,
+  region_name   text,
+  winery_id     integer,
+  winery_name   text,
+  website       text,
+  vintages      integer[]   not null default '{}',
+  -- NV bottlings appear in the corpus as the literal 'N.V.' among the vintage
+  -- list; `vintages` holds only the numeric years, and this flag carries the
+  -- rest so a non-vintage wine is not silently rendered as vintage-less.
+  has_non_vintage boolean   not null default false,
+  rating_avg    numeric(4,3),
+  rating_count  integer     not null default 0,
+  constraint xwines_catalog_rating_avg_range
+    check (rating_avg is null or (rating_avg >= 1 and rating_avg <= 5)),
+  constraint xwines_catalog_rating_count_non_negative
+    check (rating_count >= 0)
+);
+
+create index xwines_catalog_winery_trgm_idx
+  on public.xwines_catalog using gin (winery_name gin_trgm_ops);
+
+create index xwines_catalog_name_trgm_idx
+  on public.xwines_catalog using gin (name gin_trgm_ops);
+
+create index xwines_catalog_type_idx     on public.xwines_catalog (type);
+create index xwines_catalog_country_idx  on public.xwines_catalog (country);
+create index xwines_catalog_grapes_idx    on public.xwines_catalog using gin (grapes);
+create index xwines_catalog_harmonize_idx on public.xwines_catalog using gin (harmonize);
+
+comment on table public.xwines_catalog is
+  'X-Wines Full 100K reference corpus (CC0-1.0). Global, read-only. '
+  'rating_avg/rating_count are aggregated from the distribution''s 21M '
+  'ratings on its native 1.0-5.0 scale.';
+
+create table public.xwines_vintage_ratings (
+  wine_id      integer not null references public.xwines_catalog (wine_id) on delete cascade,
+  vintage      integer not null,
+  rating_avg   numeric(4,3) not null,
+  rating_count integer not null,
+  primary key (wine_id, vintage),
+  constraint xwines_vintage_ratings_avg_range
+    check (rating_avg >= 1 and rating_avg <= 5),
+  constraint xwines_vintage_ratings_count_positive
+    check (rating_count > 0)
+);
+
+comment on table public.xwines_vintage_ratings is
+  'Per-(wine, vintage) rating aggregate from the X-Wines 21M rating corpus. '
+  'A row exists only where at least one rating does; absence means "no '
+  'ratings yet", which a reader must render as such rather than as zero.';
+
+-------------------------------------------------------------------------------
+-- RLS — global reference data, readable by any authenticated user.
+-- No write policy: these tables are populated by scripts/seed-xwines.ts running
+-- under the service role, which bypasses RLS. Leaving writes unpolicied means a
+-- compromised end-user session cannot rewrite the corpus every restaurant reads.
+-------------------------------------------------------------------------------
+alter table public.xwines_catalog        enable row level security;
+alter table public.xwines_vintage_ratings enable row level security;
+
+create policy "anyone can read xwines_catalog"
+  on public.xwines_catalog for select to authenticated
+  using (true);
+
+create policy "anyone can read xwines_vintage_ratings"
+  on public.xwines_vintage_ratings for select to authenticated
+  using (true);
+
+-- Grants, explicitly, rather than relying on the ambient `alter default
+-- privileges` Supabase applies to tables created in a CLI-run migration. A
+-- policy is checked only AFTER the table-level privilege is granted, so a table
+-- with a permissive policy and no grant fails with "permission denied for
+-- table" — which reads like a policy bug and is not one. Making the grant part
+-- of the migration also means the table behaves the same however it was
+-- applied.
+grant select on public.xwines_catalog         to authenticated;
+grant select on public.xwines_vintage_ratings to authenticated;
+
+-- The seed script (scripts/seed-xwines.ts) writes as service_role.
+grant select, insert, update, delete on public.xwines_catalog         to service_role;
+grant select, insert, update, delete on public.xwines_vintage_ratings to service_role;
+
+-- === 0132_canonical_wines_xwines_link.sql ===
+-- Attach the X-Wines corpus to the identity spine.
+--
+-- WHERE the link lives is the whole decision here. Body, acidity, ABV, grape
+-- composition and food pairing are facts about a producer's cuvée — they do not
+-- vary by which restaurant happens to stock the bottle. So the link hangs off
+-- `canonical_wines`, the shared catalog layer every import contributes to
+-- (0097_canonical_wines.sql:173-181), and tenant rows reach it by the
+-- `wines.canonical_wine_id` they already carry (0098_wine_variants.sql:93-94).
+--
+-- Putting these columns on `wines` instead would copy the same corpus facts
+-- once per restaurant per bottling, and let two restaurants stocking the same
+-- wine disagree about its acidity. `wine_variants` would be wrong for the
+-- opposite reason: it is vintage- and size-grained, and a cuvée's body does not
+-- change between a 750ml and a magnum.
+--
+-- Vintage-varying data is NOT stored here. Per-vintage ratings live at their own
+-- grain in xwines_vintage_ratings (0131) and are read through
+-- xwines_catalog.wine_id.
+-------------------------------------------------------------------------------
+
+alter table public.canonical_wines
+  add column xwines_wine_id     integer references public.xwines_catalog (wine_id) on delete set null,
+  add column xwines_match_score real;
+
+-- Partial: only a minority of canonical wines will ever match the corpus (the
+-- corpus is consumer-review breadth, the cellar is trade), so indexing the
+-- nulls would be most of the index.
+create index canonical_wines_xwines_wine_id_idx
+  on public.canonical_wines (xwines_wine_id)
+  where xwines_wine_id is not null;
+
+comment on column public.canonical_wines.xwines_match_score is
+  'Trigram score from match_xwines that produced xwines_wine_id, retained so a '
+  'weak match can be re-examined or superseded without re-running the matcher. '
+  'Null when the link was set by any means other than the matcher.';
+
+-------------------------------------------------------------------------------
+-- match_xwines — producer-weighted trigram match against the corpus.
+--
+-- Deliberately mirrors match_lwin's shape and weighting (0127, itself carrying
+-- 0078's semantics): producer similarity is worth 0.6 and cuvée 0.4, the
+-- producer must clear the threshold outright, and the cuvée need only clear
+-- 70% of it — a producer is the stronger signal, and cuvée names vary far more
+-- in punctuation and qualifiers.
+--
+-- The `order by score desc, wine_id asc` tie-break is 0127's fix, applied here
+-- for the same reason: without a total order two rows tying on score have no
+-- defined winner, and a match run twice (preview, then confirm) can resolve
+-- differently and persist a wine the operator never approved. `wine_id` is the
+-- primary key, so it is non-null and unique; ascending is arbitrary but stable.
+--
+-- UNLIKE match_lwin, this returns the two component similarities alongside the
+-- blend, because the blend alone cannot express the failure mode that matters
+-- here. Measured against this repo's own seed cellar: "Bodegas Muga" / "Reserva"
+-- blends to 0.667 against "Borsao Bodegas" / "Reserva" — a wrong producer
+-- carried over the line by an exactly-matching cuvée name (0.445*0.6 +
+-- 1.0*0.4). A caller enriching a wine with someone else's acidity and food
+-- pairings needs to floor the PRODUCER independently, so it is given the number
+-- to floor. See xwines-profile.ts for the acceptance rule and the measurements
+-- behind it.
+-------------------------------------------------------------------------------
+create or replace function public.match_xwines(
+  p_producer  text,
+  p_name      text,
+  p_threshold float default 0.3
+)
+returns table (
+  wine_id        integer,
+  name           text,
+  winery_name    text,
+  region_name    text,
+  country        text,
+  type           text,
+  score          float,
+  producer_score float,
+  name_score     float
+)
+language sql security definer set search_path = public
+as $$
+  select set_config('pg_trgm.similarity_threshold', p_threshold::text, true);
+  select xc.wine_id, xc.name, xc.winery_name, xc.region_name, xc.country, xc.type,
+         (similarity(lower(p_producer), lower(xc.winery_name)) * 0.6 +
+          similarity(lower(p_name), lower(xc.name)) * 0.4) as score,
+         similarity(lower(p_producer), lower(xc.winery_name))::float as producer_score,
+         similarity(lower(p_name), lower(xc.name))::float as name_score
+  from public.xwines_catalog xc
+  where lower(xc.winery_name) % lower(p_producer)
+    and similarity(lower(p_producer), lower(xc.winery_name)) >= p_threshold
+    and similarity(lower(p_name), lower(xc.name)) >= p_threshold * 0.7
+  order by score desc, xc.wine_id asc
+  limit 1;
+$$;
+
+revoke all on function public.match_xwines(text, text, float) from public;
+grant execute on function public.match_xwines(text, text, float) to authenticated;
+
+-- === 0133_xwines_catalog_lower_trgm_indexes.sql ===
+-- match_xwines never used an index. 0131 shipped
+-- `gin (winery_name gin_trgm_ops)` and `gin (name gin_trgm_ops)` on the RAW
+-- columns, but 0132's matcher prefilters on
+-- `lower(xc.winery_name) % lower(p_producer)` — and Postgres cannot serve a
+-- functional expression from a bare-column index. Every call therefore
+-- parallel-seq-scanned all 100,646 rows.
+--
+-- Identical defect, identical remedy as 0078 for
+-- `lwin_catalog.lower(producer)`; this is that fix applied to the corpus that
+-- shipped after it.
+--
+-- Measured on the local corpus (100,646 rows), the matcher's own predicate for
+-- Penfolds / Koonunga Hill, `explain (analyze, buffers)`:
+--
+--   before  Parallel Seq Scan, 33,546 rows removed by filter per worker,
+--           5,348 shared buffer hits, 77.3 ms
+--   after   Bitmap Index Scan on this index (208 rows) -> Bitmap Heap Scan,
+--           233 shared buffer hits, 1.2 ms
+--
+-- ONE index, not two, deliberately. The cuvée half of the predicate is
+-- `similarity(lower(p_name), lower(xc.name)) >= p_threshold * 0.7` — a bare
+-- similarity() call, which gin_trgm_ops does not support (it answers only %,
+-- <->, and the LIKE family). A matching `gin (lower(name) gin_trgm_ops)` was
+-- built and measured here: the planner ignored it entirely, the plan was
+-- byte-identical apart from noise, so it was dropped rather than shipped as an
+-- index nothing can read. 0078 reached the same conclusion for the same
+-- reason.
+--
+-- 0131's two raw-column indexes are now dead weight — nothing queries either
+-- column unlowered. They are left in place: dropping them is a separate,
+-- independently reversible decision and not this fix's business.
+--
+-- Index-only migration. No function body, no grant, no matching semantics
+-- changes; match_xwines returns exactly the rows it returned before, faster.
+--
+-- DOWN: drops the index. See down/0133_xwines_catalog_lower_trgm_indexes.down.sql.
+
+create index if not exists xwines_catalog_winery_lower_trgm_idx
+  on public.xwines_catalog using gin (lower(winery_name) gin_trgm_ops);
+
+-- === 0134_match_xwines_top_n.sql ===
+-- match_xwines returned one row; the caller's bar is stricter than the
+-- function's.
+--
+-- 0132 ends `order by score desc, xc.wine_id asc limit 1`, and the RPC's own
+-- admission bar is loose by design: the cuvée need only clear
+-- `p_threshold * 0.7` (0.21 at the default threshold). The acceptance rule that
+-- actually decides what a reader is shown lives in
+-- src/lib/wine-intelligence/xwines-profile.ts and is far stricter — a blended
+-- floor, a producer floor, and now a name floor. So the single row this
+-- function returned was routinely rejected client-side while a second,
+-- ACCEPTABLE candidate sat one position below it, never sent.
+--
+-- Measured instance, on the local corpus: "E. Guigal" / "Cotes-du-Rhone"
+-- returns "Côtes-du-Rhône Rosé" first (score 0.744) with "Côtes-du-Rhône
+-- Rouge" (0.738) and "Côtes-du-Rhône Blanc" (0.733) behind it. Whichever of
+-- those a stricter client rule prefers, under `limit 1` it never saw them.
+--
+-- `p_limit` defaults to 5: enough for a client floor to walk past a few
+-- near-ties, small enough that the added work is bounded (the ordering is
+-- unchanged, so rows 2..N are the ones the sort already produced).
+--
+-- Everything else is 0132 verbatim — the same predicates, the same 0.6/0.4
+-- weighting, the same transaction-local pg_trgm.similarity_threshold, the same
+-- deterministic `score desc, wine_id asc` tie-break (0127's fix), the same
+-- `security definer set search_path = public`, the same revoke/grant pair.
+-- Only the row count changes.
+--
+-- The three-argument function is DROPPED rather than left beside the new one.
+-- PostgREST resolves an RPC by the named arguments in the request body, and
+-- two overloads that both accept {p_producer, p_name, p_threshold} are
+-- ambiguous — the call would fail at runtime, not at deploy. One arity only.
+--
+-- DOWN: drops the four-argument function and restores 0132's three-argument
+-- body verbatim. See down/0134_match_xwines_top_n.down.sql.
+
+drop function if exists public.match_xwines(text, text, float);
+
+create or replace function public.match_xwines(
+  p_producer  text,
+  p_name      text,
+  p_threshold float default 0.3,
+  p_limit     integer default 5
+)
+returns table (
+  wine_id        integer,
+  name           text,
+  winery_name    text,
+  region_name    text,
+  country        text,
+  type           text,
+  score          float,
+  producer_score float,
+  name_score     float
+)
+language sql security definer set search_path = public
+as $$
+  select set_config('pg_trgm.similarity_threshold', p_threshold::text, true);
+  select xc.wine_id, xc.name, xc.winery_name, xc.region_name, xc.country, xc.type,
+         (similarity(lower(p_producer), lower(xc.winery_name)) * 0.6 +
+          similarity(lower(p_name), lower(xc.name)) * 0.4) as score,
+         similarity(lower(p_producer), lower(xc.winery_name))::float as producer_score,
+         similarity(lower(p_name), lower(xc.name))::float as name_score
+  from public.xwines_catalog xc
+  where lower(xc.winery_name) % lower(p_producer)
+    and similarity(lower(p_producer), lower(xc.winery_name)) >= p_threshold
+    and similarity(lower(p_name), lower(xc.name)) >= p_threshold * 0.7
+  order by score desc, xc.wine_id asc
+  limit p_limit;
+$$;
+
+revoke all on function public.match_xwines(text, text, float, integer) from public;
+grant execute on function public.match_xwines(text, text, float, integer) to authenticated;

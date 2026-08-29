@@ -6,11 +6,44 @@ export type FacetDimension =
   | "country"
   | "varietal"
   | "vintage"
-  | "format";
+  | "format"
+  | "colour";
+
+/**
+ * The six colours the enrichment writes, in the order every wine list on
+ * earth prints them — light to dark, still before sweet. Alphabetical
+ * ordering ("dessert, fortified, red, rose…") reads as a database dump to
+ * anyone who has held a wine list, so colour is the one dimension that does
+ * not sort by label. Values are stored lowercase and unaccented; the labels
+ * carry the accent back.
+ */
+export const COLOUR_ORDER = [
+  "red",
+  "white",
+  "sparkling",
+  "rose",
+  "dessert",
+  "fortified",
+] as const;
+
+const COLOUR_LABELS: Record<string, string> = {
+  red: "Red",
+  white: "White",
+  sparkling: "Sparkling",
+  rose: "Rosé",
+  dessert: "Dessert",
+  fortified: "Fortified",
+};
+
+/** Title-cases anything the enrichment writes that isn't one of the six. */
+export function colourLabel(value: string): string {
+  return COLOUR_LABELS[normalize(value)] ?? value.charAt(0).toUpperCase() + value.slice(1);
+}
 
 export type CellarGroupBy = "producer" | "region" | "varietal" | "vintage";
 
 export type CellarFacets = {
+  colour?: string | null;
   producer?: string | null;
   region?: string | null;
   country?: string | null;
@@ -23,6 +56,8 @@ export type CellarFacets = {
 
 export type CellarFacetRow = {
   wine_id: string;
+  /** Optional: Atlas reuses this row shape and has no use for colour. */
+  colour?: string | null;
   producer: string;
   region: string | null;
   country: string | null;
@@ -44,7 +79,7 @@ export type CellarFacetGroup<T extends CellarFacetRow = CellarFacetRow> = {
   wines: T[];
 };
 
-const TEXT_DIMENSIONS = ["producer", "region", "country", "varietal"] as const;
+const TEXT_DIMENSIONS = ["colour", "producer", "region", "country", "varietal"] as const;
 
 export function applyFacets<T extends CellarFacetRow>(
   rows: readonly T[],
@@ -70,6 +105,7 @@ export function facetCounts<T extends CellarFacetRow>(
   facets: CellarFacets,
 ): FacetCounts {
   return {
+    colour: countDimension(applyFacets(rows, omitDimension(facets, "colour")), "colour"),
     producer: countDimension(applyFacets(rows, omitDimension(facets, "producer")), "producer"),
     region: countDimension(applyFacets(rows, omitDimension(facets, "region")), "region"),
     country: countDimension(applyFacets(rows, omitDimension(facets, "country")), "country"),
@@ -112,7 +148,7 @@ export function groupRows<T extends CellarFacetRow>(
     .sort((left, right) => compareGroups(left, right, groupBy));
 }
 
-function matchesText(value: string | null, expected: string | null | undefined) {
+function matchesText(value: string | null | undefined, expected: string | null | undefined) {
   if (!expected) return true;
   return value != null && normalize(value) === normalize(expected);
 }
@@ -142,7 +178,7 @@ function countDimension<T extends CellarFacetRow>(
     else {
       counts.set(key, {
         value: isUnknown ? UNKNOWN_FACET_VALUE : raw,
-        label: isUnknown ? "Unknown" : raw,
+        label: isUnknown ? "Unknown" : dimensionLabel(raw, dimension),
         count: 1,
         isUnknown,
       });
@@ -168,7 +204,22 @@ function compareCounts(left: FacetCount, right: FacetCount, dimension: FacetDime
   if (left.isUnknown !== right.isUnknown) return left.isUnknown ? 1 : -1;
   if (dimension === "vintage") return Number(right.value) - Number(left.value);
   if (dimension === "format") return Number(left.value) - Number(right.value);
+  if (dimension === "colour") {
+    const leftRank = colourRank(left.value);
+    const rightRank = colourRank(right.value);
+    if (leftRank !== rightRank) return leftRank - rightRank;
+  }
   return left.label.localeCompare(right.label, undefined, { sensitivity: "base" });
+}
+
+/** Unrecognised colours sort after the six known ones, then alphabetically. */
+function colourRank(value: string) {
+  const index = COLOUR_ORDER.indexOf(normalize(value) as (typeof COLOUR_ORDER)[number]);
+  return index === -1 ? COLOUR_ORDER.length : index;
+}
+
+function dimensionLabel(raw: string, dimension: FacetDimension) {
+  return dimension === "colour" ? colourLabel(raw) : raw;
 }
 
 function compareGroups(

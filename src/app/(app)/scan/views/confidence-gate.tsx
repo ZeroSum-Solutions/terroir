@@ -31,7 +31,7 @@ export function ConfidenceGateView({
   return (
     <section className="flex min-h-[60vh] items-center justify-center">
       <div className="w-full max-w-[480px] rounded-card card-surface p-xl text-center">
-        <div className="mx-auto mb-md flex h-14 w-14 items-center justify-center rounded-full bg-blush-wash text-accent">
+        <div className="mx-auto mb-md flex h-14 w-14 items-center justify-center rounded-full bg-risk-wash text-risk-ink">
           <AlertTriangle className="h-6 w-6" strokeWidth={1.75} />
         </div>
         <h2 className="font-serif text-[22px] text-ink">
@@ -42,14 +42,14 @@ export function ConfidenceGateView({
           <button
             type="button"
             onClick={onReviewResults}
-            className="flex h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-[38px]"
+            className="flex h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring md:h-[38px]"
           >
             Review AI results
           </button>
           <button
             type="button"
             onClick={onManualEntry}
-            className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-[38px]"
+            className="flex h-11 items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-wash focus-ring md:h-[38px]"
           >
             Enter manually
           </button>

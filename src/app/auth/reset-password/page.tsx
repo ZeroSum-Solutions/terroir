@@ -42,14 +42,14 @@ export default async function ResetPasswordPage({
   if (!data.user) redirect(loginUrl({ error: "link" }));
 
   const inputClassName =
-    "min-h-11 rounded-pill border border-hairline bg-surface px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/25";
+    "min-h-11 rounded-pill border border-rule bg-surface px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-accent focus-ring";
 
   return (
     <main className="dawn-gradient flex min-h-screen items-center justify-center px-md py-lg sm:px-lg sm:py-xl">
       <div className="glass w-full max-w-[420px] rounded-card p-lg sm:p-xl">
         <div className="mb-xl text-center">
           <div className="mb-sm font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink">
-            TERR<span className="text-accent">OIR</span>
+            TERR<span className="text-mark">OIR</span>
           </div>
           <h1 className="font-serif text-heading-sm leading-tight text-ink">
             Set new password
@@ -100,7 +100,7 @@ export default async function ResetPasswordPage({
               id="reset-password-error"
               role="alert"
               aria-live="assertive"
-              className="rounded-md border border-accent/30 bg-blush-wash p-md text-[13px] text-accent"
+              className="rounded-md border border-risk-ink/30 bg-risk-wash p-md text-[13px] text-risk-ink"
             >
               {error}
             </div>
