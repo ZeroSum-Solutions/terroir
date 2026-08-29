@@ -27,6 +27,7 @@
     "types:gen": "node scripts/generate-supabase-types.mjs",
     "types:check": "node scripts/check-types-drift.mjs",
     "downs:check": "node scripts/check-down-migrations.mjs",
+    "drill:restore": "node scripts/restore-drill.mjs",
     "manifest:check": "node scripts/check-migration-manifest.mjs",
     "atlas:geo": "tsx scripts/build-atlas-geo.ts",
     "supabase:seed:local": "node scripts/seed-local-supabase.mjs",

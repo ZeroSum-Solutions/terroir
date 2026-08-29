@@ -142,6 +142,35 @@ Do not download or expose the artifact during routine health checks. Record the
 run URL. TER-002 requires three consecutive successful runs, including at
 least one scheduled run.
 
+## Drill status — READ THIS FIRST
+
+**No restore drill has ever been recorded.** The health criterion at the top of
+this runbook ("the most recent disposable restore drill passed") has therefore
+never been satisfiable: `scripts/restore-drill.mjs` exists and is complete, but
+until now it was wired to nothing — no `package.json` script, no CI job — and
+the proof directory this runbook asks for
+(`~/Inbox/notes/terroir-backup-drills/`) does not exist on any machine checked.
+
+What that means in practice: the backup pipeline proves a dump is *readable*
+(`pg_restore --list`, `assert-dump-coverage.mjs`, size and manifest checks), and
+proves the artifact is *intact* (checksums, manifest, retention metadata). It has
+never proved a dump *restores into a working database*, because the step that
+would prove it has never run.
+
+The drill is now reachable as `pnpm run drill:restore`, and its production-safety
+guard has tests (`src/test/contracts/restore-drill.test.ts`) — the guard is what
+stops a drill from pointing at anything but loopback, and it previously had no
+coverage at all. Running an actual drill still requires two things this repo
+deliberately does not hold: a downloaded backup artifact and the offline age
+identity. Until someone runs one and files the proof directory, treat "backups
+are restorable" as **unverified**, not as a property this pipeline has
+demonstrated.
+
+Noted while adding the tests, not changed: `assertScratchRestoreTarget`'s
+`PRODUCTION_HOST_FRAGMENTS` loop is unreachable — any production hostname is
+already rejected by the loopback allow-list above it. It is harmless
+defence-in-depth, and is left alone deliberately.
+
 ## Disposable local restore drill
 
 Create a proof directory under `~/Inbox/notes/terroir-backup-drills/`. Keep
