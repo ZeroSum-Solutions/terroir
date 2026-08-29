@@ -217,7 +217,7 @@ export default function CellarConfigPage() {
       {error && (
         <div
           role="alert"
-          className="mb-md rounded-md border border-accent/30 bg-blush-wash px-md py-sm text-[13px] text-accent"
+          className="mb-md rounded-md border border-risk-ink/30 bg-risk-wash px-md py-sm text-[13px] text-risk-ink"
         >
           {error}
         </div>
@@ -274,7 +274,7 @@ export default function CellarConfigPage() {
           onClick={addSection}
           disabled={busy || !newName.trim()}
           className={cn(
-            "flex h-[44px] shrink-0 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors",
+            "flex h-[44px] shrink-0 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink transition-colors",
             "hover:bg-primary-hover disabled:opacity-60 focus-ring",
           )}
         >
@@ -320,7 +320,7 @@ export default function CellarConfigPage() {
                 type="button"
                 onClick={confirmDelete}
                 disabled={busy}
-                className="min-h-11 flex-1 rounded-pill bg-primary px-md py-sm text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60 focus-ring"
+                className="min-h-11 flex-1 rounded-pill bg-primary px-md py-sm text-[14px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-60 focus-ring"
               >
                 Delete
               </button>

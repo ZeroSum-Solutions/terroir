@@ -71,7 +71,7 @@ export default async function OpenBottlesPage() {
           action={
             <Link
               href="/cellar"
-              className="inline-flex h-11 items-center rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover"
+              className="inline-flex h-11 items-center rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover"
             >
               Return to cellar
             </Link>

@@ -347,7 +347,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
               <div className="border-b border-hairline px-lg py-sm">
                 <p
                   role="alert"
-                  className="rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[12px] text-accent"
+                  className="rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[12px] text-risk-ink"
                 >
                   {catalogError}
                 </p>
@@ -482,12 +482,12 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                         <span
                           className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-xs border-2 transition-colors ${
                             checked
-                              ? "border-accent bg-primary"
-                              : "border-hairline bg-surface"
+                              ? "border-primary bg-primary"
+                              : "border-edge bg-surface"
                           }`}
                         >
                           {checked && (
-                            <Check className="h-3 w-3 text-white" strokeWidth={3} aria-hidden="true" />
+                            <Check className="h-3 w-3 text-seal-ink" strokeWidth={3} aria-hidden="true" />
                           )}
                         </span>
                         <input
@@ -570,7 +570,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
               </div>
             )}
             {suggestError && (
-              <p role="alert" className="mt-sm text-[11px] text-accent">
+              <p role="alert" className="mt-sm text-[11px] text-risk-ink">
                 {suggestError}
               </p>
             )}
@@ -644,7 +644,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 type="button"
                 onClick={handleAdd}
                 disabled={adding || selectedSectionIds.size === 0}
-                className="min-h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-60"
+                className="min-h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-60"
               >
                 {adding ? "Adding..." : `Add to ${selectedCount > 1 ? `${selectedCount} sections` : "list"}`}
               </button>

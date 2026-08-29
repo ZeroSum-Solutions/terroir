@@ -136,7 +136,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
             type="button"
             disabled={!customValue}
             onClick={submitCustom}
-            className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-40"
+            className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-40"
           >
             Pour
           </button>

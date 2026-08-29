@@ -249,7 +249,7 @@ export function PricingTargetOverride({
           {error && (
             <p
               role="alert"
-              className="mt-xs text-[11px] text-accent"
+              className="mt-xs text-[11px] text-risk-ink"
             >
               {error}
             </p>

@@ -1408,14 +1408,14 @@ export function SessionStep({
   if (!progress && loadError) {
     return (
       <div className="rounded-card card-surface p-lg">
-        <p role="alert" className="flex items-start gap-xs text-[14px] text-accent">
+        <p role="alert" className="flex items-start gap-xs text-[14px] text-risk-ink">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {loadError}
         </p>
         <button
           type="button"
           onClick={() => void refresh()}
-          className="mt-md min-h-11 rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+          className="mt-md min-h-11 rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
         >
           Retry
         </button>
@@ -1510,7 +1510,7 @@ export function SessionStep({
       </div>
 
       {actionError && (
-        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
+        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-risk-ink">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {actionError}
         </p>
@@ -1527,7 +1527,7 @@ export function SessionStep({
               type="button"
               disabled={bulkResolving}
               onClick={() => void bulkResolve("include")}
-              className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
               {bulkResolving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
               Include all with a cost
@@ -1583,7 +1583,7 @@ export function SessionStep({
                       void resolveRow(batchId, row.id, "include", manualUnitCost);
                     }}
                     disabled={row.cost_status === "missing" && !manualCostDrafts[row.id]}
-                    className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Include anyway
                   </button>
@@ -1607,7 +1607,7 @@ export function SessionStep({
             type="button"
             disabled={applying}
             onClick={() => void applyAllChunks()}
-            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
           >
             {applying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {applying

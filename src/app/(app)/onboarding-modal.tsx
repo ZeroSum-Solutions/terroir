@@ -63,7 +63,7 @@ export function OnboardingModal({
             type="button"
             onClick={submit}
             disabled={saving || !name.trim()}
-            className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-ring disabled:opacity-60"
+            className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink transition-colors hover:bg-primary-hover focus-ring disabled:opacity-60"
           >
             {saving ? "Saving..." : "Continue"}
           </button>

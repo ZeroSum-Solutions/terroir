@@ -341,7 +341,7 @@ export function CellarShell({
             <button
               type="button"
               onClick={() => setReconcileOpen(true)}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill bg-primary px-md text-[12.5px] font-medium text-white hover:bg-primary-hover focus-ring"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill bg-primary px-md text-[12.5px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               Reconcile {reconcileItems.length} open bottle
               {reconcileItems.length === 1 ? "" : "s"} →
@@ -651,7 +651,7 @@ function ViewToggleButton({
       aria-label={`${label} view`}
       className={cn(
         "flex h-11 w-11 items-center justify-center text-ink-soft transition-colors",
-        active && "bg-ink text-beige",
+        active && "bg-ink text-on-inverse",
         !active && "hover:bg-surface/60 focus-ring",
       )}
     >

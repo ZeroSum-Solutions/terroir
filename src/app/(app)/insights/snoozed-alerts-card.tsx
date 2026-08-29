@@ -197,7 +197,7 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
       )}
 
       {errorMsg && (
-        <p role="alert" className="mt-sm text-[12px] text-accent">
+        <p role="alert" className="mt-sm text-[12px] text-risk-ink">
           {errorMsg}
         </p>
       )}

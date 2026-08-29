@@ -187,7 +187,7 @@ export function BottleResultsView({
 
       {lowConfidence && (
         <div className="mb-md flex items-start gap-sm rounded-card border border-accent/20 bg-blush-wash/60 px-md py-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-accent" strokeWidth={2} />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-risk-ink" strokeWidth={2} />
           <div className="text-[13px] text-ink">
             <span className="font-medium">
               Low AI match confidence ({Math.round(active.confidence * 100)}%).
@@ -224,7 +224,7 @@ export function BottleResultsView({
                   className={cn(
                     "flex min-h-11 items-center gap-xs rounded-pill border px-sm py-xs text-[13px] font-medium transition-colors focus-ring",
                     i === activeIndex
-                      ? "border-ink bg-ink text-beige"
+                      ? "border-ink bg-ink text-on-inverse"
                       : "border-hairline bg-surface text-ink hover:bg-bridge-surface",
                   )}
                 >
@@ -373,7 +373,7 @@ export function BottleResultsView({
           type="button"
           onClick={stage === "review" ? handleConfirm : handleSaveCorrected}
           disabled={isSaving || !canCommit}
-          className="flex h-12 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-50 md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-50 md:h-[38px]"
         >
           {isSaving ? (
             <>Saving...</>

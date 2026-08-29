@@ -100,7 +100,7 @@ export default async function ResetPasswordPage({
               id="reset-password-error"
               role="alert"
               aria-live="assertive"
-              className="rounded-md border border-accent/30 bg-blush-wash p-md text-[13px] text-accent"
+              className="rounded-md border border-risk-ink/30 bg-risk-wash p-md text-[13px] text-risk-ink"
             >
               {error}
             </div>

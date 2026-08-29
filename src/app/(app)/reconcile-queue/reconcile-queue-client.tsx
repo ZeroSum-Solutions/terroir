@@ -181,7 +181,7 @@ function BulkRail({ busy, selectedCount, readyCount, allReadySelected, accept, t
         {allReadySelected ? "Clear actionable" : `Select actionable (${readyCount})`}
       </button>
       <span className="text-[12px] tabular text-grey">{selectedCount} selected</span>
-      <button type="button" onClick={accept} disabled={busy || selectedCount === 0} className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-45">
+      <button type="button" onClick={accept} disabled={busy || selectedCount === 0} className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-45">
         {busy ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={1.75} aria-hidden /> : <Check className="h-4 w-4" strokeWidth={2} aria-hidden />}
         Accept {selectedCount} item{selectedCount === 1 ? "" : "s"}
       </button>
@@ -194,7 +194,7 @@ function QueueLoading() {
 }
 
 function QueueError({ message, retry }: { message: string; retry: () => void }) {
-  return <div role="alert" className="rounded-md border border-accent/30 bg-blush-wash p-md text-[13px] text-accent"><p>{message}</p><button type="button" onClick={retry} className="mt-sm h-11 rounded-pill border border-accent/30 bg-surface px-md font-medium hover:bg-bridge-surface focus-ring">Try again</button></div>;
+  return <div role="alert" className="rounded-md border border-risk-ink/30 bg-risk-wash p-md text-[13px] text-risk-ink"><p>{message}</p><button type="button" onClick={retry} className="mt-sm h-11 rounded-pill border border-edge bg-surface px-md font-medium hover:bg-bridge-surface focus-ring">Try again</button></div>;
 }
 
 function QueueEmpty() {
@@ -202,7 +202,7 @@ function QueueEmpty() {
 }
 
 function StatusBanner({ message, error }: { message: string | null; error: string | null }) {
-  return <div role={error ? "alert" : "status"} className={`mb-md rounded-md border px-md py-sm text-[13px] ${error ? "border-accent/30 bg-blush-wash text-accent" : "border-sage-ink/30 bg-sage-wash text-sage-ink"}`}>{error ?? message}</div>;
+  return <div role={error ? "alert" : "status"} className={`mb-md rounded-md border px-md py-sm text-[13px] ${error ? "border-risk-ink/30 bg-risk-wash text-risk-ink" : "border-sage-ink/30 bg-sage-wash text-sage-ink"}`}>{error ?? message}</div>;
 }
 
 function toggleId(current: Set<string>, id: string) {

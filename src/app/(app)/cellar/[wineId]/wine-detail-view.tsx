@@ -41,12 +41,12 @@ export type WineDetailViewProps = {
 };
 
 // The hero's candlelight: a warm pool behind the bottle that reads as a lit
-// alcove on the dark room's lacquer and as low sun on the light room's cream.
-// Written against the theme variables so it retints with the mode rather than
-// needing a second, hardcoded palette.
+// alcove. It is drawn with the `mark` — champagne in Nocturne, claret in
+// Daylight — because that is the one warm value in the system. `accent` is
+// bone in the dark room and would light the alcove in white.
 const HERO_GLOW = {
   backgroundImage:
-    "radial-gradient(60% 55% at 22% 42%, color-mix(in oklab, var(--t-accent) 22%, transparent) 0%, transparent 70%)",
+    "radial-gradient(60% 55% at 22% 42%, color-mix(in oklab, var(--t-mark) 22%, transparent) 0%, transparent 70%)",
 } as const;
 
 export function WineDetailView({

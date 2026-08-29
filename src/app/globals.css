@@ -407,7 +407,10 @@ body {
  * ratio depends on whatever is composited behind it and cannot be guaranteed.
  */
 .focus-ring:focus-visible,
-.focus-ring:has(:focus-visible) {
+/* A wrapper (a label around a select, a bordered row around an input) shows
+   the ring for the control it owns — but stands down when the focused control
+   carries its own .focus-ring, so a nested pair never draws two outlines. */
+.focus-ring:has(:focus-visible):not(:has(.focus-ring:focus-visible)) {
   outline: 2px solid var(--t-focus);
   outline-offset: 2px;
 }

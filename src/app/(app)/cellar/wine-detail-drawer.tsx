@@ -556,7 +556,7 @@ export function WineDetailDrawer({
             {errorMsg && pendingDirection === null && (
               <div
                 role="alert"
-                className="mt-md rounded-md border border-accent/30 bg-blush-wash px-md py-sm text-[13px] text-accent"
+                className="mt-md rounded-md border border-risk-ink/30 bg-risk-wash px-md py-sm text-[13px] text-risk-ink"
               >
                 {errorMsg}
               </div>
@@ -613,7 +613,7 @@ export function WineDetailDrawer({
                   className={cn(
                     "flex h-[48px] items-center justify-center gap-xs rounded-pill border text-[14px] font-medium transition-colors disabled:opacity-60",
                     row.is_eightysixed
-                      ? "border-accent bg-primary text-white hover:bg-primary-hover"
+                      ? "border-accent bg-primary text-seal-ink hover:bg-primary-hover"
                       : "border-edge bg-surface text-ink hover:bg-bridge-surface",
                   )}
                 >
@@ -690,7 +690,7 @@ export function WineDetailDrawer({
                           type="button"
                           disabled={busy}
                           onClick={() => doMerge(dup.wine_id)}
-                          className="h-11 flex-1 rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+                          className="h-11 flex-1 rounded-pill bg-primary text-[13px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-60"
                         >
                           {busy ? "Merging..." : "Confirm merge"}
                         </button>
@@ -735,7 +735,7 @@ export function WineDetailDrawer({
                           type="button"
                           disabled={busy}
                           onClick={doDelete}
-                          className="h-11 flex-1 rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+                          className="h-11 flex-1 rounded-pill bg-primary text-[13px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-60"
                         >
                           {busy ? "Deleting..." : "Delete"}
                         </button>
@@ -845,7 +845,7 @@ export function WineDetailDrawer({
                       "flex h-[52px] flex-1 items-center justify-center gap-xs rounded-pill text-[14px] font-medium transition-colors disabled:opacity-60",
                       canPour
                         ? "border border-edge bg-surface text-ink hover:bg-bridge-surface"
-                        : "bg-primary text-white hover:bg-primary-hover",
+                        : "bg-primary text-seal-ink hover:bg-primary-hover",
                     )}
                   >
                     <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -859,7 +859,7 @@ export function WineDetailDrawer({
                       disabled={busy || outOfStock}
                       onClick={() => row.glass_pour_ml && doPour(row.glass_pour_ml)}
                       className={cn(
-                        "h-[52px] flex-1 rounded-pill bg-primary text-[15px] font-medium text-white transition-colors",
+                        "h-[52px] flex-1 rounded-pill bg-primary text-[15px] font-medium text-seal-ink transition-colors",
                         "hover:bg-primary-hover disabled:opacity-60",
                       )}
                     >

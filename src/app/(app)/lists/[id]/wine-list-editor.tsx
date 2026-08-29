@@ -112,7 +112,7 @@ function ListActions({
     "inline-flex min-h-11 md:px-md",
   );
   const publishClassName = cn(
-    "items-center gap-xs rounded-pill bg-primary px-sm text-[13px] font-medium text-white hover:bg-primary-hover focus-ring",
+    "items-center gap-xs rounded-pill bg-primary px-sm text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring",
     "inline-flex min-h-11 md:px-md",
   );
 
@@ -880,7 +880,7 @@ export function WineListEditor({
               type="button"
               onClick={addSection}
               disabled={addingSection}
-              className="mt-md min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-50"
+              className="mt-md min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-50"
             >
               Add first section
             </button>
@@ -1048,7 +1048,7 @@ export function WineListEditor({
                 <button
                   type="button"
                   onClick={() => setShowAddWine(true)}
-                  className="flex min-h-11 min-w-11 items-center gap-xs rounded-pill bg-primary px-sm text-[13px] font-medium text-white hover:bg-primary-hover focus-ring"
+                  className="flex min-h-11 min-w-11 items-center gap-xs rounded-pill bg-primary px-sm text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
                 >
                   <Plus className="h-3.5 w-3.5" strokeWidth={2} />
                   <span className="hidden sm:inline">Add wine</span>
@@ -1175,7 +1175,7 @@ export function WineListEditor({
                   type="button"
                   onClick={confirmDeleteItem}
                   disabled={deletingItem}
-                  className="rounded-pill bg-primary px-md py-1.5 text-[13px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-60"
+                  className="rounded-pill bg-primary px-md py-1.5 text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-60"
                 >
                   Remove wine
                 </button>
@@ -1203,7 +1203,7 @@ export function WineListEditor({
         {errorToast && (
           <p
             role="alert"
-            className="rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"
+            className="rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
           >
             {errorToast}
           </p>
@@ -1234,7 +1234,7 @@ export function WineListEditor({
 
       {/* Error toast for failed drag-and-drop reorders */}
       {errorToast && deleteTarget === null && (
-        <div className="fixed bottom-lg left-1/2 z-[var(--z-dialog)] -translate-x-1/2 rounded-pill bg-primary px-lg py-sm text-[13px] font-medium text-white animate-in fade-in slide-in-from-bottom-2">
+        <div className="fixed bottom-lg left-1/2 z-[var(--z-dialog)] -translate-x-1/2 rounded-pill bg-primary px-lg py-sm text-[13px] font-medium text-seal-ink animate-in fade-in slide-in-from-bottom-2">
           {errorToast}
         </div>
       )}

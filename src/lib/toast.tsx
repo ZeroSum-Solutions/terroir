@@ -84,10 +84,10 @@ function ToastContainer({ items }: { items: ToastItem[] }) {
               )}
             >
               {t.tone === "success" && (
-                <Check className="h-4 w-4 text-sage-ink shrink-0" strokeWidth={2.25} />
+                <Check className="h-4 w-4 text-ready-ink shrink-0" strokeWidth={2.25} />
               )}
               {t.tone === "error" && (
-                <AlertTriangle className="h-4 w-4 text-primary shrink-0" strokeWidth={2.25} />
+                <AlertTriangle className="h-4 w-4 text-risk-ink shrink-0" strokeWidth={2.25} />
               )}
               <span className="flex-1">{t.text}</span>
             </div>

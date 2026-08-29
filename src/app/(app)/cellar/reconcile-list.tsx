@@ -93,7 +93,7 @@ export function ReconcileList({
       {error && (
         <div
           role="alert"
-          className="mb-md rounded-md border border-accent/30 bg-blush-wash px-md py-sm text-[13px] text-accent"
+          className="mb-md rounded-md border border-risk-ink/30 bg-risk-wash px-md py-sm text-[13px] text-risk-ink"
         >
           {error}
         </div>
@@ -121,7 +121,7 @@ export function ReconcileList({
           className={cn(
             "h-[48px] w-full rounded-pill font-medium transition-colors",
             changedCount > 0 && !saving
-              ? "bg-primary text-white hover:bg-primary-hover"
+              ? "bg-primary text-seal-ink hover:bg-primary-hover"
               : "bg-bridge-surface text-grey",
           )}
         >
@@ -269,7 +269,7 @@ function ReconcileRow({
               className={cn(
                 "h-[44px] rounded-pill border text-[12px] font-medium transition-colors",
                 isActive
-                  ? "border-accent bg-primary text-white"
+                  ? "border-accent bg-primary text-seal-ink"
                   : "border-hairline bg-surface text-ink hover:bg-bridge-surface",
               )}
             >

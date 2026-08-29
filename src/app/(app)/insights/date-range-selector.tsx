@@ -136,7 +136,7 @@ export default function DateRangeSelector() {
               className={
                 "min-h-11 min-w-11 rounded-pill border px-sm py-2xs text-[12px] font-medium transition-colors " +
                 (isActive
-                  ? "border-ink bg-ink text-beige"
+                  ? "border-ink bg-ink text-on-inverse"
                   : "border-edge text-ink hover:bg-bridge-surface")
               }
             >
@@ -184,7 +184,7 @@ export default function DateRangeSelector() {
               }
             }}
             disabled={!canApplyCustom}
-            className="min-h-11 rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+            className="min-h-11 rounded-pill bg-primary px-sm text-[12px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
           >
             Apply
           </button>

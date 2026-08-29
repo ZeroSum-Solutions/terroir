@@ -382,7 +382,7 @@ export function WineListLanding({
           <button
             type="button"
             onClick={() => setShowModal(true)}
-            className="flex h-11 items-center gap-sm self-start rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring md:self-auto"
+            className="flex h-11 items-center gap-sm self-start rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring md:self-auto"
           >
             <Plus className="h-4 w-4" strokeWidth={2} />
             New wine list
@@ -393,7 +393,7 @@ export function WineListLanding({
       {deleteError && deleteTarget === null && (
         <div
           role="alert"
-          className="mb-md flex items-start justify-between gap-sm rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"
+          className="mb-md flex items-start justify-between gap-sm rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
         >
           <span>{deleteError}</span>
           <button
@@ -416,7 +416,7 @@ export function WineListLanding({
             <button
               type="button"
               onClick={() => setShowModal(true)}
-              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               <Plus className="h-4 w-4" strokeWidth={2} />
               New wine list
@@ -519,7 +519,7 @@ export function WineListLanding({
         {deleteError && (
           <p
             role="alert"
-            className="rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"
+            className="rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
           >
             {deleteError}
           </p>
@@ -596,7 +596,7 @@ function CreateListModal({
         {error && (
           <p
             role="alert"
-            className="mt-sm rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"
+            className="mt-sm rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
           >
             {error}
           </p>
@@ -613,7 +613,7 @@ function CreateListModal({
             type="button"
             onClick={onCreate}
             disabled={creating}
-            className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-60"
+            className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-60"
           >
             {creating ? "Creating..." : "Create"}
           </button>

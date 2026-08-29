@@ -223,7 +223,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                 />
               </div>
               {slugError && !unpublishOpen && (
-                <p className="mt-xs text-[12px] text-accent" role="alert">
+                <p className="mt-xs text-[12px] text-risk-ink" role="alert">
                   {slugError}
                 </p>
               )}
@@ -241,7 +241,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                 type="button"
                 onClick={publish}
                 disabled={publishing}
-                className="h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-60"
+                className="h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-60"
               >
                 {publishing ? "Publishing..." : "Publish"}
               </button>
@@ -315,7 +315,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                 </button>
               </div>
               {slugError && !unpublishOpen && (
-                <p className="mt-xs text-[12px] text-accent" role="alert">
+                <p className="mt-xs text-[12px] text-risk-ink" role="alert">
                   {slugError}
                 </p>
               )}
@@ -350,7 +350,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                 <button
                   type="button"
                   onClick={onClose}
-                  className="h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+                  className="h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
                 >
                   Done
                 </button>
@@ -372,7 +372,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
         {slugError && (
           <p
             role="alert"
-            className="rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"
+            className="rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
           >
             {slugError}
           </p>

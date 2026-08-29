@@ -322,7 +322,7 @@ export function EditMetadataModal({
         {errorMsg && (
           <div
             role="alert"
-            className="rounded-md border border-accent/30 bg-blush-wash px-md py-sm text-[13px] text-accent"
+            className="rounded-md border border-risk-ink/30 bg-risk-wash px-md py-sm text-[13px] text-risk-ink"
           >
             {errorMsg}
           </div>
@@ -370,7 +370,7 @@ export function EditMetadataModal({
           onClick={handleSave}
           disabled={busy || !producer.trim() || !name.trim()}
           className={cn(
-            "flex h-11 items-center gap-sm rounded-pill px-md text-[13px] font-medium text-white transition-colors",
+            "flex h-11 items-center gap-sm rounded-pill px-md text-[13px] font-medium text-seal-ink transition-colors",
             dirty
               ? "bg-primary hover:bg-primary-hover"
               : "bg-primary/50",

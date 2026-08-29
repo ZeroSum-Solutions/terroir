@@ -375,7 +375,7 @@ export default function ScanBottlePage() {
           <button
             type="button"
             onClick={handleNewSession}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
           >
             <Camera className="h-4 w-4" strokeWidth={2} />
             Start new session
@@ -438,7 +438,7 @@ export default function ScanBottlePage() {
             <button
               type="button"
               onClick={() => setPhase("manual")}
-              className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+              className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               <Keyboard className="h-4 w-4" strokeWidth={2} />
               Enter code
@@ -475,7 +475,7 @@ export default function ScanBottlePage() {
             <button
               type="submit"
               disabled={!manualCode.trim()}
-              className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-50"
+              className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-50"
             >
               <Search className="h-4 w-4" strokeWidth={2} />
               Look up wine
@@ -559,7 +559,7 @@ export default function ScanBottlePage() {
                 setSection("");
                 setBinLocation("");
               }}
-              className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+              className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               <Check className="h-4 w-4" strokeWidth={2} />
               Confirm
@@ -704,7 +704,7 @@ export default function ScanBottlePage() {
                 <button
                   type="submit"
                   disabled={!section.trim() || !binLocation.trim() || confirming}
-                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-50"
+                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-50"
                 >
                   <Check className="h-4 w-4" strokeWidth={2} />
                   {confirming ? "Saving..." : "Save location"}
@@ -742,7 +742,7 @@ export default function ScanBottlePage() {
               <button
                 type="button"
                 onClick={handleScanAgain}
-                className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary px-xl text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+                className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary px-xl text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
               >
                 <Camera className="h-4 w-4" strokeWidth={2} />
                 Scan another bottle
@@ -786,7 +786,7 @@ export default function ScanBottlePage() {
               <button
                 type="button"
                 onClick={handleScanAgain}
-                className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+                className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
               >
                 <Camera className="h-4 w-4" strokeWidth={2} />
                 Try again

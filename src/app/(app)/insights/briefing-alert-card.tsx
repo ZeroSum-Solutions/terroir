@@ -118,7 +118,7 @@ export function BriefingAlertCard({ alert }: { alert: DrinkWindowAlert }) {
           <div className="mt-md flex flex-wrap items-center gap-xs">
             <Link
               href={metricHref("wine", alert.wine_id)}
-              className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring"
+              className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               View {alert.bottle_count} bottle{alert.bottle_count === 1 ? "" : "s"}
               <ChevronRight className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -137,7 +137,7 @@ export function BriefingAlertCard({ alert }: { alert: DrinkWindowAlert }) {
           </div>
 
           {errorMsg && (
-            <p role="alert" className="mt-sm text-[12px] text-accent">
+            <p role="alert" className="mt-sm text-[12px] text-risk-ink">
               {errorMsg}
             </p>
           )}

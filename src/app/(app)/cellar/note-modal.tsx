@@ -64,7 +64,7 @@ export function NoteModal({
         {error && (
           <p
             role="alert"
-            className="mt-sm rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"
+            className="mt-sm rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
           >
             {error}
           </p>

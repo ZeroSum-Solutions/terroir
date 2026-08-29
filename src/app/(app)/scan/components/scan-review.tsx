@@ -352,7 +352,7 @@ export function ScanReview({
                 type="button"
                 onClick={handleCommit}
                 disabled={isCommitting || commitOk}
-                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
+                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
               >
                 {isCommitting ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : null}
                 <span>{isCommitting ? "Committing..." : commitOk ? "Committed ✓" : "Commit to Inventory"}</span>

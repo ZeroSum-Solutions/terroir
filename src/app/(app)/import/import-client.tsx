@@ -998,7 +998,7 @@ export function ImportClient() {
       {isDragging && (
         <div
           aria-hidden="true"
-          className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center bg-ink/60 p-lg"
+          className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center bg-scrim p-lg"
         >
           <div className="rounded-card border-2 border-dashed border-beige bg-surface px-xl py-lg text-center">
             <p className="font-serif text-[20px] text-ink">Drop your cellar file</p>
@@ -1193,7 +1193,7 @@ function UploadStep({
           className="sr-only"
           onChange={(event) => setFile(event.target.files?.[0] ?? null)}
         />
-        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-seal-ink">
           <Upload className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
         </span>
         <span className="text-[14px] font-medium text-ink">
@@ -1213,7 +1213,7 @@ function UploadStep({
       )}
 
       {error && (
-        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
+        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-risk-ink">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {error}
         </p>
@@ -1248,7 +1248,7 @@ function UploadStep({
         // that ordering staying true.
         disabled={!file || converting || previewing || previewUnitsStatus === "pending"}
         onClick={onPreview}
-        className="mt-lg flex min-h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-lg flex min-h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
       >
         {previewing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
         {previewing ? "Reading file…" : "Preview import"}
@@ -1652,7 +1652,7 @@ export function PreviewStep({
           </ul>
           {hiddenCount > 0 && (
             <>
-              <p role="alert" className="mt-2xs flex items-start gap-xs text-caption text-accent">
+              <p role="alert" className="mt-2xs flex items-start gap-xs text-caption text-risk-ink">
                 <AlertTriangle className="mt-[2px] h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 {hiddenCount} more row(s) with errors are not shown yet.
               </p>
@@ -1764,7 +1764,7 @@ export function PreviewStep({
           (blocksConfirmButton no longer treats either code as terminal);
           recovery for multiple_live_batches is under Recent imports. */}
       {error && (
-        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
+        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-risk-ink">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {error}
         </p>
@@ -1784,7 +1784,7 @@ export function PreviewStep({
             type="button"
             disabled={!canConfirm || confirming}
             onClick={onConfirm}
-            className="flex min-h-11 flex-1 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-11 flex-1 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
           >
             {confirming ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {confirming ? "Creating import…" : hasFailedChunk ? "Retry upload" : "Confirm import"}
@@ -2171,7 +2171,7 @@ export function BatchStep({
         <button
           type="button"
           onClick={onDone}
-          className="mt-lg flex min-h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-ring"
+          className="mt-lg flex min-h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink transition-colors hover:bg-primary-hover focus-ring"
         >
           Done
         </button>
@@ -2194,7 +2194,7 @@ export function BatchStep({
       </dl>
 
       {actionError && (
-        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-accent">
+        <p role="alert" className="mt-md flex items-start gap-xs text-[13px] text-risk-ink">
           <AlertTriangle className="mt-[2px] h-4 w-4 shrink-0" aria-hidden="true" />
           {actionError}
         </p>
@@ -2235,7 +2235,7 @@ export function BatchStep({
                       void resolveRow(row.id, "include", manualUnitCost);
                     }}
                     disabled={row.cost_status === "missing" && !manualCostDrafts[row.id]}
-                    className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Include anyway
                   </button>
@@ -2286,7 +2286,7 @@ export function BatchStep({
             type="button"
             disabled={applying}
             onClick={applyAll}
-            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
           >
             {applying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {applying ? `Applying… (${appliedCount} of ${batch.batch.total_rows})` : `Apply ${eligibleNotApplied.length} row(s)`}

@@ -17,7 +17,7 @@ export function ErrorView({ mode, message, onRetry, onNewPhoto, hasFile, onManua
   return (
     <section className="flex min-h-[60vh] items-center justify-center">
       <div role="alert" className="w-full max-w-[480px] rounded-card card-surface p-xl text-center">
-        <div className="mx-auto mb-md flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white">
+        <div className="mx-auto mb-md flex h-14 w-14 items-center justify-center rounded-full bg-primary text-seal-ink">
           <AlertTriangle className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
         </div>
         <h2 className="font-serif text-[22px] text-ink">
@@ -29,7 +29,7 @@ export function ErrorView({ mode, message, onRetry, onNewPhoto, hasFile, onManua
             <button
               type="button"
               onClick={onRetry}
-              className="flex h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+              className="flex h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               <RotateCw className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               {isBottle ? "Retry label scan" : "Retry invoice scan"}

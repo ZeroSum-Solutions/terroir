@@ -19,12 +19,22 @@
  *                 solids, window ramp, card highlight) is implementation, not
  *                 contract, and is left alone.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const design = readFileSync(join(root, "DESIGN.md"), "utf8");
+
+function walk(dir, out = []) {
+  for (const entry of readdirSync(dir)) {
+    if (entry === "node_modules" || entry === ".next") continue;
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) walk(full, out);
+    else if (/\.(tsx?|css)$/.test(entry)) out.push(full);
+  }
+  return out;
+}
 const css = readFileSync(join(root, "src/app/globals.css"), "utf8");
 
 const failures = [];
@@ -258,6 +268,28 @@ for (const [name, value] of Object.entries(scalars("motion"))) {
   const actual = key.startsWith("--ease-") ? theme[key] : rootAll[key];
   if (norm(actual) !== norm(value)) {
     fail(`motion: ${key} is ${actual ?? "(absent)"}, DESIGN.md says ${value}`);
+  }
+}
+
+/* ── 6. No component may reference a runtime variable that is gone ─── */
+
+/**
+ * `var(--t-hairline)` in an inline style does not error when the variable is
+ * removed — the declaration simply resolves to nothing and the element renders
+ * unstyled. That is how a whole price band went invisible in this migration
+ * without a single failing test.
+ */
+const declared = new Set([...Object.keys(light), ...Object.keys(dark)]);
+for (const file of walk(join(root, "src"))) {
+  const text = readFileSync(file, "utf8");
+  for (const m of text.matchAll(/var\(\s*(--t-[a-z0-9-]+)\s*[,)]/gi)) {
+    if (!declared.has(m[1])) {
+      const line = text.slice(0, m.index).split("\n").length;
+      fail(
+        `${relative(root, file)}:${line} uses var(${m[1]}), which globals.css ` +
+          "no longer declares — the declaration will silently resolve to nothing",
+      );
+    }
   }
 }
 

@@ -257,7 +257,7 @@ export function TeamActions({
             <button
               type="button"
               onClick={openInvite}
-              className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring"
+              className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               <Link2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               Create invite link
@@ -270,7 +270,7 @@ export function TeamActions({
           pendingInvitationRevocation === null && (
           <div
             role="alert"
-            className="mb-sm flex items-start justify-between gap-sm rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"
+            className="mb-sm flex items-start justify-between gap-sm rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
           >
             <span>{memberActionError}</span>
             <IconButton
@@ -293,7 +293,7 @@ export function TeamActions({
                 <button
                   type="button"
                   onClick={openInvite}
-                  className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring"
+                  className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
                 >
                   <Link2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                   Create invite link
@@ -508,7 +508,7 @@ export function TeamActions({
         {memberActionError && (
           <p
             role="alert"
-            className="rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"
+            className="rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
           >
             {memberActionError}
           </p>
@@ -531,7 +531,7 @@ export function TeamActions({
         {memberActionError && (
           <p
             role="alert"
-            className="rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"
+            className="rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
           >
             {memberActionError}
           </p>
@@ -652,7 +652,7 @@ function InviteModal({
             {error && (
               <p
                 role="alert"
-                className="mt-md rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"
+                className="mt-md rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
               >
                 {error}
               </p>
@@ -670,7 +670,7 @@ function InviteModal({
                 type="button"
                 onClick={onCreate}
                 disabled={creating || inviteEmail.trim().length === 0}
-                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-60"
+                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-60"
               >
                 {creating && (
                   <Loader2
@@ -700,7 +700,7 @@ function InviteModal({
               <button
                 type="button"
                 onClick={onCopy}
-                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
               >
                 {copied ? (
                   <Check className="h-4 w-4" strokeWidth={2} />

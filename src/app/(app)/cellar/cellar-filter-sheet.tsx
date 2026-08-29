@@ -203,7 +203,7 @@ export function CellarFilterSheet({
           <button
             type="button"
             onClick={handleApply}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill bg-primary text-[13px] font-medium text-white hover:bg-primary-hover focus-ring"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill bg-primary text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
           >
             Apply
           </button>

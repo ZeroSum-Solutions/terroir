@@ -189,7 +189,7 @@ export default async function LoginPage({
                   aria-current={loginMode === value ? "page" : undefined}
                   className={`${choiceClassName} ${
                     loginMode === value
-                      ? "bg-primary text-white"
+                      ? "bg-primary text-seal-ink"
                       : "text-grey hover:bg-surface hover:text-ink"
                   }`}
                 >
@@ -311,7 +311,7 @@ function ErrorMessage({ error }: { error?: string }) {
       id="login-error"
       role="alert"
       aria-live="assertive"
-      className="rounded-md border border-accent/30 bg-blush-wash p-md text-[13px] text-accent"
+      className="rounded-md border border-risk-ink/30 bg-risk-wash p-md text-[13px] text-risk-ink"
     >
       {error}
     </div>

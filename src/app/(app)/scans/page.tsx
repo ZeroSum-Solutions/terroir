@@ -66,7 +66,7 @@ function statusBadge(status: string) {
     case "processing":
       return "bg-powder-wash text-powder-ink";
     case "failed":
-      return "bg-primary text-white";
+      return "bg-primary text-seal-ink";
     default:
       return "bg-bridge-surface text-grey";
   }
@@ -154,7 +154,7 @@ export default async function ScansPage({
             aria-label={`${f.label} (${countForChip})`}
             className={`inline-flex min-h-11 items-center gap-xs rounded-pill border px-md text-[12px] font-medium transition-colors focus-ring ${
               active
-                ? "border-ink bg-ink text-beige"
+                ? "border-ink bg-ink text-on-inverse"
                 : "border-edge bg-surface text-grey hover:bg-bridge-surface"
             }`}
           >
@@ -162,7 +162,7 @@ export default async function ScansPage({
             <span
               aria-hidden
               className={`tabular text-[11px] ${
-                active ? "text-beige/70" : "text-grey"
+                active ? "text-on-inverse/70" : "text-grey"
               }`}
             >
               {countForChip}
@@ -229,7 +229,7 @@ export default async function ScansPage({
           action={
             <Link
               href="/scan"
-              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               Scan an invoice
             </Link>

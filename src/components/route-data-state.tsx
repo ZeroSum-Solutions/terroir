@@ -34,14 +34,14 @@ export function RouteDataError({
   return (
     <section
       role="alert"
-      className="rounded-card shadow-card border border-hairline bg-blush-wash p-lg text-ink"
+      className="rounded-card shadow-card border border-hairline bg-risk-wash p-lg text-ink"
     >
       <h2 className="text-[16px] font-medium">{title}</h2>
       <p className="mt-xs text-[14px] text-grey">{description}</p>
       <button
         type="button"
         onClick={onRetry}
-        className="mt-md inline-flex h-11 items-center rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+        className="mt-md inline-flex h-11 items-center rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
       >
         Try again
       </button>

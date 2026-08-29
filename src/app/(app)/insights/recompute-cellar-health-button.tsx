@@ -45,7 +45,7 @@ export function RecomputeCellarHealthButton() {
       >
         {busy ? "Recomputing…" : "Recompute"}
       </button>
-      {error && <p role="alert" className="text-[12px] text-accent">{error}</p>}
+      {error && <p role="alert" className="text-[12px] text-risk-ink">{error}</p>}
     </div>
   );
 }

@@ -305,7 +305,7 @@ export default async function PriceComparisonPage({
           action={
             <Link
               href="/scan"
-              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
+              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               <ScanLine className="h-4 w-4" strokeWidth={2} />
               Go to scanner

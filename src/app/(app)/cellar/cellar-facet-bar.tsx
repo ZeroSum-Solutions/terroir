@@ -142,7 +142,7 @@ export function CellarFacetBar({
             <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             Filters
             {secondaryActiveCount > 0 && (
-              <span className="tabular inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-pill bg-primary px-xs text-[10px] text-white">
+              <span className="tabular inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-pill bg-primary px-xs text-[10px] text-seal-ink">
                 {secondaryActiveCount}
               </span>
             )}

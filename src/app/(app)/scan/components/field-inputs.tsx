@@ -37,7 +37,7 @@ export function FieldWrap({ low, edited, invalid, children }: FieldWrapProps) {
       {children}
       {low && (
         <AlertTriangle
-          className="ml-xs h-4 w-4 shrink-0 text-accent"
+          className="ml-xs h-4 w-4 shrink-0 text-risk-ink"
           strokeWidth={2}
           aria-label="Needs review"
         />

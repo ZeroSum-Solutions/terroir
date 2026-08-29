@@ -174,7 +174,7 @@ export function PricingTargetsPanel({
         <div
           role="alert"
           className={cn(
-            "mt-md rounded-md border border-accent/30 bg-blush-wash px-md py-sm text-[13px] text-accent",
+            "mt-md rounded-md border border-risk-ink/30 bg-risk-wash px-md py-sm text-[13px] text-risk-ink",
           )}
         >
           {error}

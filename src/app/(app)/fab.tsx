@@ -97,7 +97,7 @@ function FabInner() {
         aria-label={open ? "Close actions" : "Open actions"}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "pointer-events-auto absolute right-md grid h-14 w-14 place-items-center rounded-pill bg-primary text-white transition-transform duration-200",
+          "pointer-events-auto absolute right-md grid h-14 w-14 place-items-center rounded-pill bg-primary text-seal-ink transition-transform duration-200",
           "hover:bg-primary-hover active:scale-95 focus-ring",
           open && "rotate-45",
         )}

@@ -507,7 +507,7 @@ export default async function DashboardPage({
           </p>
           <Link
             href="/scan"
-            className="mt-lg flex h-[38px] items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-ring"
+            className="mt-lg flex h-[38px] items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink transition-colors hover:bg-primary-hover focus-ring"
           >
             <ScanLine className="h-4 w-4" strokeWidth={2} />
             Go to scanner
@@ -1044,7 +1044,7 @@ export default async function DashboardPage({
               </p>
               <Link
                 href="/scan"
-                className="mt-md inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring"
+                className="mt-md inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
               >
                 <ScanLine className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                 Scan an invoice

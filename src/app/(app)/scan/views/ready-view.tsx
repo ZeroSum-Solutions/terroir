@@ -154,7 +154,7 @@ export function ReadyView({
       {isDragging && (
         <div
           aria-hidden="true"
-          className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center bg-ink/60 p-lg"
+          className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center bg-scrim p-lg"
         >
           <div className="rounded-card border-2 border-dashed border-beige bg-surface px-xl py-lg text-center">
             <p className="font-serif text-[20px] text-ink">
@@ -177,7 +177,7 @@ export function ReadyView({
             className={cn(
               "flex min-h-11 items-center gap-xs rounded-pill px-md py-sm text-[13px] font-medium transition-colors focus-ring",
               !isBottle
-                ? "bg-ink text-beige"
+                ? "bg-ink text-on-inverse"
                 : "text-grey hover:text-ink",
             )}
           >
@@ -191,7 +191,7 @@ export function ReadyView({
             className={cn(
               "flex min-h-11 items-center gap-xs rounded-pill px-md py-sm text-[13px] font-medium transition-colors focus-ring",
               isBottle
-                ? "bg-ink text-beige"
+                ? "bg-ink text-on-inverse"
                 : "text-grey hover:text-ink",
             )}
           >
@@ -245,7 +245,7 @@ export function ReadyView({
         onClick={() => beginCapture(cameraRef)}
         className="flex min-h-11 w-full flex-col items-center justify-center rounded-card border-2 border-dashed border-beige-deep bg-bridge-surface px-lg py-2xl text-center transition-colors hover:border-accent hover:bg-blush-wash/40 focus-ring md:py-3xl"
       >
-        <span className="mb-md flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white md:h-16 md:w-16">
+        <span className="mb-md flex h-14 w-14 items-center justify-center rounded-full bg-primary text-seal-ink md:h-16 md:w-16">
           <Camera className="h-6 w-6 md:h-7 md:w-7" strokeWidth={1.75} aria-hidden="true" />
         </span>
         <h2 className="font-serif text-[20px] text-ink md:text-[22px]">

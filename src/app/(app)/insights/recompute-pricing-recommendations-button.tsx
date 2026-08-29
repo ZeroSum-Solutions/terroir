@@ -59,7 +59,7 @@ export function RecomputePricingRecommendationsButton({
         {busy ? "Recomputing…" : "Recompute"}
       </button>
       {blocked && <p className="text-[11px] text-grey">{blockedReason}</p>}
-      {error && <p role="alert" className="text-[12px] text-accent">{error}</p>}
+      {error && <p role="alert" className="text-[12px] text-risk-ink">{error}</p>}
     </div>
   );
 }

@@ -66,7 +66,7 @@ export function BinForm({
         <button
           type="submit"
           disabled={busy}
-          className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-50"
+          className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-50"
         >
           {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
           {submitLabel}

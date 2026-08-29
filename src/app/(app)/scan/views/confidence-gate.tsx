@@ -42,7 +42,7 @@ export function ConfidenceGateView({
           <button
             type="button"
             onClick={onReviewResults}
-            className="flex h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-ring md:h-[38px]"
+            className="flex h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring md:h-[38px]"
           >
             Review AI results
           </button>

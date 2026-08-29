@@ -133,7 +133,7 @@ export function RefreshRetailButton() {
       )}
 
       {errorMsg && (
-        <p role="alert" className="text-[12px] text-accent">
+        <p role="alert" className="text-[12px] text-risk-ink">
           {errorMsg}
         </p>
       )}

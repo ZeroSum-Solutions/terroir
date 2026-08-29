@@ -133,7 +133,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
         type="button"
         onClick={createCellar}
         disabled={creating}
-        className="flex h-[38px] w-full items-center justify-center gap-xs rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+        className="flex h-[38px] w-full items-center justify-center gap-xs rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-60"
       >
         {creating && (
           <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
@@ -202,12 +202,12 @@ export function CellarGridView({
                   // Contract tokens only: beige-deep (empty), amber (low), sage (in stock).
                   // --t-* runtime vars so both themes retint the SVG; the
                   // canvas color reads on amber and sage in both modes.
-                  let fill = "var(--t-hairline-strong)"; // empty — beige-deep alias
+                  let fill = "var(--t-rule-strong)"; // empty
                   const textFill = "var(--t-canvas)";
                   if (total > 0 && total <= 2) {
-                    fill = "var(--t-amber)"; // low
+                    fill = "var(--t-risk-ink)"; // low
                   } else if (total > 2) {
-                    fill = "var(--t-sage)"; // in stock
+                    fill = "var(--t-ready)"; // in stock
                   }
 
                   const isSelected = selectedBin === binId;
@@ -221,7 +221,7 @@ export function CellarGridView({
                         height={CELL_SIZE}
                         rx={4}
                         fill={fill}
-                        stroke={isSelected ? "var(--t-accent)" : "transparent"}
+                        stroke={isSelected ? "var(--t-mark)" : "transparent"}
                         strokeWidth={isSelected ? 2 : 0}
                         role="button"
                         tabIndex={0}
@@ -327,18 +327,21 @@ export function CellarGridView({
         )}
       </div>
 
-      {/* Legend */}
+      {/* Legend — the same runtime vars the cells are filled with. It used to
+          carry three hardcoded Cantina hexes, so after any palette change the
+          legend quietly described a map that no longer existed (and one of
+          them, #8B6914, was a brown). */}
       <div className="mt-lg flex items-center gap-lg text-[12px] text-grey">
         <div className="flex items-center gap-xs">
-          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#ADAA8A" }} />
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "var(--t-ready)" }} />
           In stock (3+)
         </div>
         <div className="flex items-center gap-xs">
-          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#8B6914" }} />
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "var(--t-risk-ink)" }} />
           Low (1-2)
         </div>
         <div className="flex items-center gap-xs">
-          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "#E3D9CB" }} />
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "var(--t-rule-strong)" }} />
           Empty
         </div>
       </div>

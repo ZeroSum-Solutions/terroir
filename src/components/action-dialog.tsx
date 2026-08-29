@@ -126,7 +126,7 @@ export function ActionDialog({
             className={cn(
               "min-h-11 rounded-pill px-lg text-[14px] font-medium transition-colors focus-ring disabled:cursor-not-allowed disabled:opacity-60",
               tone === "danger"
-                ? "bg-primary text-white hover:bg-primary-hover"
+                ? "bg-primary text-seal-ink hover:bg-primary-hover"
                 : "bg-surface-inverse text-on-inverse hover:bg-ink-soft",
             )}
           >

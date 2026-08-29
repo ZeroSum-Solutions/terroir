@@ -201,7 +201,7 @@ export function VoiceCellarControl({
         onClick={recording ? stopRecording : startRecording}
         className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-pill focus-ring md:hidden ${
           recording
-            ? "bg-primary text-white"
+            ? "bg-primary text-seal-ink"
             : "text-ink-soft hover:bg-surface/60 disabled:opacity-50"
         }`}
       >

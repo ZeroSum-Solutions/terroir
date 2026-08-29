@@ -43,7 +43,7 @@ export function BinManager({ bins, inventory, canManage, unplacedCount }: Props)
 }
 
 function ManagerToolbar({ query, onQueryChange, canManage, onCreate }: { query: string; onQueryChange: (value: string) => void; canManage: boolean; onCreate: () => void }) {
-  return <div className="mb-lg grid gap-sm md:grid-cols-[minmax(0,1fr)_auto]"><SearchBox query={query} onChange={onQueryChange} />{canManage && <button type="button" onClick={onCreate} className="flex h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring"><Plus className="h-4 w-4" strokeWidth={2} aria-hidden />Create bin</button>}</div>;
+  return <div className="mb-lg grid gap-sm md:grid-cols-[minmax(0,1fr)_auto]"><SearchBox query={query} onChange={onQueryChange} />{canManage && <button type="button" onClick={onCreate} className="flex h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"><Plus className="h-4 w-4" strokeWidth={2} aria-hidden />Create bin</button>}</div>;
 }
 
 function UnplacedAnchor({ count }: { count: number }) {
@@ -151,5 +151,5 @@ function FormPanel({ title, children }: { title: string; children: React.ReactNo
 }
 
 function ErrorBanner({ message, dismiss }: { message: string; dismiss: () => void }) {
-  return <div role="alert" className="mb-md flex items-center justify-between gap-sm rounded-md border border-accent/30 bg-blush-wash px-sm py-xs text-[13px] text-accent"><span>{message}</span><IconButton label="Dismiss error" onClick={dismiss} className="shrink-0 rounded-md text-accent/70 hover:bg-primary/10 hover:text-accent focus-ring"><X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton></div>;
+  return <div role="alert" className="mb-md flex items-center justify-between gap-sm rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"><span>{message}</span><IconButton label="Dismiss error" onClick={dismiss} className="shrink-0 rounded-md text-risk-ink/70 hover:bg-risk-wash hover:text-risk-ink focus-ring"><X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton></div>;
 }

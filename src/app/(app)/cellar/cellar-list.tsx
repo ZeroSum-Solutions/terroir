@@ -327,7 +327,7 @@ export function CellarList({
         <div className="mt-md flex flex-col items-center gap-sm">
           <Link
             href="/scan"
-            className="inline-flex min-h-11 items-center justify-center rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover"
+            className="inline-flex min-h-11 items-center justify-center rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover"
           >
             Scan an invoice →
           </Link>
@@ -430,7 +430,7 @@ export function CellarList({
                   <button
                     type="button"
                     onClick={() => setAssignTarget(assignTarget ? null : "__open__")}
-                    className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover"
+                    className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-sm text-[12px] font-medium text-seal-ink hover:bg-primary-hover"
                   >
                     <Layers className="h-4 w-4" strokeWidth={2} aria-hidden />
                     Assign {selectedIds.size} to section
@@ -461,7 +461,7 @@ export function CellarList({
                     type="button"
                     onClick={doBulkAssign}
                     disabled={busy}
-                    className="inline-flex min-h-11 items-center rounded-pill bg-primary px-sm text-[12px] font-medium text-white hover:bg-primary-hover disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center rounded-pill bg-primary px-sm text-[12px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-60"
                   >
                     {busy ? "..." : "Confirm"}
                   </button>
