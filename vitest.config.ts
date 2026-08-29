@@ -27,6 +27,10 @@ export default defineConfig({
     environment: "happy-dom",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     setupFiles: ["./vitest.setup.ts"],
+    // Prints, after a local run, which live-DB suites skipped themselves — so a
+    // green fresh clone cannot quietly hide 47 absent tests. No-ops in CI and
+    // whenever the stack is configured. See vitest.global-setup.ts.
+    globalSetup: ["./vitest.global-setup.ts"],
     // Forks, not threads (integration critic finding): vi.stubEnv mutates
     // process.env, which threads SHARE across concurrently-running files —
     // proxy.test.ts stubbing NEXT_PUBLIC_SUPABASE_URL to "" could race the
