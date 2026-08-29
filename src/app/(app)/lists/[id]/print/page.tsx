@@ -73,7 +73,7 @@ export default async function WineListPrintPage({
     <main className="mx-auto min-h-screen max-w-[720px] bg-surface px-lg py-2xl print:px-0 print:py-md">
       <PrintControls listId={id} />
 
-      <header className="mb-2xl border-b border-ink/20 pb-lg print:mb-xl print:pb-md">
+      <header className="mb-2xl border-b border-rule-strong pb-lg print:mb-xl print:pb-md">
         <p className="text-[11px] uppercase tracking-[0.12em] text-ink-subtle">
           {restaurantName}
         </p>
@@ -90,7 +90,7 @@ export default async function WineListPrintPage({
 
       {sections.map((section) => (
         <section key={section.id} className="mb-2xl break-inside-avoid print:mb-xl">
-          <h2 className="mb-md border-b border-ink/10 pb-xs font-serif text-[20px] font-medium text-ink print:text-[17px]">
+          <h2 className="mb-md border-b border-rule pb-xs font-serif text-[20px] font-medium text-ink print:text-[17px]">
             {section.name}
           </h2>
           <div className="flex flex-col">
@@ -99,7 +99,7 @@ export default async function WineListPrintPage({
               return (
                 <div
                   key={item.id}
-                  className="break-inside-avoid border-b border-ink/5 py-sm last:border-b-0 print:py-2xs"
+                  className="break-inside-avoid border-b border-rule py-sm last:border-b-0 print:py-2xs"
                 >
                   <div className="flex items-baseline justify-between gap-md">
                     <div className="min-w-0">

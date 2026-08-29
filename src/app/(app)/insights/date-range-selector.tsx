@@ -137,7 +137,7 @@ export default function DateRangeSelector() {
                 "min-h-11 min-w-11 rounded-pill border px-sm py-2xs text-[12px] font-medium transition-colors " +
                 (isActive
                   ? "border-ink bg-ink text-beige"
-                  : "border-ink/25 text-ink hover:bg-bridge-surface")
+                  : "border-edge text-ink hover:bg-bridge-surface")
               }
             >
               {opt.label}
@@ -162,7 +162,7 @@ export default function DateRangeSelector() {
                 ? draftTo
                 : localToday
             }
-            className="min-h-11 w-[130px] rounded-pill border border-ink/25 bg-surface px-sm text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/25"
+            className="min-h-11 w-[130px] rounded-pill border border-edge bg-surface px-sm text-[12px] text-ink focus-ring"
           />
           <span className="text-[12px] text-grey">&ndash;</span>
           <label className="sr-only" htmlFor="dr-to">
@@ -175,7 +175,7 @@ export default function DateRangeSelector() {
             onChange={function (e) { setDraftTo(e.target.value); }}
             min={draftFrom || ""}
             max={localToday}
-            className="min-h-11 w-[130px] rounded-pill border border-ink/25 bg-surface px-sm text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/25"
+            className="min-h-11 w-[130px] rounded-pill border border-edge bg-surface px-sm text-[12px] text-ink focus-ring"
           />
           <button
             onClick={function () {

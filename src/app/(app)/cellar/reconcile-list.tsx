@@ -113,7 +113,7 @@ export function ReconcileList({
         ))}
       </ul>
 
-      <div className="fixed bottom-[72px] left-0 right-0 z-30 border-t border-hairline bg-surface px-lg py-sm md:static md:mt-lg md:border-0 md:px-0 md:py-0">
+      <div className="fixed bottom-[calc(var(--chrome-tabbar-total)+var(--spacing-xs))] left-0 right-0 z-[var(--z-chrome)] border-t border-hairline bg-surface px-lg py-sm md:static md:mt-lg md:border-0 md:px-0 md:py-0">
         <button
           type="button"
           onClick={onSaveAll}
@@ -235,7 +235,7 @@ function ReconcileRow({
                   note: pending?.note,
                 });
               }}
-              className="h-11 w-[96px] rounded-pill border border-hairline bg-surface px-sm text-[14px] font-mono tabular-nums outline-none focus:border-accent focus:ring-2 focus:ring-blush-wash"
+              className="h-11 w-[96px] rounded-pill border border-hairline bg-surface px-sm text-[14px] font-mono tabular-nums outline-none focus:border-accent focus-ring"
               aria-label="Actual remaining volume in ml"
             />
           </label>
@@ -295,7 +295,7 @@ function ReconcileRow({
               })
             }
             placeholder="spill, miscount, etc."
-            className="h-11 flex-1 rounded-pill border border-hairline bg-surface px-sm text-[13px] outline-none focus:border-accent focus:ring-2 focus:ring-blush-wash"
+            className="h-11 flex-1 rounded-pill border border-hairline bg-surface px-sm text-[13px] outline-none focus:border-accent focus-ring"
           />
         </label>
       </div>

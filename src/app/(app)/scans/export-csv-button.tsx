@@ -61,7 +61,7 @@ export function ExportCsvButton({ rows }: { rows: ScanHistoryCsvRow[] }) {
     <button
       type="button"
       onClick={handleClick}
-      className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-ink/25 bg-surface px-md text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+      className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-edge bg-surface px-md text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
       title="Download this page of scan history as CSV"
     >
       <Download className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />

@@ -1,17 +1,20 @@
 "use client";
 
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { GripVertical, CheckSquare, Square, Layers, ChevronDown, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
+  DragOverlay,
   closestCenter,
   PointerSensor,
   TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -26,8 +29,8 @@ import {
   type CellarFacets,
   type CellarGroupBy,
 } from "@/lib/cellar-facets";
+import { applyCellarQueryFilter } from "@/lib/cellar-facets/query-filter";
 import { sortCellarRows, type CellarSort } from "@/lib/cellar-facets/sort";
-import { isClosingWindow, isHolding } from "@/lib/drink-window/status";
 import { StatusChip } from "@/components/status-chip";
 import { bottlesOnHand, pickRowChip } from "./row-chip";
 import type { CellarWineRow } from "./types";
@@ -141,46 +144,12 @@ export function CellarList({
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
-  const filteredWithoutFacets = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return rows.filter((r) => {
-      switch (filter) {
-        case "open":
-          if (r.open_remaining_ml === null || r.open_remaining_ml <= 0) return false;
-          break;
-        case "out":
-          if (!r.is_eightysixed) return false;
-          break;
-        case "low": {
-          if (!r.size_ml) return false;
-          const totalMl = (r.open_remaining_ml ?? 0) + r.sealed_count * r.size_ml;
-          if (totalMl >= 2 * r.size_ml) return false;
-          if (r.is_eightysixed) return false;
-          break;
-        }
-        case "off-site":
-          return false;
-        case "drink-now":
-          if (!isClosingWindow(r.drink_window_end)) return false;
-          if (r.is_eightysixed) return false;
-          break;
-        case "hold":
-          if (!isHolding(r.drink_window_start)) return false;
-          if (r.is_eightysixed) return false;
-          break;
-        case "all":
-        default:
-          break;
-      }
-      if (!q) return true;
-      return (
-        r.name.toLowerCase().includes(q) ||
-        r.producer.toLowerCase().includes(q) ||
-        (r.varietal ?? "").toLowerCase().includes(q) ||
-        (r.region ?? "").toLowerCase().includes(q)
-      );
-    });
-  }, [rows, query, filter]);
+  // Shared with the Gallery view so one link can never show two different
+  // result sets (see lib/cellar-facets/query-filter).
+  const filteredWithoutFacets = useMemo(
+    () => applyCellarQueryFilter(rows, query, filter),
+    [rows, query, filter],
+  );
 
   const filtered = useMemo(
     () => sortCellarRows(applyFacets(filteredWithoutFacets, facets), sort),
@@ -237,6 +206,31 @@ export function CellarList({
   }, [visibleRows, sections]);
 
   // BND-063: handle DnD — when a wine is dropped into a different section
+  /**
+   * The dragged row renders through a portalled overlay rather than in place.
+   * z-index cannot lift an element out of a clipping ancestor, and every
+   * section card is `overflow-hidden` — so the old approach (opacity 0.5 plus
+   * a local zIndex) left the row visibly sheared off at the section boundary
+   * the moment it was picked up. Only a portal escapes that (DESIGN.md —
+   * Layers).
+   */
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  // The canonical "am I past hydration" read. document.body does not exist on
+  // the server, and a setState-in-effect would do the same job while tripping
+  // react-hooks/set-state-in-effect.
+  const portalReady = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+  const draggingRow = useMemo(
+    () => (draggingId ? (rows.find((r) => r.wine_id === draggingId) ?? null) : null),
+    [draggingId, rows],
+  );
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setDraggingId(String(event.active.id));
+  }, []);
+
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
       const { active, over } = event;
@@ -340,13 +334,13 @@ export function CellarList({
           <div className="flex flex-wrap items-center justify-center gap-sm">
             <Link
               href="/scan?mode=bottle"
-              className="inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/20 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+              className="inline-flex min-h-11 items-center justify-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
             >
               Scan a bottle
             </Link>
             <Link
               href="/import"
-              className="inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/20 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+              className="inline-flex min-h-11 items-center justify-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
             >
               Import a CSV
             </Link>
@@ -383,7 +377,7 @@ export function CellarList({
           <button
             type="button"
             onClick={onResetFilters}
-            className="mt-sm inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-surface px-md text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-accent/25"
+            className="mt-sm inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-md text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
           >
             Clear filters & search
           </button>
@@ -408,7 +402,7 @@ export function CellarList({
             <button
               type="button"
               onClick={() => setSelectMode(true)}
-              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-ink/20 bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface transition-colors"
+              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface transition-colors"
             >
               <CheckSquare className="h-4 w-4" strokeWidth={2} aria-hidden />
               Select wines
@@ -418,7 +412,7 @@ export function CellarList({
               <button
                 type="button"
                 onClick={selectAll}
-                className="inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface"
+                className="inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface"
               >
                 Select all ({filtered.length})
               </button>
@@ -426,7 +420,7 @@ export function CellarList({
                 <button
                   type="button"
                   onClick={deselectAll}
-                  className="inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
+                  className="inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
                 >
                   Clear
                 </button>
@@ -443,7 +437,7 @@ export function CellarList({
                     <ChevronDown className="h-3 w-3" strokeWidth={2} aria-hidden />
                   </button>
                   {assignTarget === "__open__" && (
-                    <div className="absolute top-full left-0 mt-1 z-20 w-56 rounded-lg card-surface py-xs">
+                    <div className="absolute top-full left-0 mt-1 z-[var(--z-overlay)] w-56 rounded-lg card-surface py-xs">
                       {sections.map((s) => (
                         <button
                           key={s.id}
@@ -475,7 +469,7 @@ export function CellarList({
                     type="button"
                     onClick={() => setAssignTarget(null)}
                     disabled={busy}
-                    className="inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-60"
                   >
                     <X className="h-3 w-3" strokeWidth={2} aria-hidden />
                   </button>
@@ -484,7 +478,7 @@ export function CellarList({
               <button
                 type="button"
                 onClick={() => { setSelectMode(false); setSelectedIds(new Set()); setAssignTarget(null); }}
-                className="ml-auto inline-flex min-h-11 items-center rounded-pill border border-ink/20 bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
+                className="ml-auto inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
               >
                 Done
               </button>
@@ -507,7 +501,17 @@ export function CellarList({
           ))}
         </div>
       ) : sections && sections.length > 0 ? (
-        <DndContext id="cellar-section-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext
+          id="cellar-section-dnd"
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={(event) => {
+            setDraggingId(null);
+            void handleDragEnd(event);
+          }}
+          onDragCancel={() => setDraggingId(null)}
+        >
           <div className="flex flex-col gap-md">
             {sectionGroups.map((group) => (
               <SectionGroup
@@ -524,6 +528,24 @@ export function CellarList({
               />
             ))}
           </div>
+          {portalReady &&
+            createPortal(
+              <DragOverlay style={{ zIndex: "var(--z-drag)" }}>
+                {draggingRow ? (
+                  <div className="rounded-lg card-surface shadow-glass">
+                    <CellarRow
+                      row={draggingRow}
+                      lowStockThreshold={lowStockThreshold}
+                      onSelect={() => {}}
+                      selectMode={false}
+                      selected={false}
+                      onToggleSelect={() => {}}
+                    />
+                  </div>
+                ) : null}
+              </DragOverlay>,
+              document.body,
+            )}
         </DndContext>
       ) : (
         <div className="flex flex-col divide-y divide-hairline overflow-hidden rounded-card card-surface">
@@ -565,7 +587,7 @@ export function CellarList({
                 count: visibleCount + CELLAR_PAGE_SIZE,
               })
             }
-            className="inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/20 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+            className="inline-flex min-h-11 items-center justify-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
           >
             Show {Math.min(CELLAR_PAGE_SIZE, filtered.length - visibleRows.length)} more · {visibleRows.length} of {filtered.length}
           </button>
@@ -862,19 +884,20 @@ function DraggableWineRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: row.wine_id });
 
+  // While dragging, the row keeps its space in the list but hands its
+  // appearance to the portalled DragOverlay — a local z-index cannot escape
+  // the section card's `overflow-hidden`.
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : undefined,
-    position: "relative",
-    zIndex: isDragging ? 10 : undefined,
+    opacity: isDragging ? 0 : undefined,
   };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={cn(isDragging && "bg-bridge-surface rounded-lg")}
+      className={cn(isDragging && "bg-wash rounded-lg")}
     >
       <CellarRow
         row={row}
@@ -959,7 +982,7 @@ function CellarRow({
       <button
         type="button"
         onClick={selectMode ? undefined : onSelect}
-        className="flex-1 min-w-0 px-md py-sm text-left transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:ring-inset rounded-md"
+        className="flex-1 min-w-0 px-md py-sm text-left transition-colors hover:bg-bridge-surface focus-ring rounded-md"
       >
         {/* Mobile ledger row — two lines, location top-right, quantity in
             the Courier column (Kimi audit row anatomy: ~6–7 rows per

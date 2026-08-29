@@ -68,7 +68,7 @@ export function LineItemCard({
         <IconButton
           label={`Remove ${item.name}`}
           onClick={() => onRemove(item.id)}
-          className="shrink-0 rounded-pill text-grey hover:bg-bridge-surface hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          className="shrink-0 rounded-pill text-grey hover:bg-bridge-surface hover:text-accent focus-ring"
         >
           <Trash2 className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
         </IconButton>

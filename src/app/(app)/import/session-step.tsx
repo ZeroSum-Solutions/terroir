@@ -1107,7 +1107,7 @@ export function ChunkUploadProgress({
                   onClick={() => onImportAnyway(c.index)}
                   disabled={frozen}
                   title="Imports this chunk's identical rows as a separate tracked upload."
-                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-11 rounded-pill border border-edge bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Import anyway
                 </button>
@@ -1117,7 +1117,7 @@ export function ChunkUploadProgress({
                   type="button"
                   onClick={() => onSkipChunk(c.index)}
                   disabled={frozen}
-                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-11 rounded-pill border border-edge bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Skip this chunk
                 </button>
@@ -1131,7 +1131,7 @@ export function ChunkUploadProgress({
                   type="button"
                   onClick={() => onUndoSkip(c.index)}
                   disabled={frozen}
-                  className="min-h-11 rounded-pill border border-ink/25 bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-11 rounded-pill border border-edge bg-surface px-sm py-2xs text-caption font-medium text-ink hover:bg-bridge-surface focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Undo skip
                 </button>
@@ -1415,7 +1415,7 @@ export function SessionStep({
         <button
           type="button"
           onClick={() => void refresh()}
-          className="mt-md min-h-11 rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+          className="mt-md min-h-11 rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
         >
           Retry
         </button>
@@ -1527,7 +1527,7 @@ export function SessionStep({
               type="button"
               disabled={bulkResolving}
               onClick={() => void bulkResolve("include")}
-              className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
               {bulkResolving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
               Include all with a cost
@@ -1536,7 +1536,7 @@ export function SessionStep({
               type="button"
               disabled={bulkResolving}
               onClick={() => void bulkResolve("exclude")}
-              className="min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+              className="min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
               Exclude all pending
             </button>
@@ -1572,7 +1572,7 @@ export function SessionStep({
                       placeholder="Unit cost"
                       value={manualCostDrafts[row.id] ?? ""}
                       onChange={(e) => setManualCostDrafts((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                      className="min-h-11 w-28 rounded-pill border border-hairline bg-surface px-sm text-[14px] focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
+                      className="min-h-11 w-28 rounded-pill border border-hairline bg-surface px-sm text-[14px] focus:border-accent focus-ring"
                     />
                   )}
                   <button
@@ -1583,14 +1583,14 @@ export function SessionStep({
                       void resolveRow(batchId, row.id, "include", manualUnitCost);
                     }}
                     disabled={row.cost_status === "missing" && !manualCostDrafts[row.id]}
-                    className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Include anyway
                   </button>
                   <button
                     type="button"
                     onClick={() => void resolveRow(batchId, row.id, "exclude")}
-                    className="min-h-11 rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                    className="min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
                   >
                     Exclude
                   </button>
@@ -1607,7 +1607,7 @@ export function SessionStep({
             type="button"
             disabled={applying}
             onClick={() => void applyAllChunks()}
-            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
           >
             {applying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {applying
@@ -1620,7 +1620,7 @@ export function SessionStep({
           <button
             type="button"
             onClick={() => setRevertDialogOpen(true)}
-            className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-ink/25 bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-edge bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-ring"
           >
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
             Revert this import
@@ -1630,7 +1630,7 @@ export function SessionStep({
         <button
           type="button"
           onClick={onDone}
-          className="min-h-11 rounded-pill px-lg text-[14px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          className="min-h-11 rounded-pill px-lg text-[14px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink focus-ring"
         >
           Start a new import
         </button>

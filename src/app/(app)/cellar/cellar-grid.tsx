@@ -80,7 +80,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             onChange={(e) =>
               setSetupRows(Math.max(1, Math.min(26, +e.target.value)))
             }
-            className="tabular mt-xs w-full rounded-pill border border-ink/20 bg-surface px-md py-sm text-center text-[16px] text-ink"
+            className="tabular mt-xs w-full rounded-pill border border-edge bg-surface px-md py-sm text-center text-[16px] text-ink"
           />
         </div>
         <div>
@@ -99,7 +99,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             onChange={(e) =>
               setSetupCols(Math.max(1, Math.min(30, +e.target.value)))
             }
-            className="tabular mt-xs w-full rounded-pill border border-ink/20 bg-surface px-md py-sm text-center text-[16px] text-ink"
+            className="tabular mt-xs w-full rounded-pill border border-edge bg-surface px-md py-sm text-center text-[16px] text-ink"
           />
         </div>
       </div>
@@ -121,7 +121,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             className={`flex-1 rounded-pill border px-sm py-xs text-[13px] font-medium transition-colors ${
               setupRows === preset.r && setupCols === preset.c
                 ? "border-accent bg-blush-wash text-accent"
-                : "border-ink/20 bg-surface text-grey hover:border-beige-deep"
+                : "border-edge bg-surface text-grey hover:border-beige-deep"
             }`}
           >
             {preset.label}

@@ -57,7 +57,7 @@ export function NoteModal({
               maxLength={500}
               rows={3}
               placeholder="e.g., last bottle just poured"
-              className="mt-xs min-h-11 w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-blush-wash"
+              className="mt-xs min-h-11 w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
             />
           )}
         </Field>

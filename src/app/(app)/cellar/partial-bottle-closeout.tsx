@@ -139,7 +139,7 @@ function CloseoutFields({ reasons, form }: { reasons: Reason[]; form: CloseoutFo
         </select>
       </label>
       {form.error && <p role="alert" className="mt-sm text-[12px] text-accent">{form.error}</p>}
-      <button type="button" disabled={form.busy || form.invalid} onClick={form.closeBottle} className="mt-sm h-11 w-full rounded-pill border border-ink/25 bg-surface text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50">
+      <button type="button" disabled={form.busy || form.invalid} onClick={form.closeBottle} className="mt-sm h-11 w-full rounded-pill border border-edge bg-surface text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50">
         {form.busy ? "Closing…" : "Close bottle"}
       </button>
     </>

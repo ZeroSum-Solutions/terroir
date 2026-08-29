@@ -113,7 +113,7 @@ export default async function OpenBottlesPage() {
                 <li key={bottle.id}>
                   <Link
                     href={`/cellar?wine=${bottle.wine_id}`}
-                    className="block px-lg py-md hover:bg-bridge-surface transition-colors focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:outline-none"
+                    className="block px-lg py-md hover:bg-bridge-surface transition-colors focus-ring"
                   >
                     <div className="md:hidden">
                       <div className="flex items-start justify-between gap-sm">

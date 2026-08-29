@@ -189,6 +189,14 @@ jobs:
           fi
           pnpm run types:check
 
+      - name: Design system check
+        # DESIGN.md is the contract, and a contract nobody can run is a
+        # preference. Four gates: the brown/cream ban, every measured contrast
+        # pair, DESIGN.md <-> globals.css token agreement, and the type scale's
+        # fingerprinted baseline (new arbitrary sizes fail; the baseline only
+        # shrinks).
+        run: pnpm run check:design
+
       - name: Down migrations check
         # INT-006 — every forward migration from 0011 onward must have a
         # paired .down.sql sibling. Catches PRs that add a forward

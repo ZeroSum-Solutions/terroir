@@ -59,14 +59,14 @@ export function BinForm({
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="h-11 rounded-pill border border-beige-deep bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:opacity-50"
+          className="h-11 rounded-pill border border-beige-deep bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:opacity-50"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={busy}
-          className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:opacity-50"
+          className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-50"
         >
           {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
           {submitLabel}
@@ -78,7 +78,7 @@ export function BinForm({
 
 function BinFields({ draft, onChange }: { draft: BinDraft; onChange: (draft: BinDraft) => void }) {
   const set = (field: keyof BinDraft, value: string) => onChange({ ...draft, [field]: value });
-  const common = "h-11 w-full rounded-pill border border-hairline bg-surface px-md text-[14px] text-ink focus:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25";
+  const common = "h-11 w-full rounded-pill border border-hairline bg-surface px-md text-[14px] text-ink focus:border-accent focus-ring";
   return <>
     <Field label="Code"><input required maxLength={50} value={draft.code} onChange={(event) => set("code", event.target.value)} className={`${common} font-mono`} /></Field>
     <Field label="Zone"><input maxLength={100} value={draft.zone} onChange={(event) => set("zone", event.target.value)} className={common} /></Field>

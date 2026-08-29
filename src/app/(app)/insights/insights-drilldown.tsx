@@ -125,7 +125,7 @@ export function OwnerMetricGrid({ metrics }: { metrics: OwnerMetrics }) {
             // it always wins over Tailwind's layered ring-* utilities on the
             // same element — never combine it with one of those. Focus goes
             // through `outline`, which glass never touches.
-            className="glass group block rounded-lg p-md transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="glass group block rounded-lg p-md transition-transform hover:-translate-y-0.5 focus-ring"
           >
             <span className="flex items-center gap-xs text-caption font-medium uppercase text-grey">
               {item.label}
@@ -168,7 +168,7 @@ function exceptionBadgeClass(kind: TodayException["kind"]): string {
     case "past-window":
       return "border border-primary bg-primary text-seal-ink";
     case "pricing":
-      return "border border-ink/15 bg-transparent text-ink-soft";
+      return "border border-edge bg-transparent text-ink-soft";
   }
 }
 

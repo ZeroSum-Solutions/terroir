@@ -305,7 +305,7 @@ export default async function PriceComparisonPage({
           action={
             <Link
               href="/scan"
-              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
             >
               <ScanLine className="h-4 w-4" strokeWidth={2} />
               Go to scanner
@@ -379,7 +379,7 @@ export default async function PriceComparisonPage({
               <Link
                 href={`/cellar?wine=${comparable[0].wine.id}`}
                 aria-label={`View top savings opportunity: ${comparable[0].wine.producer} ${comparable[0].wine.name} in cellar`}
-                className="group min-w-0 max-w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                className="group min-w-0 max-w-full rounded-md focus-ring"
               >
                 <div className="text-caption font-medium uppercase text-grey">
                   Top opportunity
@@ -460,7 +460,7 @@ export default async function PriceComparisonPage({
                             <Link
                               href={`/cellar?wine=${comp.wine.id}`}
                               aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                              className="group block min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                              className="group block min-w-0 flex-1 rounded-md focus-ring"
                             >
                               <div className="font-serif text-[17px] font-medium text-ink group-hover:text-accent">
                                 {comp.wine.producer}
@@ -598,7 +598,7 @@ export default async function PriceComparisonPage({
                       <Link
                         href={`/cellar?wine=${comp.wine.id}`}
                         aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                        className="group min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                        className="group min-w-0 flex-1 rounded-md focus-ring"
                       >
                         <div className="font-serif text-[17px] font-medium text-ink group-hover:text-accent">
                           {comp.wine.name}
@@ -727,7 +727,7 @@ export default async function PriceComparisonPage({
                           <Link
                             href={`/cellar?wine=${comp.wine.id}`}
                             aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                            className="group inline-block min-w-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                            className="group inline-block min-w-0 rounded-md focus-ring"
                           >
                             <span className="font-serif text-[17px] font-medium text-ink group-hover:text-accent">
                               {comp.wine.producer}
@@ -804,7 +804,7 @@ export default async function PriceComparisonPage({
                       <Link
                         href={`/cellar?wine=${comp.wine.id}`}
                         aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                        className="group min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                        className="group min-w-0 flex-1 rounded-md focus-ring"
                       >
                         <div className="font-serif text-[17px] font-medium text-ink group-hover:text-accent">
                           {comp.wine.name}
@@ -864,7 +864,7 @@ export default async function PriceComparisonPage({
       {hasMoreComparisons && (
         <Link
           href={`/price-comparison?${showMoreParams.toString()}`}
-          className="mt-lg inline-flex min-h-11 w-full items-center justify-center rounded-pill border border-hairline bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          className="mt-lg inline-flex min-h-11 w-full items-center justify-center rounded-pill border border-hairline bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
         >
           Show {Math.min(25, comparisons.length - visibleComparisonCount)} more ·{" "}
           {visibleComparisonCount} of {comparisons.length}

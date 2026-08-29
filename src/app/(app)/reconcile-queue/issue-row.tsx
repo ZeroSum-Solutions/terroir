@@ -46,7 +46,7 @@ export function QueueIssueRow(props: Props) {
           checked={checked}
           disabled={disabled || !actionable}
           onChange={onToggle}
-          className="h-4 w-4 rounded-sm border-beige-deep text-accent focus:ring-accent disabled:opacity-35"
+          className="h-4 w-4 rounded-sm border-beige-deep text-accent focus-ring disabled:opacity-35"
         />
       </label>
       <IssueIdentity row={row} />
@@ -110,7 +110,7 @@ function IssueControl({ row, bins, binId, onBinChange }: Pick<Props, "row" | "bi
         aria-label={`Bin for ${row.title}`}
         value={binId ?? ""}
         onChange={(event) => onBinChange(event.target.value)}
-        className="h-11 w-full rounded-pill border border-beige-deep bg-surface px-md text-[13px] text-ink focus:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+        className="h-11 w-full rounded-pill border border-beige-deep bg-surface px-md text-[13px] text-ink focus:border-accent focus-ring"
       >
         <option value="">Choose bin</option>
         {bins.map((bin) => <option key={bin.id} value={bin.id}>{bin.zone ? `${bin.zone} · ` : ""}{bin.code}</option>)}

@@ -35,11 +35,11 @@ function loginHref(mode: LoginMode, next: string): string {
 }
 
 const inputClassName =
-  "min-h-11 rounded-pill border border-hairline bg-surface px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/25";
+  "min-h-11 rounded-pill border border-hairline bg-surface px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-accent focus-ring";
 const choiceClassName =
-  "inline-flex min-h-11 flex-1 items-center justify-center rounded-pill px-sm text-center text-[13px] font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-accent/25";
+  "inline-flex min-h-11 flex-1 items-center justify-center rounded-pill px-sm text-center text-[13px] font-medium outline-none transition-colors focus-ring";
 const textLinkClassName =
-  "inline-flex min-h-11 items-center justify-center rounded-pill px-sm text-center text-[13px] text-grey outline-none transition-colors hover:text-ink focus-visible:ring-[3px] focus-visible:ring-accent/25";
+  "inline-flex min-h-11 items-center justify-center rounded-pill px-sm text-center text-[13px] text-grey outline-none transition-colors hover:text-ink focus-ring";
 
 function EmailField({ error }: { error?: string }) {
   return (
@@ -291,7 +291,7 @@ export default async function LoginPage({
               </p>
               <a
                 href="/api/dev-login"
-                className="flex min-h-11 items-center justify-center rounded-pill border border-beige-deep bg-surface px-md text-center text-[13px] font-medium text-ink outline-none hover:bg-bridge-surface focus-visible:ring-[3px] focus-visible:ring-accent/25"
+                className="flex min-h-11 items-center justify-center rounded-pill border border-beige-deep bg-surface px-md text-center text-[13px] font-medium text-ink outline-none hover:bg-bridge-surface focus-ring"
               >
                 Sign in as {devBypassEmail}
               </a>

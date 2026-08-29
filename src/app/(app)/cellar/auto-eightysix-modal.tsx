@@ -67,7 +67,7 @@ export function AutoEightysixModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby={headingId}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim md:items-center md:p-lg"
+      className="fixed inset-0 z-[var(--z-dialog)] flex items-end justify-center bg-scrim md:items-center md:p-lg"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -87,7 +87,7 @@ export function AutoEightysixModal({
           </button>
         </header>
         <div
-          className="flex flex-col gap-md overflow-y-auto px-md py-md md:gap-lg md:px-lg md:py-lg"
+          className="flex flex-col gap-md overflow-y-auto overscroll-contain px-md py-md md:gap-lg md:px-lg md:py-lg"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
         >
           <PricingTargetsPanel
@@ -105,7 +105,7 @@ export function AutoEightysixModal({
           <Link
             href="/cellar/config"
             onClick={onClose}
-            className="flex items-center justify-center gap-xs rounded-pill border border-ink/25 bg-surface py-sm text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface"
+            className="flex items-center justify-center gap-xs rounded-pill border border-edge bg-surface py-sm text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface"
           >
             <Layers className="h-4 w-4" strokeWidth={2} aria-hidden />
             Manage cellar sections

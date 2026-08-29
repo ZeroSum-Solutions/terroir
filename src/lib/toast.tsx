@@ -60,8 +60,12 @@ function ToastContainer({ items }: { items: ToastItem[] }) {
     <div
       aria-live="polite"
       className={cn(
-        "fixed inset-x-md z-50 mx-auto max-w-[420px]",
-        "bottom-[88px] md:bottom-lg",
+        // `toast` sits above `dialog` on purpose: feedback about an action
+        // must be visible over the surface that triggered it (DESIGN.md —
+        // Layers). It used to share z-[var(--z-dialog)] with modals, so whether a
+        // confirmation appeared depended on DOM order.
+        "fixed inset-x-md z-[var(--z-toast)] mx-auto max-w-[420px]",
+        "bottom-[calc(var(--chrome-tabbar-total)+var(--spacing-lg))] md:bottom-lg",
       )}
     >
       <div className="flex flex-col gap-xs">
@@ -69,7 +73,11 @@ function ToastContainer({ items }: { items: ToastItem[] }) {
           return (
             <div
               key={t.id}
-              role="alert"
+              // The container is aria-live="polite"; role="alert" is
+              // assertive and contradicts it, so a success confirmation used
+              // to interrupt a screen-reader user mid-sentence. Only errors
+              // are alerts (DESIGN.md — State).
+              role={t.tone === "error" ? "alert" : "status"}
               className={cn(
                 "glass flex items-center gap-sm rounded-lg px-md py-sm text-[14px] text-ink",
                 "animate-[toast-in_0.2s ease-out]",

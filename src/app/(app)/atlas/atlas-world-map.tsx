@@ -86,7 +86,7 @@ export function AtlasWorldMap({
             fill={`color-mix(in srgb, var(--color-accent) ${fillPct}%, var(--color-surface))`}
             stroke={selected ? "var(--color-accent)" : "var(--color-hairline)"}
             strokeWidth={selected ? 2 : 0.5}
-            className="cursor-pointer outline-none transition-[stroke-width] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+            className="cursor-pointer outline-none transition-[stroke-width] duration-150 focus-ring"
           >
             <title>{`${country.label} — ${bottleLabel}`}</title>
           </path>

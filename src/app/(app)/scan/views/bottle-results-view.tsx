@@ -222,7 +222,7 @@ export function BottleResultsView({
                   aria-pressed={i === activeIndex}
                   onClick={() => setActiveIndex(i)}
                   className={cn(
-                    "flex min-h-11 items-center gap-xs rounded-pill border px-sm py-xs text-[13px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                    "flex min-h-11 items-center gap-xs rounded-pill border px-sm py-xs text-[13px] font-medium transition-colors focus-ring",
                     i === activeIndex
                       ? "border-ink bg-ink text-beige"
                       : "border-hairline bg-surface text-ink hover:bg-bridge-surface",
@@ -264,7 +264,7 @@ export function BottleResultsView({
             <button
               type="button"
               onClick={handleCorrect}
-              className="flex h-11 items-center justify-center gap-xs self-start rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="flex h-11 items-center justify-center gap-xs self-start rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
             >
               <Pencil className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
               Something&rsquo;s off — correct details
@@ -364,7 +364,7 @@ export function BottleResultsView({
         <button
           type="button"
           onClick={onScanAnother}
-          className="flex h-12 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring md:h-[38px]"
         >
           <RotateCcw className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
           Scan another
@@ -373,7 +373,7 @@ export function BottleResultsView({
           type="button"
           onClick={stage === "review" ? handleConfirm : handleSaveCorrected}
           disabled={isSaving || !canCommit}
-          className="flex h-12 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50 md:h-[38px]"
+          className="flex h-12 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-50 md:h-[38px]"
         >
           {isSaving ? (
             <>Saving...</>

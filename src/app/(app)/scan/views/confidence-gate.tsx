@@ -42,14 +42,14 @@ export function ConfidenceGateView({
           <button
             type="button"
             onClick={onReviewResults}
-            className="flex h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-[38px]"
+            className="flex h-11 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-white hover:bg-primary-hover focus-ring md:h-[38px]"
           >
             Review AI results
           </button>
           <button
             type="button"
             onClick={onManualEntry}
-            className="flex h-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-[38px]"
+            className="flex h-11 items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring md:h-[38px]"
           >
             Enter manually
           </button>

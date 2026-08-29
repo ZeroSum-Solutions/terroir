@@ -215,7 +215,7 @@ export function WineListLanding({
         <button
           type="button"
           onClick={() => router.push(`/lists/${list.id}`)}
-          className="block w-full rounded-card p-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          className="block w-full rounded-card p-md text-left focus-ring"
         >
           <div className="flex items-start justify-between gap-sm">
             <h3 className="font-serif text-[18px] text-ink group-hover:text-accent">
@@ -275,7 +275,7 @@ export function WineListLanding({
                   type="button"
                   onClick={() => copyListLink(list)}
                   aria-label={`Copy public link for ${list.name}`}
-                  className="inline-flex min-h-11 items-center gap-xs whitespace-nowrap rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  className="inline-flex min-h-11 items-center gap-xs whitespace-nowrap rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
                 >
                   {justCopied ? (
                     <Check
@@ -297,7 +297,7 @@ export function WineListLanding({
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Open public ${list.name} list in a new tab`}
-                  className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
                 >
                   <ExternalLink
                     className="h-3.5 w-3.5"
@@ -314,7 +314,7 @@ export function WineListLanding({
               onClick={() => cloneList(list)}
               disabled={isCloning}
               aria-label={`Clone ${list.name}`}
-              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:opacity-60"
+              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:opacity-60"
             >
               <Files className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               Clone
@@ -330,7 +330,7 @@ export function WineListLanding({
                   ? `Restore ${list.name}`
                   : `Archive ${list.name}`
               }
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-hairline bg-canvas text-ink-subtle hover:bg-bridge-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:opacity-60"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-hairline bg-canvas text-ink-subtle hover:bg-bridge-surface hover:text-ink focus-ring disabled:opacity-60"
             >
               {list.archived ? (
                 <ArchiveRestore className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -345,7 +345,7 @@ export function WineListLanding({
                 onClick={() => requestDeleteList(list)}
                 disabled={isDeleting}
                 aria-label={`Permanently delete ${list.name}`}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-hairline bg-canvas text-ink-subtle hover:bg-blush-wash hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-60"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-hairline bg-canvas text-ink-subtle hover:bg-blush-wash hover:text-accent focus-ring disabled:opacity-60"
               >
                 <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </button>
@@ -373,7 +373,7 @@ export function WineListLanding({
           {archivedLists.length > 0 && (
             <a
               href={showArchived ? "/lists" : "/lists?show_archived=1"}
-              className="flex h-11 items-center gap-xs rounded-pill border border-ink/25 bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 self-start md:self-auto"
+              className="flex h-11 items-center gap-xs rounded-pill border border-edge bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring self-start md:self-auto"
             >
               <Archive className="h-4 w-4" strokeWidth={2} />
               {showArchived ? "Hide archived" : `Show archived (${archivedLists.length})`}
@@ -382,7 +382,7 @@ export function WineListLanding({
           <button
             type="button"
             onClick={() => setShowModal(true)}
-            className="flex h-11 items-center gap-sm self-start rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 md:self-auto"
+            className="flex h-11 items-center gap-sm self-start rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring md:self-auto"
           >
             <Plus className="h-4 w-4" strokeWidth={2} />
             New wine list
@@ -400,7 +400,7 @@ export function WineListLanding({
             type="button"
             onClick={() => setDeleteError(null)}
             aria-label="Dismiss error"
-            className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-pill text-accent/70 hover:bg-primary/10 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-pill text-accent/70 hover:bg-primary/10 hover:text-accent focus-ring"
           >
             <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           </button>
@@ -416,7 +416,7 @@ export function WineListLanding({
             <button
               type="button"
               onClick={() => setShowModal(true)}
-              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
             >
               <Plus className="h-4 w-4" strokeWidth={2} />
               New wine list
@@ -468,7 +468,7 @@ export function WineListLanding({
               </p>
               <Link
                 href="/lists?show_archived=1"
-                className="mt-lg inline-flex h-11 items-center gap-sm rounded-pill border border-ink/25 bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                className="mt-lg inline-flex h-11 items-center gap-sm rounded-pill border border-edge bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
               >
                 <Archive className="h-4 w-4" strokeWidth={2} />
                 Show archived lists
@@ -554,7 +554,7 @@ function CreateListModal({
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; this dialog already has full keyboard access via useFocusTrap (Escape + a visible Close button).
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim px-md"
+      className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center bg-scrim px-md"
       role="dialog"
       aria-modal="true"
       aria-labelledby="new-wine-list-title"
@@ -584,14 +584,14 @@ function CreateListModal({
             if (e.key === "Enter") onCreate();
           }}
           placeholder="Spring 2026 Wine List…"
-          className="mt-lg h-[38px] w-full rounded-pill border border-hairline bg-canvas px-md text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          className="mt-lg h-[38px] w-full rounded-pill border border-hairline bg-canvas px-md text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-ring"
         />
         <textarea
           value={newDescription}
           onChange={(e) => setNewDescription(e.target.value)}
           placeholder="Description (optional)"
           rows={3}
-          className="mt-sm w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 resize-none"
+          className="mt-sm w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-ring resize-none"
         />
         {error && (
           <p
@@ -605,7 +605,7 @@ function CreateListModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-[38px] rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+            className="h-[38px] rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring"
           >
             Cancel
           </button>
@@ -613,7 +613,7 @@ function CreateListModal({
             type="button"
             onClick={onCreate}
             disabled={creating}
-            className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:opacity-60"
+            className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-60"
           >
             {creating ? "Creating..." : "Create"}
           </button>

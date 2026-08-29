@@ -257,8 +257,8 @@ describe("Manage Cellar Sections mobile layout", () => {
     const newSectionInput = container.querySelector<HTMLInputElement>(
       'input[placeholder^="New section name"]',
     )!;
-    expect(newSectionInput.className).toContain("focus-visible:outline-accent");
-    expect(newSectionInput.className).not.toMatch(/focus:ring/);
+    expect(newSectionInput.className).toContain("focus-ring");
+    expect(newSectionInput.className).not.toMatch(/focus(-visible)?:(ring|outline)/);
 
     const rename = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Rename Reds"]',
@@ -267,8 +267,8 @@ describe("Manage Cellar Sections mobile layout", () => {
     const renameInput = container.querySelector<HTMLInputElement>(
       'li input[type="text"]',
     )!;
-    expect(renameInput.className).toContain("focus-visible:outline-accent");
-    expect(renameInput.className).not.toMatch(/focus:ring/);
+    expect(renameInput.className).toContain("focus-ring");
+    expect(renameInput.className).not.toMatch(/focus(-visible)?:(ring|outline)/);
   });
 
   it("shows the burgundy outline immediately on the Add button", async () => {
@@ -279,9 +279,8 @@ describe("Manage Cellar Sections mobile layout", () => {
     const addButton = [...container.querySelectorAll("button")].find(
       (button) => button.textContent?.trim() === "Add",
     )!;
-    expect(addButton.className).toContain("focus-visible:outline-accent");
-    expect(addButton.className).toContain("focus-visible:transition-none");
-    expect(addButton.className).not.toMatch(/focus:ring/);
+    expect(addButton.className).toContain("focus-ring");
+    expect(addButton.className).not.toMatch(/focus(-visible)?:(ring|outline)/);
   });
 
   it("disables native touch-scroll handling on the drag handle so dnd-kit's TouchSensor can activate", async () => {

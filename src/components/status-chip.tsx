@@ -32,7 +32,7 @@ export function StatusChip({
       className={cn(
         "inline-flex items-center gap-2xs whitespace-nowrap rounded-pill border px-sm py-2xs text-[10px] font-medium uppercase tracking-[0.13em]",
         tone === "muted" && "border-transparent bg-bridge-surface text-grey",
-        tone === "neutral" && "border-ink/15 bg-transparent text-ink-soft",
+        tone === "neutral" && "border-edge bg-transparent text-ink-soft",
         tone === "optimal" && "border-gold/40 bg-gold/10 text-gold",
         tone === "attention" && "border-accent/40 bg-accent/10 text-accent",
         tone === "urgent" &&

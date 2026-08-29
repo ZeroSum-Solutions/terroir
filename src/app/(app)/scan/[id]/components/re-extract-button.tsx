@@ -43,7 +43,7 @@ export function ReExtractButton({ scanId }: ReExtractButtonProps) {
         type="button"
         onClick={handleClick}
         disabled={reExtracting}
-        className="flex h-11 min-w-11 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink disabled:opacity-50 hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+        className="flex h-11 min-w-11 items-center justify-center gap-sm rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink disabled:opacity-50 hover:bg-bridge-surface focus-ring"
         title="Re-run Claude extraction on the stored OCR text"
       >
         <RefreshCw

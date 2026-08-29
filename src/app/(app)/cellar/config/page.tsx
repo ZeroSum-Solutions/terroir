@@ -201,7 +201,7 @@ export default function CellarConfigPage() {
           type="button"
           onClick={() => router.back()}
           aria-label="Back to cellar"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-ring"
         >
           <ArrowLeft className="h-5 w-5" strokeWidth={2} aria-hidden />
         </button>
@@ -266,7 +266,7 @@ export default function CellarConfigPage() {
             if (e.key === "Enter") addSection();
           }}
           placeholder="New section name (e.g. Reds by Region)"
-          className="min-w-0 flex-1 rounded-pill border border-hairline px-sm py-sm text-[14px] text-ink placeholder:text-grey focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="min-w-0 flex-1 rounded-pill border border-hairline px-sm py-sm text-[14px] text-ink placeholder:text-grey focus-ring"
           disabled={busy}
         />
         <button
@@ -275,7 +275,7 @@ export default function CellarConfigPage() {
           disabled={busy || !newName.trim()}
           className={cn(
             "flex h-[44px] shrink-0 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors",
-            "hover:bg-primary-hover disabled:opacity-60 focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+            "hover:bg-primary-hover disabled:opacity-60 focus-ring",
           )}
         >
           <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -286,7 +286,7 @@ export default function CellarConfigPage() {
       {deleteTarget && (
         // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; the dialog below has full keyboard access via useFocusTrap (Escape + a Cancel button).
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim"
+          className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center bg-scrim"
           onClick={() => setDeleteTarget(null)}
         >
           {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- onClick here only stops the backdrop's dismiss-click from bubbling; no independent interaction to reach by keyboard. */}
@@ -312,7 +312,7 @@ export default function CellarConfigPage() {
                 type="button"
                 onClick={() => setDeleteTarget(null)}
                 disabled={busy}
-                className="min-h-11 flex-1 rounded-pill border border-ink/25 px-md py-sm text-[14px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="min-h-11 flex-1 rounded-pill border border-edge px-md py-sm text-[14px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60 focus-ring"
               >
                 Cancel
               </button>
@@ -320,7 +320,7 @@ export default function CellarConfigPage() {
                 type="button"
                 onClick={confirmDelete}
                 disabled={busy}
-                className="min-h-11 flex-1 rounded-pill bg-primary px-md py-sm text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="min-h-11 flex-1 rounded-pill bg-primary px-md py-sm text-[14px] font-medium text-white hover:bg-primary-hover disabled:opacity-60 focus-ring"
               >
                 Delete
               </button>
@@ -389,7 +389,7 @@ function SortableSectionItem({
               if (e.key === "Enter") onCommitEdit(section.id);
               if (e.key === "Escape") onCancelEdit();
             }}
-            className="min-h-11 min-w-0 flex-1 rounded-pill border border-hairline px-sm py-sm text-[14px] text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="min-h-11 min-w-0 flex-1 rounded-pill border border-hairline px-sm py-sm text-[14px] text-ink focus-ring"
             autoFocus
           />
           <button
@@ -397,7 +397,7 @@ function SortableSectionItem({
             onClick={() => onCommitEdit(section.id)}
             disabled={!editName.trim()}
             aria-label="Save rename"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-sage-ink hover:bg-sage-wash disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-sage-ink hover:bg-sage-wash disabled:opacity-40 focus-ring"
           >
             <Check className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
@@ -405,7 +405,7 @@ function SortableSectionItem({
             type="button"
             onClick={onCancelEdit}
             aria-label="Cancel rename"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-ring"
           >
             <X className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
@@ -418,7 +418,7 @@ function SortableSectionItem({
               {...attributes}
               {...listeners}
               aria-label={`Drag to reorder ${section.name}`}
-              className="flex h-11 w-11 shrink-0 touch-none items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="flex h-11 w-11 shrink-0 touch-none items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink focus-ring"
             >
               <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
@@ -433,7 +433,7 @@ function SortableSectionItem({
               onClick={() => onStartEdit(section)}
               disabled={busy}
               aria-label={`Rename ${section.name}`}
-              className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface disabled:opacity-40 focus-ring"
             >
               <Pencil className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
@@ -442,7 +442,7 @@ function SortableSectionItem({
               onClick={() => onDelete(section)}
               disabled={busy}
               aria-label={`Delete ${section.name}`}
-              className="flex h-11 w-11 items-center justify-center rounded-pill text-accent/70 hover:bg-blush-wash hover:text-accent disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="flex h-11 w-11 items-center justify-center rounded-pill text-accent/70 hover:bg-blush-wash hover:text-accent disabled:opacity-40 focus-ring"
             >
               <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>

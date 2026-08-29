@@ -81,7 +81,7 @@ export default function AcceptInvitePage() {
             <button
               type="button"
               onClick={() => router.push("/login")}
-              className="mx-auto mt-lg flex min-h-11 items-center rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+              className="mx-auto mt-lg flex min-h-11 items-center rounded-pill bg-primary px-lg text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-ring"
             >
               Go to login
             </button>

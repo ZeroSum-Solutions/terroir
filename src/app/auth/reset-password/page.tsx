@@ -42,7 +42,7 @@ export default async function ResetPasswordPage({
   if (!data.user) redirect(loginUrl({ error: "link" }));
 
   const inputClassName =
-    "min-h-11 rounded-pill border border-hairline bg-surface px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent/25";
+    "min-h-11 rounded-pill border border-hairline bg-surface px-md text-[16px] text-ink outline-none transition-colors focus-visible:border-accent focus-ring";
 
   return (
     <main className="dawn-gradient flex min-h-screen items-center justify-center px-md py-lg sm:px-lg sm:py-xl">

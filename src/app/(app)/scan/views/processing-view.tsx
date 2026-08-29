@@ -126,7 +126,7 @@ export function ProcessingView({ progress, stage, mode, onCancel, previewUrl }: 
         <button
           type="button"
           onClick={onCancel}
-          className="mt-lg h-11 rounded-pill border border-ink/25 bg-surface px-lg text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="mt-lg h-11 rounded-pill border border-edge bg-surface px-lg text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring"
         >
           Cancel scan
         </button>

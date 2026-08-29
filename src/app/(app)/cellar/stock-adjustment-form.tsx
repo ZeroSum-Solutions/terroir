@@ -111,7 +111,7 @@ function StockAdjustmentFields({
         <input name="note" maxLength={500} value={form.note} onChange={(event) => form.setNote(event.target.value)} className="mt-xs h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink" />
       </label>
       {form.message && <p role="status" className="mt-sm text-[12px] text-grey">{form.message}</p>}
-      <button type="button" disabled={form.busy || form.invalid} onClick={form.submit} className="mt-sm h-11 w-full rounded-pill border border-ink/25 bg-surface text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50">
+      <button type="button" disabled={form.busy || form.invalid} onClick={form.submit} className="mt-sm h-11 w-full rounded-pill border border-edge bg-surface text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50">
         {form.busy ? "Recording…" : "Record event"}
       </button>
     </>

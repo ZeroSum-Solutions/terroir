@@ -245,7 +245,7 @@ function PourConfigRow({
           }}
           placeholder="148"
           aria-label={`Pour size in ml for ${item.wines.name}`}
-          className="h-11 w-[64px] rounded-md border border-hairline bg-surface px-xs text-right font-mono text-[12px] text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
+          className="h-11 w-[64px] rounded-md border border-hairline bg-surface px-xs text-right font-mono text-[12px] text-ink outline-none focus:border-accent focus-ring"
         />
         <span className="shrink-0 text-[11px] text-ink-subtle">ml</span>
         {ozHint && (
@@ -365,7 +365,7 @@ export function WineRow({
               onBlur={(e) => { if (!e.target.value.trim()) onBlurbChange(item.id, null); }}
               placeholder="Add a note for guests (e.g., sommelier pick, pairing suggestion)"
               rows={2}
-              className="min-h-11 min-w-0 flex-1 resize-none rounded-md border border-hairline bg-surface px-xs py-1 text-[12px] text-ink outline-none placeholder:text-ink-muted/50 focus:border-accent focus:ring-2 focus:ring-accent/25"
+              className="min-h-11 min-w-0 flex-1 resize-none rounded-md border border-hairline bg-surface px-xs py-1 text-[12px] text-ink outline-none placeholder:text-ink-muted/50 focus:border-accent focus-ring"
             />
             {/* BND-171: hide toggle */}
             <button
@@ -453,7 +453,7 @@ export function WineRow({
             onBlur={(e) => { if (!e.target.value.trim()) onBlurbChange(item.id, null); }}
             placeholder="Sommelier pick, pairing suggestion..."
             rows={2}
-            className="mt-xs w-full rounded-md border border-hairline bg-surface px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-accent focus:ring-2 focus:ring-accent/25 placeholder:text-ink-muted/50"
+            className="mt-xs w-full rounded-md border border-hairline bg-surface px-xs py-1 text-[12px] text-ink resize-none outline-none focus:border-accent focus-ring placeholder:text-ink-muted/50"
           />
           <button
             type="button"

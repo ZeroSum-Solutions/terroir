@@ -276,7 +276,7 @@ export default async function ReconcileHistoryPage() {
                                     {event.wines ? (
                                       <Link
                                         href={`/cellar?wine=${event.wine_id}`}
-                                        className="group rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                                        className="group rounded-sm focus-ring"
                                       >
                                         <span className="font-medium text-ink group-hover:text-accent">
                                           {event.wines.producer}
@@ -316,7 +316,7 @@ export default async function ReconcileHistoryPage() {
                                 {event.wines ? (
                                   <Link
                                     href={`/cellar?wine=${event.wine_id}`}
-                                    className="group rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft"
+                                    className="group rounded-sm focus-ring"
                                   >
                                     <div className="truncate text-[13px] font-medium text-ink group-hover:text-accent">
                                       {event.wines.producer} {event.wines.name}

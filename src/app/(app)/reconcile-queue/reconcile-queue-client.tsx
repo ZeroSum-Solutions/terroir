@@ -107,7 +107,7 @@ function QueueView(props: QueueViewProps) {
               count: visibleCount + QUEUE_PAGE_SIZE,
             })
           }
-          className="mt-md min-h-11 w-full rounded-pill border border-hairline bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          className="mt-md min-h-11 w-full rounded-pill border border-hairline bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
         >
           Show {Math.min(QUEUE_PAGE_SIZE, rows.length - visibleRows.length)} more ·{" "}
           {visibleRows.length} of {rows.length}
@@ -166,7 +166,7 @@ function QueueHeader({ summary, latestBatch, busy, undo }: { summary: QueueRespo
         <p className="mt-xs text-[14px] tabular-nums text-grey">{summary.itemCount} items · {summary.unitCount} units · ${formatRisk(summary.atRisk)} at risk</p>
       </div>
       {latestBatch && (
-        <button type="button" onClick={undo} disabled={busy} className="flex h-11 items-center gap-xs rounded-pill border border-beige-deep bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:opacity-50">
+        <button type="button" onClick={undo} disabled={busy} className="flex h-11 items-center gap-xs rounded-pill border border-beige-deep bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:opacity-50">
           <Undo2 className="h-4 w-4" strokeWidth={1.75} aria-hidden />Undo latest batch
         </button>
       )}
@@ -176,12 +176,12 @@ function QueueHeader({ summary, latestBatch, busy, undo }: { summary: QueueRespo
 
 function BulkRail({ busy, selectedCount, readyCount, allReadySelected, accept, toggleAll }: { busy: boolean; selectedCount: number; readyCount: number; allReadySelected: boolean; accept: () => void; toggleAll: () => void }) {
   return (
-    <div className="glass sticky bottom-[72px] z-10 mt-md flex flex-wrap items-center justify-between gap-sm rounded-lg px-sm py-sm md:bottom-md md:px-md">
-      <button type="button" onClick={toggleAll} disabled={busy || readyCount === 0} className="h-11 rounded-pill px-sm text-[13px] font-medium text-grey hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:opacity-40">
+    <div className="glass sticky bottom-[calc(var(--chrome-tabbar-total)+var(--spacing-xs))] z-[var(--z-sticky)] mt-md flex flex-wrap items-center justify-between gap-sm rounded-lg px-sm py-sm md:bottom-md md:px-md">
+      <button type="button" onClick={toggleAll} disabled={busy || readyCount === 0} className="h-11 rounded-pill px-sm text-[13px] font-medium text-grey hover:bg-bridge-surface focus-ring disabled:opacity-40">
         {allReadySelected ? "Clear actionable" : `Select actionable (${readyCount})`}
       </button>
       <span className="text-[12px] tabular text-grey">{selectedCount} selected</span>
-      <button type="button" onClick={accept} disabled={busy || selectedCount === 0} className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:opacity-45">
+      <button type="button" onClick={accept} disabled={busy || selectedCount === 0} className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-45">
         {busy ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={1.75} aria-hidden /> : <Check className="h-4 w-4" strokeWidth={2} aria-hidden />}
         Accept {selectedCount} item{selectedCount === 1 ? "" : "s"}
       </button>
@@ -194,7 +194,7 @@ function QueueLoading() {
 }
 
 function QueueError({ message, retry }: { message: string; retry: () => void }) {
-  return <div role="alert" className="rounded-md border border-accent/30 bg-blush-wash p-md text-[13px] text-accent"><p>{message}</p><button type="button" onClick={retry} className="mt-sm h-11 rounded-pill border border-accent/30 bg-surface px-md font-medium hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25">Try again</button></div>;
+  return <div role="alert" className="rounded-md border border-accent/30 bg-blush-wash p-md text-[13px] text-accent"><p>{message}</p><button type="button" onClick={retry} className="mt-sm h-11 rounded-pill border border-accent/30 bg-surface px-md font-medium hover:bg-bridge-surface focus-ring">Try again</button></div>;
 }
 
 function QueueEmpty() {

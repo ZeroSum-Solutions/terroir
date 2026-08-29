@@ -896,7 +896,7 @@ export function Scanner({
         <div
           role={feedback.kind === "error" ? "alert" : "status"}
           aria-live={feedback.kind === "error" ? "assertive" : "polite"}
-          className="glass fixed inset-x-md bottom-[88px] z-30 mx-auto max-w-[420px] rounded-card px-md py-sm text-[14px] text-ink md:bottom-lg"
+          className="glass fixed inset-x-md bottom-[calc(var(--chrome-tabbar-total)+var(--spacing-lg))] z-[var(--z-toast)] mx-auto max-w-[420px] rounded-card px-md py-sm text-[14px] text-ink md:bottom-lg"
         >
           <div className="flex items-center gap-sm">
             {feedback.kind === "error" ? (

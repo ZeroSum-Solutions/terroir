@@ -137,7 +137,7 @@ export function CellarFacetBar({
           <button
             type="button"
             onClick={() => setSheetOpen(true)}
-            className="inline-flex h-11 shrink-0 items-center gap-xs rounded-pill border border-ink/20 bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="inline-flex h-11 shrink-0 items-center gap-xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
           >
             <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             Filters
@@ -162,7 +162,7 @@ export function CellarFacetBar({
                 type="button"
                 onClick={chip.onRemove}
                 aria-label={`Remove ${chip.label} filter`}
-                className="flex h-11 w-11 shrink-0 -my-[6px] items-center justify-center rounded-pill text-grey hover:bg-surface hover:text-ink-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="flex h-11 w-11 shrink-0 -my-[6px] items-center justify-center rounded-pill text-grey hover:bg-surface hover:text-ink-soft focus-ring"
               >
                 <X className="h-3 w-3" strokeWidth={2.5} aria-hidden />
               </button>
@@ -174,7 +174,7 @@ export function CellarFacetBar({
               onFacetsChange(CLEAR_ALL_PATCH);
               onGroupByChange(null);
             }}
-            className="flex h-11 shrink-0 -my-[6px] items-center justify-center rounded-pill px-sm text-[11.5px] font-medium text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex h-11 shrink-0 -my-[6px] items-center justify-center rounded-pill px-sm text-[11.5px] font-medium text-grey hover:bg-bridge-surface focus-ring"
           >
             Clear all
           </button>
@@ -335,4 +335,4 @@ function FacetSelect({
 // one row down to 320px (each select would otherwise size toward its widest
 // option's text); md: restores the roomier desktop width.
 const selectClassName =
-  "h-11 max-w-[104px] md:max-w-[180px] rounded-pill border border-ink/20 bg-surface px-sm text-[12px] text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "h-11 max-w-[104px] md:max-w-[180px] rounded-pill border border-edge bg-surface px-sm text-[12px] text-ink hover:bg-bridge-surface focus-ring";

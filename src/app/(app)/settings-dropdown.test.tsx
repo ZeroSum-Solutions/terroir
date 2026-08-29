@@ -42,10 +42,11 @@ describe("SettingsDropdown touch targets", () => {
       'button[aria-label="Settings"]',
     )!;
 
-    expect(trigger.className).toContain("focus-visible:outline-accent");
-    expect(trigger.className).toContain("focus-visible:outline-offset-2");
-    expect(trigger.className).toContain("focus-visible:transition-none");
-    expect(trigger.className).not.toMatch(/focus:ring/);
+    // DESIGN.md — Focus: one solid token, one recipe, :focus-visible only.
+    // The ring idiom this replaced measured 1.54:1 on light and 1.59:1 on
+    // dark — not a weaker indicator, a WCAG 2.2 SC 2.4.11 failure.
+    expect(trigger.className).toContain("focus-ring");
+    expect(trigger.className).not.toMatch(/focus(-visible)?:(ring|outline)/);
   });
 
   it("keeps every Settings menu action at least 44px tall", async () => {
@@ -90,13 +91,10 @@ describe("SettingsDropdown touch targets", () => {
     ];
     for (const action of actions) {
       expect.soft(action.className, action.textContent?.trim()).toContain(
-        "focus-visible:outline-accent",
-      );
-      expect.soft(action.className, action.textContent?.trim()).toContain(
-        "focus-visible:transition-none",
+        "focus-ring",
       );
       expect.soft(action.className, action.textContent?.trim()).not.toMatch(
-        /focus:ring/,
+        /focus(-visible)?:(ring|outline)/,
       );
     }
   });

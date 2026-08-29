@@ -6,7 +6,7 @@ const STORAGE_KEY = "terroir-theme";
 
 // Canvas colors for browser/PWA chrome — hand-synced with the DESIGN.md
 // tokens, viewport.themeColor in layout.tsx, and its themeInitScript.
-const THEME_COLORS = { light: "#f2ede3", dark: "#0d0c09" } as const;
+const THEME_COLORS = { light: "#F4F5F6", dark: "#07080A" } as const;
 
 type ThemeChoice = "light" | "dark" | "system";
 
@@ -87,7 +87,7 @@ export function ThemeToggle() {
               setChoice(value);
               applyChoice(value);
             }}
-            className={`min-h-10 flex-1 px-2xs text-[12px] font-medium transition-colors focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${
+            className={`min-h-10 flex-1 px-2xs text-[12px] font-medium transition-colors focus-ring ${
               choice === value
                 ? "bg-surface-inverse text-on-inverse"
                 : "text-grey hover:bg-bridge-surface hover:text-ink"

@@ -199,7 +199,7 @@ export function VoiceCellarControl({
         aria-pressed={recording}
         disabled={busy}
         onClick={recording ? stopRecording : startRecording}
-        className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-pill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 md:hidden ${
+        className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-pill focus-ring md:hidden ${
           recording
             ? "bg-primary text-white"
             : "text-ink-soft hover:bg-surface/60 disabled:opacity-50"
@@ -218,7 +218,7 @@ export function VoiceCellarControl({
         <p
           role="status"
           aria-live="polite"
-          className="glass fixed inset-x-md bottom-[88px] z-40 mx-auto max-w-[420px] rounded-lg px-md py-sm text-[14px] text-ink md:bottom-lg"
+          className="glass fixed inset-x-md bottom-[calc(var(--chrome-tabbar-total)+var(--spacing-lg))] z-[var(--z-toast)] mx-auto max-w-[420px] rounded-lg px-md py-sm text-[14px] text-ink md:bottom-lg"
         >
           {notice}
         </p>
@@ -258,7 +258,7 @@ function VoiceDisambiguationSheet({
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; the dialog below already has full keyboard access via useFocusTrap (Escape + a visible Close button).
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim md:items-center"
+      className="fixed inset-0 z-[var(--z-dialog)] flex items-end justify-center bg-scrim md:items-center"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -281,7 +281,7 @@ function VoiceDisambiguationSheet({
             type="button"
             onClick={onClose}
             aria-label="Close wine choices"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-ring"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
@@ -292,7 +292,7 @@ function VoiceDisambiguationSheet({
               key={candidate.itemId}
               type="button"
               onClick={() => onChoose(candidate)}
-              className="min-h-11 rounded-card card-surface px-md py-sm text-left hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="min-h-11 rounded-card card-surface px-md py-sm text-left hover:bg-bridge-surface focus-ring"
             >
               <span className="block text-[14px] font-medium text-ink">
                 {candidate.producer} · {candidate.name}

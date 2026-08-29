@@ -99,7 +99,7 @@ export function ScanDetailView({
       <header className="mb-lg">
         <Link
           href="/scans"
-          className="mb-md inline-flex items-center gap-xs text-[13px] text-grey hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+          className="mb-md inline-flex items-center gap-xs text-[13px] text-grey hover:text-ink focus-ring"
         >
           <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
           Back to scan history
@@ -112,7 +112,7 @@ export function ScanDetailView({
             <button
               type="button"
               onClick={handleExportCsv}
-              className="flex h-10 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 md:h-[38px]"
+              className="flex h-10 items-center justify-center gap-sm rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring md:h-[38px]"
               title="Download line items as CSV"
             >
               <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -188,7 +188,7 @@ export function ScanDetailView({
             <button
               type="button"
               onClick={() => setOcrOpen(!ocrOpen)}
-              className="flex w-full items-center justify-between p-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 focus-visible:ring-inset"
+              className="flex w-full items-center justify-between p-md text-left focus-ring"
             >
               <span className="flex items-center gap-sm text-[13px] font-medium text-ink">
                 <FileText className="h-4 w-4 text-grey" strokeWidth={1.75} />
@@ -229,7 +229,7 @@ export function ScanDetailView({
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Open full-resolution invoice from ${distributor} in a new tab`}
-                  className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  className="block rounded-lg focus-ring"
                 >
                   <Image
                     src={imageUrl}
@@ -245,7 +245,7 @@ export function ScanDetailView({
                   href={imageUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-sm inline-flex items-center gap-xs text-[12px] text-grey hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  className="mt-sm inline-flex items-center gap-xs text-[12px] text-grey hover:text-accent focus-ring"
                 >
                   <ExternalLink className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                   Open full size
@@ -426,7 +426,7 @@ export function ScanDetailView({
                       <td className="px-sm py-sm font-serif text-[17px] font-medium text-ink">
                         <Link
                           href={`/cellar?wine=${ii.wine_id}`}
-                          className="text-ink hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                          className="text-ink hover:text-accent focus-ring"
                         >
                           {ii.wine_name}
                         </Link>
@@ -458,7 +458,7 @@ export function ScanDetailView({
                 <Link
                   key={ii.id}
                   href={`/cellar?wine=${ii.wine_id}`}
-                  className="rounded-card card-surface p-md hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  className="rounded-card card-surface p-md hover:bg-bridge-surface focus-ring"
                 >
                   <div className="flex items-start gap-md">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill bg-bridge-surface">

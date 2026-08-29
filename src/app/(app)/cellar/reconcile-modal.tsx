@@ -63,7 +63,7 @@ export function ReconcileModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby={headingId}
-      className="fixed inset-0 z-50 flex flex-col bg-canvas md:items-center md:justify-center md:bg-scrim md:p-lg"
+      className="fixed inset-0 z-[var(--z-dialog)] flex flex-col bg-canvas md:items-center md:justify-center md:bg-scrim md:p-lg"
     >
       <div className="flex h-full w-full flex-col overflow-hidden bg-surface md:h-[min(720px,90vh)] md:max-w-[640px] md:rounded-card md:border md:border-hairline">
         <header
@@ -92,7 +92,7 @@ export function ReconcileModal({
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-md py-md md:px-lg md:py-lg">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-md py-md md:px-lg md:py-lg">
           <ReconcileList initialItems={items} varianceThresholdOz={varianceThresholdOz} />
         </div>
       </div>

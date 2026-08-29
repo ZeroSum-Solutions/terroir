@@ -85,7 +85,7 @@ export function ActionDialog({
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; this dialog already has full keyboard access via useFocusTrap (Escape + explicit action buttons).
     <div
       data-action-dialog-backdrop="true"
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-scrim p-md sm:items-center"
+      className="fixed inset-0 z-[var(--z-dialog)] flex items-end justify-center bg-scrim p-md sm:items-center"
       onMouseDown={handleBackdrop}
     >
       <div
@@ -115,7 +115,7 @@ export function ActionDialog({
             type="button"
             aria-disabled={busy || undefined}
             onClick={closeWhenIdle}
-            className="min-h-11 rounded-pill border border-hairline bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+            className="min-h-11 rounded-pill border border-hairline bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-ring"
           >
             {cancelLabel}
           </button>
@@ -124,7 +124,7 @@ export function ActionDialog({
             disabled={busy}
             onClick={onConfirm}
             className={cn(
-              "min-h-11 rounded-pill px-lg text-[14px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
+              "min-h-11 rounded-pill px-lg text-[14px] font-medium transition-colors focus-ring disabled:cursor-not-allowed disabled:opacity-60",
               tone === "danger"
                 ? "bg-primary text-white hover:bg-primary-hover"
                 : "bg-surface-inverse text-on-inverse hover:bg-ink-soft",

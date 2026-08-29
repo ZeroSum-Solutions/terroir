@@ -91,7 +91,7 @@ export function MemberAnalyticsTable({
 }
 
 function Metric({ href, name, children }: { href: string; name: string; children: React.ReactNode }) {
-  return <td data-metric={name} className="py-sm pr-md"><Link href={href} className="tabular inline-flex min-h-11 min-w-11 items-center rounded-sm text-ink underline decoration-beige-deep underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25">{children}</Link></td>;
+  return <td data-metric={name} className="py-sm pr-md"><Link href={href} className="tabular inline-flex min-h-11 min-w-11 items-center rounded-sm text-ink underline decoration-beige-deep underline-offset-2 focus-ring">{children}</Link></td>;
 }
 
 function formatRate(rate: number) {

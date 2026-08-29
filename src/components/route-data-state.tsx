@@ -41,7 +41,7 @@ export function RouteDataError({
       <button
         type="button"
         onClick={onRetry}
-        className="mt-md inline-flex h-11 items-center rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blush-wash focus-visible:ring-offset-2"
+        className="mt-md inline-flex h-11 items-center rounded-pill bg-primary px-lg text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
       >
         Try again
       </button>

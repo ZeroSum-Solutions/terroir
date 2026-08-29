@@ -257,7 +257,7 @@ export function TeamActions({
             <button
               type="button"
               onClick={openInvite}
-              className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+              className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring"
             >
               <Link2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               Create invite link
@@ -276,7 +276,7 @@ export function TeamActions({
             <IconButton
               label="Dismiss error"
               onClick={() => setMemberActionError(null)}
-              className="shrink-0 rounded-md text-accent/70 hover:bg-primary/10 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+              className="shrink-0 rounded-md text-accent/70 hover:bg-primary/10 hover:text-accent focus-ring"
             >
               <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
             </IconButton>
@@ -293,7 +293,7 @@ export function TeamActions({
                 <button
                   type="button"
                   onClick={openInvite}
-                  className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+                  className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring"
                 >
                   <Link2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                   Create invite link
@@ -334,7 +334,7 @@ export function TeamActions({
                         aria-label={`Change role for ${member.name}`}
                         value={member.role}
                         onChange={(e) => changeRole(member.id, e.target.value)}
-                        className="min-h-11 rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                        className="min-h-11 rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink focus-ring"
                       >
                         <option value="owner">Owner</option>
                         <option value="manager">Manager</option>
@@ -352,7 +352,7 @@ export function TeamActions({
                           setMemberActionError(null);
                           setPendingMemberRemoval(member);
                         }}
-                        className="rounded-md text-grey hover:bg-blush-wash hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                        className="rounded-md text-grey hover:bg-blush-wash hover:text-accent focus-ring"
                       >
                         <Trash2
                           className="h-3.5 w-3.5"
@@ -429,7 +429,7 @@ export function TeamActions({
                           type="button"
                           onClick={() => copyInvitationLink(inv)}
                           aria-label={`Copy invite link for ${identity}`}
-                          className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-beige-deep bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                          className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-beige-deep bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
                         >
                           {justCopied ? (
                             <Check className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -443,7 +443,7 @@ export function TeamActions({
                         type="button"
                         onClick={() => resendInvitation(inv.id)}
                         aria-label={`Resend invitation for ${identity}`}
-                        className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-beige-deep bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                        className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-beige-deep bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
                       >
                         <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                         Resend
@@ -454,7 +454,7 @@ export function TeamActions({
                           setMemberActionError(null);
                           setPendingInvitationRevocation(inv);
                         }}
-                        className="rounded-pill border border-beige-deep bg-surface text-grey hover:bg-blush-wash hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                        className="rounded-pill border border-beige-deep bg-surface text-grey hover:bg-blush-wash hover:text-accent focus-ring"
                       >
                         <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
                       </IconButton>
@@ -572,7 +572,7 @@ function InviteModal({
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; this dialog already has full keyboard access via useFocusTrap (Escape + a visible Close button).
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim backdrop-blur-sm"
+      className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center bg-scrim backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="invite-modal-title"
@@ -619,7 +619,7 @@ function InviteModal({
                     onCreate();
                   }
                 }}
-                className="mt-xs min-h-11 w-full rounded-pill border border-hairline bg-surface px-md text-[14px] text-ink focus:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                className="mt-xs min-h-11 w-full rounded-pill border border-hairline bg-surface px-md text-[14px] text-ink focus:border-accent focus-ring"
               />
               <p className="mt-xs text-[12px] text-grey">
                 The link will only work for this address.
@@ -639,7 +639,7 @@ function InviteModal({
                 onChange={(e) =>
                   setInviteRole(e.target.value as "manager" | "staff")
                 }
-                className="mt-xs min-h-11 w-full rounded-pill border border-hairline bg-surface px-md text-[14px] text-ink focus:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                className="mt-xs min-h-11 w-full rounded-pill border border-hairline bg-surface px-md text-[14px] text-ink focus:border-accent focus-ring"
               >
                 <option value="manager">Manager</option>
                 <option value="staff">Staff</option>
@@ -662,7 +662,7 @@ function InviteModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex min-h-11 items-center rounded-pill border border-beige-deep bg-surface px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                className="flex min-h-11 items-center rounded-pill border border-beige-deep bg-surface px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring"
               >
                 Cancel
               </button>
@@ -670,7 +670,7 @@ function InviteModal({
                 type="button"
                 onClick={onCreate}
                 disabled={creating || inviteEmail.trim().length === 0}
-                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2 disabled:opacity-60"
+                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring disabled:opacity-60"
               >
                 {creating && (
                   <Loader2
@@ -693,14 +693,14 @@ function InviteModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex min-h-11 items-center rounded-pill border border-beige-deep bg-surface px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                className="flex min-h-11 items-center rounded-pill border border-beige-deep bg-surface px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring"
               >
                 Done
               </button>
               <button
                 type="button"
                 onClick={onCopy}
-                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+                className="flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[14px] font-medium text-white hover:bg-primary-hover focus-ring"
               >
                 {copied ? (
                   <Check className="h-4 w-4" strokeWidth={2} />

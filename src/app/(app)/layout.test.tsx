@@ -61,7 +61,11 @@ describe("AppLayout shell context", () => {
     expect(root.querySelector("header")?.parentElement?.className).toContain(
       "overflow-x-hidden",
     );
-    expect(root.querySelector("main")?.className).toContain("pb-[152px]");
+    // The bottom gutter clears the tab bar, its safe area and the FAB, and
+    // comes from the chrome tokens rather than a hand-written 152px.
+    expect(root.querySelector("main")?.className).toContain(
+      "pb-[calc(var(--chrome-tabbar-total)+var(--chrome-fab)+var(--spacing-2xl))]",
+    );
   });
 
   it("keeps onboarding and visible fallback context for a null restaurant", async () => {

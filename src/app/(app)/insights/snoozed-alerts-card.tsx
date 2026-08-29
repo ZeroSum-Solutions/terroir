@@ -108,7 +108,7 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+        className="flex w-full items-center justify-between rounded-sm text-left focus-ring"
       >
         <div>
           <h3 className="font-serif text-[18px] text-ink">
@@ -181,7 +181,7 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
                   type="button"
                   disabled={isBusy}
                   onClick={() => onUnsnooze(e.wineId, e.kind)}
-                  className="inline-flex h-[30px] items-center gap-2xs rounded-pill border border-ink/25 bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 disabled:opacity-60"
+                  className="inline-flex h-[30px] items-center gap-2xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:opacity-60"
                 >
                   <RotateCcw
                     className="h-3 w-3"

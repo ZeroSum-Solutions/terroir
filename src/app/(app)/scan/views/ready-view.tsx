@@ -22,13 +22,13 @@ function RecentScansList({ scans }: RecentScansListProps) {
   if (scans.length === 0) return null;
   return (
     <section className="mt-2xl">
-      <div className="mb-md flex items-center justify-between"><h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Recent scans</h3><Link href="/scans" className="inline-flex min-h-11 items-center gap-xs text-[11px] font-medium text-grey hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">View all<ArrowRight className="h-3 w-3" strokeWidth={2} /></Link></div>
+      <div className="mb-md flex items-center justify-between"><h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Recent scans</h3><Link href="/scans" className="inline-flex min-h-11 items-center gap-xs text-[11px] font-medium text-grey hover:text-accent focus-ring">View all<ArrowRight className="h-3 w-3" strokeWidth={2} /></Link></div>
       <div className="grid grid-cols-1 gap-sm md:grid-cols-3 md:gap-md">
         {scans.map((s) => (
           <Link
             key={s.id}
             href={`/scan/${s.id}`}
-            className="block min-h-11 rounded-card card-surface p-md transition-colors hover:border-accent/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="block min-h-11 rounded-card card-surface p-md transition-colors hover:border-accent/40 focus-ring"
           >
             <div className="mb-sm flex items-center justify-between">
               <TimeAgo iso={s.parsedAt} className="tabular text-[12px] text-ink-muted" />
@@ -154,7 +154,7 @@ export function ReadyView({
       {isDragging && (
         <div
           aria-hidden="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/60 p-lg"
+          className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center bg-ink/60 p-lg"
         >
           <div className="rounded-card border-2 border-dashed border-beige bg-surface px-xl py-lg text-center">
             <p className="font-serif text-[20px] text-ink">
@@ -175,7 +175,7 @@ export function ReadyView({
             onClick={() => onModeChange("invoice")}
             aria-pressed={!isBottle}
             className={cn(
-              "flex min-h-11 items-center gap-xs rounded-pill px-md py-sm text-[13px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+              "flex min-h-11 items-center gap-xs rounded-pill px-md py-sm text-[13px] font-medium transition-colors focus-ring",
               !isBottle
                 ? "bg-ink text-beige"
                 : "text-grey hover:text-ink",
@@ -189,7 +189,7 @@ export function ReadyView({
             onClick={() => onModeChange("bottle")}
             aria-pressed={isBottle}
             className={cn(
-              "flex min-h-11 items-center gap-xs rounded-pill px-md py-sm text-[13px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+              "flex min-h-11 items-center gap-xs rounded-pill px-md py-sm text-[13px] font-medium transition-colors focus-ring",
               isBottle
                 ? "bg-ink text-beige"
                 : "text-grey hover:text-ink",
@@ -224,7 +224,7 @@ export function ReadyView({
             <Link
               href="/lists"
               onClick={onDismissSaved}
-              className="flex min-h-11 items-center gap-xs rounded-pill px-sm py-xs text-[13px] font-medium text-accent hover:bg-blush-wash focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="flex min-h-11 items-center gap-xs rounded-pill px-sm py-xs text-[13px] font-medium text-accent hover:bg-blush-wash focus-ring"
             >
               <ListOrdered className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
               Add to wine list
@@ -232,7 +232,7 @@ export function ReadyView({
             <button
               type="button"
               onClick={onDismissSaved}
-              className="min-h-11 text-[13px] text-grey hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="min-h-11 text-[13px] text-grey hover:text-ink focus-ring"
             >
               Dismiss
             </button>
@@ -243,7 +243,7 @@ export function ReadyView({
       <button
         type="button"
         onClick={() => beginCapture(cameraRef)}
-        className="flex min-h-11 w-full flex-col items-center justify-center rounded-card border-2 border-dashed border-beige-deep bg-bridge-surface px-lg py-2xl text-center transition-colors hover:border-accent hover:bg-blush-wash/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:py-3xl"
+        className="flex min-h-11 w-full flex-col items-center justify-center rounded-card border-2 border-dashed border-beige-deep bg-bridge-surface px-lg py-2xl text-center transition-colors hover:border-accent hover:bg-blush-wash/40 focus-ring md:py-3xl"
       >
         <span className="mb-md flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white md:h-16 md:w-16">
           <Camera className="h-6 w-6 md:h-7 md:w-7" strokeWidth={1.75} aria-hidden="true" />
@@ -268,7 +268,7 @@ export function ReadyView({
           <button
             type="button"
             onClick={() => beginCapture(fileRef)}
-            className="flex h-12 w-full flex-1 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex h-12 w-full flex-1 items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring"
           >
             <FileUp className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
             Upload file
@@ -282,7 +282,7 @@ export function ReadyView({
             <button
               type="button"
               onClick={() => void handlePaste()}
-              className="flex h-12 shrink-0 items-center justify-center gap-sm rounded-pill border border-ink/25 bg-surface px-lg text-[14px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="flex h-12 shrink-0 items-center justify-center gap-sm rounded-pill border border-edge bg-surface px-lg text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring"
             >
               <ClipboardPaste className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               Paste

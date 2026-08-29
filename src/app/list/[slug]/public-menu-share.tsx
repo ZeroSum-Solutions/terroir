@@ -45,7 +45,7 @@ export function PublicMenuShare({ title, text }: PublicMenuShareProps) {
       <button
         type="button"
         onClick={handleShare}
-        className="inline-flex min-h-11 items-center justify-center gap-xs rounded-pill border border-border px-md py-sm text-[13px] font-medium text-ink print:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2"
+        className="inline-flex min-h-11 items-center justify-center gap-xs rounded-pill border border-border px-md py-sm text-[13px] font-medium text-ink print:hidden focus-ring"
       >
         <Share2 aria-hidden="true" className="h-4 w-4" />
         Share menu

@@ -136,7 +136,7 @@ function AtlasCountryList({
                     : "open bottle only"
                 }`}
                 className={cn(
-                  "inline-flex min-h-11 items-center gap-xs whitespace-nowrap rounded-pill border px-md transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                  "inline-flex min-h-11 items-center gap-xs whitespace-nowrap rounded-pill border px-md transition-colors focus-ring",
                   selected
                     ? "border-accent bg-accent/10 text-accent"
                     : "border-hairline bg-surface text-ink hover:bg-bridge-surface",
@@ -188,7 +188,7 @@ function AtlasRegionSheet({
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; the dialog below already has full keyboard access via useFocusTrap (Escape + a visible Close button).
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-scrim md:items-center"
+      className="fixed inset-0 z-[var(--z-dialog)] flex items-end justify-center bg-scrim md:items-center"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -208,13 +208,13 @@ function AtlasRegionSheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-ring"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-md py-md">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-md py-md">
           {namedRegions.length === 0 && !unknownRegion ? (
             <p className="py-md text-center text-body-sm text-grey">No regions recorded.</p>
           ) : (

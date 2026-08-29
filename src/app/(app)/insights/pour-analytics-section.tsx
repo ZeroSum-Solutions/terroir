@@ -251,7 +251,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
                     <div key={w.wine_id} data-metric={`ranked-pours-${w.wine_id}`}>
                       <Link
                         href={metricHref("wine", w.wine_id)}
-                        className="flex min-h-11 items-center gap-sm rounded-sm p-xs transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                        className="flex min-h-11 items-center gap-sm rounded-sm p-xs transition-colors hover:bg-surface focus-ring"
                       >
                         <span className="w-[18px] shrink-0 text-right tabular text-[11px] text-grey">
                           {i + 1}
@@ -297,7 +297,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
                     >
                       <Link
                         href={metricHref("wine", w.wine_id)}
-                        className="flex min-h-11 items-center gap-sm rounded-sm p-xs transition-colors hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                        className="flex min-h-11 items-center gap-sm rounded-sm p-xs transition-colors hover:bg-surface focus-ring"
                       >
                         <span className="w-[18px] shrink-0 text-right tabular text-[11px] text-grey">
                           {i + 1}

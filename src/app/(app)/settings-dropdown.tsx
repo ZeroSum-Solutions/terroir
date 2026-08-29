@@ -60,7 +60,7 @@ export function SettingsDropdown() {
         aria-label="Settings"
         aria-expanded={open}
         aria-haspopup="true"
-        className="flex h-11 w-11 items-center justify-center rounded-pill text-grey transition-colors hover:bg-bridge-surface hover:text-ink focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:h-auto md:w-auto md:border md:border-beige-deep md:bg-surface md:px-md md:py-sm"
+        className="flex h-11 w-11 items-center justify-center rounded-pill text-grey transition-colors hover:bg-bridge-surface hover:text-ink focus-ring md:h-auto md:w-auto md:border md:border-beige-deep md:bg-surface md:px-md md:py-sm"
       >
         <Settings className="h-5 w-5 md:h-4 md:w-4" strokeWidth={1.75} aria-hidden="true" />
       </button>
@@ -70,13 +70,13 @@ export function SettingsDropdown() {
           the lightweight dropdown convention. */}
       {open && (
         <div
-          className="fixed inset-0 z-20 bg-scrim md:hidden"
+          className="fixed inset-0 z-[var(--z-overlay)] bg-scrim md:hidden"
           aria-hidden="true"
           onClick={close}
         />
       )}
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-xs w-[180px] rounded-card card-surface" role="menu">
+        <div className="absolute right-0 top-full z-[var(--z-overlay)] mt-xs w-[180px] rounded-card card-surface" role="menu">
           <div className="flex flex-col py-xs">
             <Link
               ref={(el) => { itemsRef.current[0] = el; }}
@@ -84,7 +84,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-ring"
             >
               <DollarSign className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Pricing
@@ -95,7 +95,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-ring"
             >
               <Archive className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Bins
@@ -109,7 +109,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-ring"
             >
               <Users className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Team
@@ -120,7 +120,7 @@ export function SettingsDropdown() {
               onClick={close}
               role="menuitem"
               tabIndex={-1}
-              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="flex min-h-11 items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-ring"
             >
               <Upload className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
               Import
@@ -134,7 +134,7 @@ export function SettingsDropdown() {
                 type="submit"
                 role="menuitem"
                 tabIndex={-1}
-                className="flex min-h-11 w-full items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-visible:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="flex min-h-11 w-full items-center gap-sm px-md py-sm text-[14px] text-ink transition-colors hover:bg-bridge-surface focus-ring"
               >
                 <LogOut className="h-4 w-4 text-ink-muted" strokeWidth={1.75} aria-hidden="true" />
                 Sign out

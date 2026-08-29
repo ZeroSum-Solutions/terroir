@@ -507,7 +507,7 @@ export default async function DashboardPage({
           </p>
           <Link
             href="/scan"
-            className="mt-lg flex h-[38px] items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+            className="mt-lg flex h-[38px] items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-white transition-colors hover:bg-primary-hover focus-ring"
           >
             <ScanLine className="h-4 w-4" strokeWidth={2} />
             Go to scanner
@@ -540,7 +540,7 @@ export default async function DashboardPage({
           <a
             href="/api/insights/csv"
             download="insights-export.csv"
-            className="flex min-h-11 items-center gap-xs rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 focus-visible:ring-offset-2"
+            className="flex min-h-11 items-center gap-xs rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-ring"
           >
             <svg
               width="16"
@@ -633,7 +633,7 @@ export default async function DashboardPage({
               {drinkWindowAlerts.length > visibleDrinkWindowAlerts.length && (
                 <Link
                   href={metricHref("drink-now-count")}
-                  className="inline-flex min-h-11 items-center justify-center self-start rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  className="inline-flex min-h-11 items-center justify-center self-start rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
                 >
                   View all {drinkWindowAlerts.length} in Cellar
                 </Link>
@@ -714,7 +714,7 @@ export default async function DashboardPage({
               visiblePastDrinkWindowWines.length && (
               <Link
                 href={metricHref("drink-now-count")}
-                className="mt-md inline-flex min-h-11 items-center justify-center rounded-pill border border-ink/25 bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                className="mt-md inline-flex min-h-11 items-center justify-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
               >
                 View all {pastDrinkWindowWines.length} past-window wines in Cellar
               </Link>
@@ -1044,7 +1044,7 @@ export default async function DashboardPage({
               </p>
               <Link
                 href="/scan"
-                className="mt-md inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                className="mt-md inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-white hover:bg-primary-hover focus-ring"
               >
                 <ScanLine className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                 Scan an invoice
@@ -1067,7 +1067,7 @@ export default async function DashboardPage({
                     key={scan.id}
                     href={`/scan/${scan.id}`}
                     aria-label={`View scan from ${scan.distributor_name}, ${scan.item_count} wines, ${formatMoney(scanTotal)}, ${relative}`}
-                    className={`flex items-center gap-md rounded-sm py-sm transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25 ${i > 0 ? "border-t border-hairline" : ""}`}
+                    className={`flex items-center gap-md rounded-sm py-sm transition-colors hover:bg-bridge-surface focus-ring ${i > 0 ? "border-t border-hairline" : ""}`}
                   >
                     <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-bridge-surface text-grey">
                       <ScanLine className="h-4 w-4" strokeWidth={1.75} />
