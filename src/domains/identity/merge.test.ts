@@ -229,7 +229,7 @@ describe.skipIf(!hasLiveDb)("P2 merge_wines / merge_canonical_wines (MANDATORY l
 
     const { data: batch } = await admin
       .from("import_batches")
-      .insert({ restaurant_id: restaurantA, filename: "p2-merge-test.csv", total_rows: 1 } as never)
+      .insert({ restaurant_id: restaurantA, filename: "p2-merge-test.csv", total_rows: 1, content_sha256: "2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a2e6a" } as never)
       .select("id")
       .single();
     const { data: batchRow } = await admin

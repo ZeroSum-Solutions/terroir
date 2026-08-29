@@ -1,7 +1,7 @@
 # Camera-First Personal Cellar — Owner Decisions Brief
 
 > **SUPERSEDED 2026-08-28 — do not act on the defaults below.**
-> All eleven gates were decided in
+> All twelve gates were decided in
 > `2026-08-28-camera-first-decisions-recorded.md`, which is the binding
 > record. Six rows were amended rather than ratified, and the adjudication
 > found **twelve factual errors in this document's own premises** — several

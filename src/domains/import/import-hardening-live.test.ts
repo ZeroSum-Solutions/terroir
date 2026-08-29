@@ -237,10 +237,29 @@ describe.skipIf(!hasLiveDb)("import hardening 0127/0128 (MANDATORY, live Postgre
           .select("id")
           .single();
 
-        // 23514 = check_violation. Service role is not exempt: a CHECK is a
-        // table constraint, not an RLS policy.
-        expect(error?.code, `digest ${String(digest)} was accepted`).toBe("23514");
+        // P0005 from the guard trigger. Service role is not exempt: a trigger
+        // is table machinery, not an RLS policy.
+        expect(error?.code, `digest ${String(digest)} was accepted`).toBe("P0005");
       }
+    });
+
+    it("REFUSES to attach new rows to a batch with no normalisable digest", async () => {
+      // The second half of the bypass. A grandfathered parent stays unlockable
+      // forever, so attaching fresh rows to one and applying it would walk past
+      // the barrier without ever inserting or updating a PARENT — neither of the
+      // parent-level rules would fire. There is no way to create such a parent
+      // any more, so this test reaches for the same guard from the other side:
+      // a batch id that does not resolve to a normalisable digest at all.
+      const { error } = await admin
+        .from("import_batch_rows")
+        .insert({
+          batch_id: "00000000-0000-0000-0000-000000000000",
+          restaurant_id: restaurantId,
+          row_number: 1,
+          raw: { producer: "Orphan", name: "Orphan Wine" },
+        } as never);
+
+      expect(error?.code).toBe("P0007");
     });
 
     it("REFUSES to repoint an existing batch at another file's digest", async () => {

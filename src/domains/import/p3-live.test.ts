@@ -226,11 +226,16 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
   describe("C09: re-confirming byte-identical content is idempotent, and a rows-insert failure never leaves an orphaned batch", () => {
     it("BEFORE (simulated pre-fix path): the OLD two-separate-statement confirm pattern really did create two batches and double quantities — proves the bug was real, not hypothetical", async () => {
       // Reproduces confirmImportBatch's EXACT pre-P3 body: two independent
-      // client statements, no content hash, no atomicity between them.
-      async function oldConfirm() {
+      // client statements with no atomicity between them. The pre-P3 body also
+      // wrote no content hash; this fixture now supplies one because 0129
+      // requires every NEW batch to carry a digest 0128 can lock on. The hash
+      // was never what this test was about — the double-batch/double-quantity
+      // bug came from the two statements not sharing a transaction, and that is
+      // reproduced unchanged.
+      async function oldConfirm(contentSha256: string) {
         const { data: batch, error: batchError } = await admin
           .from("import_batches")
-          .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c09-old.csv", total_rows: 1 } as never)
+          .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c09-old.csv", total_rows: 1, content_sha256: contentSha256 } as never)
           .select("id")
           .single();
         if (batchError || !batch) throw batchError;
@@ -250,8 +255,12 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
         return batchId;
       }
 
-      const batchId1 = await oldConfirm();
-      const batchId2 = await oldConfirm();
+      // Two DISTINCT digests: the pre-P3 body hashed nothing, so nothing tied
+      // two uploads of the same content together. Reusing one digest would let
+      // import_batches_content_sha256_idx perform exactly the deduplication this
+      // test exists to prove was absent.
+      const batchId1 = await oldConfirm("c09a".repeat(16));
+      const batchId2 = await oldConfirm("c09b".repeat(16));
       expect(batchId1).not.toBe(batchId2); // the bug: two batches for identical content
 
       await userClient.rpc("apply_import_batch_chunk", { p_batch_id: batchId1, p_limit: 10 } as never);
@@ -369,7 +378,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
 
       const { data: batch, error: batchError } = await admin
         .from("import_batches")
-        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c16.csv", total_rows: 101 } as never)
+        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c16.csv", total_rows: 101, content_sha256: "c16bc16bc16bc16bc16bc16bc16bc16bc16bc16bc16bc16bc16bc16bc16bc16b" } as never)
         .select("id")
         .single();
       if (batchError || !batch) throw batchError;
@@ -450,7 +459,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
     it("a later HIGHER-confidence match overwrites an earlier lower-confidence one (0.31 then 0.95)", async () => {
       const { data: batch } = await admin
         .from("import_batches")
-        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c24a.csv", total_rows: 2 } as never)
+        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c24a.csv", total_rows: 2, content_sha256: "c24ac24ac24ac24ac24ac24ac24ac24ac24ac24ac24ac24ac24ac24ac24ac24a" } as never)
         .select("id")
         .single();
       const batchId = (batch as { id: string }).id;
@@ -470,7 +479,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
     it("a later LOWER-confidence match never downgrades a higher-confidence one already in place (0.95 then 0.31)", async () => {
       const { data: batch } = await admin
         .from("import_batches")
-        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c24b.csv", total_rows: 2 } as never)
+        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c24b.csv", total_rows: 2, content_sha256: "c24bc24bc24bc24bc24bc24bc24bc24bc24bc24bc24bc24bc24bc24bc24bc24b" } as never)
         .select("id")
         .single();
       const batchId = (batch as { id: string }).id;
@@ -490,7 +499,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
     it("a score between the old 0.3 bar and the new 0.6 bar (0.45) never sets wines.lwin_id at all", async () => {
       const { data: batch } = await admin
         .from("import_batches")
-        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c24c.csv", total_rows: 1 } as never)
+        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c24c.csv", total_rows: 1, content_sha256: "c24cc24cc24cc24cc24cc24cc24cc24cc24cc24cc24cc24cc24cc24cc24cc24c" } as never)
         .select("id")
         .single();
       const batchId = (batch as { id: string }).id;
@@ -533,7 +542,7 @@ describe.skipIf(!hasLiveDb)("P3 critical findings (MANDATORY, live Postgres)", {
 
       const { data: batch, error: batchError } = await admin
         .from("import_batches")
-        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c2contract.csv", total_rows: 1 } as never)
+        .insert({ restaurant_id: restaurantId, created_by: userId, filename: "c2contract.csv", total_rows: 1, content_sha256: "c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0c2c0" } as never)
         .select("id")
         .single();
       if (batchError || !batch) throw batchError ?? new Error("failed to insert batch");

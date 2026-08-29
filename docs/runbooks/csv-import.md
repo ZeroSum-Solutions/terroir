@@ -940,19 +940,36 @@ anything.
 
 That grandfathering was a bypass until migration `0129`. `create_import_batch`
 (0107) accepts an unvalidated `p_content_sha256 default null` and is granted to
-`authenticated`, which also holds direct insert/update on `import_batches`
-(0076) — so a caller could manufacture two batches for one file carrying two
-distinct malformed digests, or null out a valid one, and both would skip the
-lock and the check. `0129` closes that with a database boundary rather than a
-route check:
+`authenticated`, which also holds direct insert/update on `import_batches` and
+`import_batch_rows` (0076) — so a caller could manufacture two batches for one
+file carrying two distinct malformed digests, or null out a valid one, and both
+would skip the lock and the check. `0129` closes that with two triggers:
 
-* a `not valid` CHECK constraint requires every NEW digest to match one of the
-  two shapes the barrier can normalise (the `content_sha256 is not null` clause
-  is load-bearing — a CHECK whose expression is NULL *passes*); `not valid`
-  leaves every existing row untouched, so the grandfathering above survives;
-* a `before update` trigger freezes `content_sha256`, raising `P0005`. Without
-  it, rewriting one valid digest into a different valid digest would re-point a
-  batch at another file's identity and defeat the lock just as effectively.
+* `import_batches_guard_digest` (before insert or update). On INSERT it requires
+  a digest matching one of the two shapes the barrier can normalise, raising
+  `P0005`. On UPDATE it raises `P0005` only if the digest is *changing* —
+  rewriting one valid digest into a different valid one would re-point a batch
+  at another file's identity and defeat the lock just as effectively as a
+  malformed one.
+* `import_batch_rows_require_lockable_parent` (before insert). A grandfathered
+  parent stays unlockable forever, so attaching *new* rows to one and applying it
+  would walk past the barrier without ever inserting or updating a parent.
+  Raises `P0007`.
+
+**Why triggers and not a CHECK constraint.** A `not valid` CHECK looks like the
+obvious spelling and is wrong here. `not valid` skips only the initial
+validation scan; Postgres still enforces the constraint on every later INSERT
+**and UPDATE**, including updates to the legacy rows it is supposed to
+grandfather. Those rows are updated in normal operation — batch status
+recomputation, and `revert_import_batch`'s parent update — so the CHECK spelling
+would make every historic null-digest batch permanently unrevertable. That is
+not theoretical: it broke six existing live tests, and a fabricated legacy row
+proved both halves — under the trigger spelling a null-digest row still accepts
+a status update, while its digest stays frozen.
+
+Updates to existing `import_batch_rows` are deliberately *not* guarded: apply and
+revert both update them, and blocking that would strand historic batches in the
+same way.
 
 *Existing violations are not repaired by the migration.* It is a function-only
 change and never fails on data that already violates the invariant. If a

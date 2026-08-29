@@ -65,11 +65,16 @@ function main() {
     process.exit(gen.status ?? 1);
   }
 
-  const generated = readFileSync(OUT, "utf8");
-  const { drifted, diff } = compareTypeArtifacts(committed, generated);
-
-  // Always restore the committed bytes. The gate reports; it never edits.
-  writeFileSync(OUT, committed);
+  // try/finally so that ANY failure after generation — a read error, a
+  // comparison throw, an interrupt — still restores the developer's file. The
+  // gate reports; it never edits.
+  let drifted, diff;
+  try {
+    const generated = readFileSync(OUT, "utf8");
+    ({ drifted, diff } = compareTypeArtifacts(committed, generated));
+  } finally {
+    writeFileSync(OUT, committed);
+  }
 
   if (!drifted) {
     console.log(
