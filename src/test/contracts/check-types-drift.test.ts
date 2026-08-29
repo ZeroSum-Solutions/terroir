@@ -4,6 +4,10 @@ import {
   normalizeAmbientTypeFields,
   compareTypeArtifacts,
 } from "../../../scripts/check-types-drift.mjs";
+import {
+  HEADER,
+  composeArtifact,
+} from "../../../scripts/generate-supabase-types.mjs";
 
 // A committed artifact and a freshly generated one that differ ONLY inside
 // `__InternalSupabase`. Nothing in that block is schema: it reports the
@@ -107,5 +111,41 @@ describe("types drift gate", () => {
 
   test("identical artifacts are not drift", () => {
     expect(compareTypeArtifacts(committed, committed).drifted).toBe(false);
+  });
+});
+
+// The other half of the same rule: the gate must not fire on how the bytes
+// travelled. `types:gen` fetches the body from the Management API, which
+// returns it with a single trailing newline; `types:check:local` shells out to
+// `supabase gen types --local`, whose stdout carries an extra one. Before
+// composeArtifact normalized that, CI reported a one-character diff (a bare
+// `+`) on every run, with nothing a branch author could regenerate to fix it.
+describe("composeArtifact", () => {
+  const body = `export type Database = {
+  public: { Tables: { wines: { Row: { id: string } } } }
+}
+`;
+
+  test("the two transports produce a byte-identical artifact", () => {
+    expect(composeArtifact(body)).toBe(composeArtifact(`${body}\n`));
+  });
+
+  test("the artifact ends with exactly one newline", () => {
+    expect(composeArtifact(`${body}\n\n\n`).endsWith("}\n")).toBe(true);
+    expect(composeArtifact(body).endsWith("}\n\n")).toBe(false);
+  });
+
+  test("the committed artifact is already in normalized form", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const committedArtifact = await readFile("src/types/database.ts", "utf8");
+    expect(committedArtifact).toBe(
+      composeArtifact(committedArtifact.slice(HEADER.length)),
+    );
+  });
+
+  test("a body difference still survives normalization", () => {
+    expect(composeArtifact(body)).not.toBe(
+      composeArtifact(body.replace("wines", "vintages")),
+    );
   });
 });
