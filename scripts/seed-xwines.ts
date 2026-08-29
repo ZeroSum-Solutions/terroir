@@ -23,7 +23,8 @@
  *   1. Dry run is the default — parses, aggregates, prints a preview, exits
  *      without touching the DB. Pass --confirm to upsert.
  *   2. Prod host block via PROD_SUPABASE_URL_PATTERN, overridable only with
- *      ALLOW_PROD_SEED=yes.
+ *      ALLOW_PROD_SEED=yes. The block FAILS CLOSED: with no pattern
+ *      configured, --confirm is refused outright rather than assumed safe.
  *   3. Startup banner names the target URL before anything is written.
  */
 
@@ -60,6 +61,25 @@ if (PROD_URL_PATTERN !== "" && SUPABASE_URL.includes(PROD_URL_PATTERN) && !ALLOW
   );
   console.error(`Target URL: ${SUPABASE_URL}`);
   console.error("Set ALLOW_PROD_SEED=yes in your env to override.\n");
+  process.exit(1);
+}
+
+// PROD_SUPABASE_URL_PATTERN being unset is not evidence that the target is
+// safe — it is the absence of evidence, and this script's writes are
+// destructive upserts over a table every restaurant reads. Dry runs stay open
+// (they touch nothing); --confirm does not.
+if (PROD_URL_PATTERN === "" && CONFIRM && !ALLOW_PROD_SEED) {
+  console.error(
+    "\nRefusing to run with --confirm: PROD_SUPABASE_URL_PATTERN is not set, so",
+  );
+  console.error("this script cannot tell whether the target is production.");
+  console.error(`Target URL: ${SUPABASE_URL}`);
+  console.error(
+    "Set PROD_SUPABASE_URL_PATTERN in .env.local to a substring of your PRODUCTION",
+  );
+  console.error(
+    "Supabase URL (see .env.example), or set ALLOW_PROD_SEED=yes to override.\n",
+  );
   process.exit(1);
 }
 

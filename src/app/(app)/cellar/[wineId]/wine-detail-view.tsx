@@ -4,6 +4,7 @@ import { ArrowLeft, ExternalLink, Star } from "lucide-react";
 import { StatusChip } from "@/components/status-chip";
 import { WineThumb } from "@/components/wine-thumb";
 import type {
+  CorpusRead,
   TasteAxis,
   VintageRating,
   XWinesProfile,
@@ -35,8 +36,8 @@ export type WineDetailViewProps = {
   wine: WineRow;
   bottleCount: number;
   locations: string[];
-  profile: XWinesProfile | null;
-  vintageRatings: VintageRating[];
+  profile: CorpusRead<XWinesProfile | null>;
+  vintageRatings: CorpusRead<VintageRating[]>;
 };
 
 // The hero's candlelight: a warm pool behind the bottle that reads as a lit
@@ -52,12 +53,27 @@ export function WineDetailView({
   wine,
   bottleCount,
   locations,
-  profile,
-  vintageRatings,
+  profile: profileRead,
+  vintageRatings: ratingsRead,
 }: WineDetailViewProps) {
+  // An unreadable corpus renders like an unmatched wine — no taste sections —
+  // but says so in its own words below rather than borrowing "no match".
+  const profile = profileRead.status === "ok" ? profileRead.value : null;
+  const vintageRatings = ratingsRead.status === "ok" ? ratingsRead.value : [];
+
   const facets = [wine.country, wine.region, profile?.type ?? null, wine.varietal].filter(
     (value): value is string => Boolean(value),
   );
+
+  // The house's own note outranks a bought-in one, but only the bought-in one
+  // may carry the critic's byline: attributing a sommelier's words to "Wine
+  // Advocate · 95" puts a claim in someone else's mouth. Empty strings are
+  // treated as absent, so a blank tasting_notes cannot win over a real excerpt
+  // and leave an empty blockquote on the page.
+  const houseNote = wine.tasting_notes?.trim() || null;
+  const criticNote = wine.review_excerpt?.trim() || null;
+  const tastingNote = houseNote ?? criticNote;
+  const isCriticNote = houseNote === null && criticNote !== null;
 
   return (
     <div className="bg-canvas">
@@ -77,12 +93,18 @@ export function WineDetailView({
         >
           <div className="flex items-center justify-center">
             {wine.hero_image_url ? (
+              /* unoptimized, as every other hero_image_url render does
+                 (wine-detail-drawer, WineThumb): the URL is an absolute
+                 Supabase Storage one and next.config.ts declares no
+                 images.remotePatterns, so the optimizer would refuse it and
+                 the page would throw for any wine that HAS a picture. */
               <Image
                 src={wine.hero_image_url}
                 alt={`${wine.producer} ${wine.name}`}
                 width={300}
                 height={480}
                 priority
+                unoptimized
                 className="h-auto w-[min(62vw,240px)] object-contain drop-shadow-2xl md:w-full"
               />
             ) : (
@@ -129,7 +151,10 @@ export function WineDetailView({
           </div>
         </header>
 
-        {profile === null && <NoProfileNote producer={wine.producer} />}
+        {profileRead.status === "unavailable" && <CorpusUnavailableNote />}
+        {profileRead.status === "ok" && profileRead.value === null && (
+          <NoProfileNote producer={wine.producer} />
+        )}
 
         {profile && (profile.body || profile.acidity) && (
           <Section title="What does this wine taste like?">
@@ -200,19 +225,29 @@ export function WineDetailView({
           </dl>
         </Section>
 
-        {(wine.tasting_notes || wine.review_excerpt) && (
+        {tastingNote !== null && (
           <Section title="Tasting note">
             <blockquote className="card-surface rounded-card p-lg">
               <p className="font-serif text-subheading leading-relaxed text-ink-soft">
-                {wine.tasting_notes ?? wine.review_excerpt}
+                {tastingNote}
               </p>
-              {wine.rating_source && (
+              {isCriticNote && wine.rating_source && (
                 <footer className="mt-md text-caption uppercase text-grey">
                   {wine.rating_source}
                   {wine.rating != null && ` · ${wine.rating}`}
                 </footer>
               )}
             </blockquote>
+          </Section>
+        )}
+
+        {profile && ratingsRead.status === "unavailable" && (
+          <Section title="Compare vintages">
+            <p className="text-body-sm text-grey">
+              Per-vintage ratings couldn&rsquo;t be read just now. This is a
+              problem at our end, not a wine without ratings — try again
+              shortly.
+            </p>
           </Section>
         )}
 
@@ -372,6 +407,22 @@ function StockBadge({ count }: { count: number }) {
     <span className="rounded-pill border border-hairline bg-surface px-md py-xs text-body-sm text-ink-soft">
       {count === 0 ? "None on hand" : `${count} on hand`}
     </span>
+  );
+}
+
+/**
+ * The other reason the taste sections are missing. Kept distinct from
+ * NoProfileNote on purpose: "we looked and this wine isn't in the reference"
+ * is a fact about the wine, and saying it during an outage is a lie that
+ * repeats itself on every reload.
+ */
+function CorpusUnavailableNote() {
+  return (
+    <p className="mt-xl rounded-card border border-hairline bg-surface-sunken px-lg py-md text-body-sm text-grey">
+      The reference corpus couldn&rsquo;t be reached, so taste structure, grapes
+      and pairings aren&rsquo;t shown for this bottle. That&rsquo;s a problem at
+      our end rather than a gap in the reference — try again shortly.
+    </p>
   );
 }
 

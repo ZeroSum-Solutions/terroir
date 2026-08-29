@@ -26,7 +26,11 @@ const WINE = {
   canonical_wine_id: null,
 };
 
-function supabaseReturning(wine: unknown, inventory: unknown[]) {
+function supabaseReturning(
+  wine: unknown,
+  inventory: unknown[],
+  errors: { wine?: unknown; inventory?: unknown } = {},
+) {
   const filters: Record<string, unknown> = {};
   return {
     filters,
@@ -39,10 +43,19 @@ function supabaseReturning(wine: unknown, inventory: unknown[]) {
             return self;
           },
           maybeSingle: () => ({
-            then: (r: (v: unknown) => unknown) => r({ data: wine, error: null }),
+            then: (r: (v: unknown) => unknown) =>
+              r(
+                errors.wine
+                  ? { data: null, error: errors.wine }
+                  : { data: wine, error: null },
+              ),
           }),
           then: (r: (v: unknown) => unknown) =>
-            r({ data: inventory, error: null }),
+            r(
+              errors.inventory
+                ? { data: null, error: errors.inventory }
+                : { data: inventory, error: null },
+            ),
         };
         return self;
       },
@@ -55,8 +68,8 @@ beforeEach(() => {
   mocks.notFound.mockImplementation(() => {
     throw new Error("NEXT_NOT_FOUND");
   });
-  mocks.resolveXWinesProfile.mockResolvedValue(null);
-  mocks.fetchVintageRatings.mockResolvedValue([]);
+  mocks.resolveXWinesProfile.mockResolvedValue({ status: "ok", value: null });
+  mocks.fetchVintageRatings.mockResolvedValue({ status: "ok", value: [] });
 });
 
 it("404s a segment that is not a wine id without querying", async () => {
@@ -120,21 +133,50 @@ it("does not fetch vintage ratings when no reference entry matched", async () =>
   });
 
   expect(mocks.fetchVintageRatings).not.toHaveBeenCalled();
-  expect(element.props.vintageRatings).toEqual([]);
+  expect(element.props.vintageRatings).toEqual({ status: "ok", value: [] });
 });
 
 it("fetches vintage ratings for the matched corpus wine", async () => {
   const { client } = supabaseReturning(WINE, []);
   mocks.getAuthContext.mockResolvedValue({ supabase: client, restaurantId: "r-1" });
-  mocks.resolveXWinesProfile.mockResolvedValue({ wineId: 174177 });
-  mocks.fetchVintageRatings.mockResolvedValue([
-    { vintage: 2018, ratingAvg: 3.7, ratingCount: 960 },
-  ]);
+  mocks.resolveXWinesProfile.mockResolvedValue({
+    status: "ok",
+    value: { wineId: 174177 },
+  });
+  mocks.fetchVintageRatings.mockResolvedValue({
+    status: "ok",
+    value: [{ vintage: 2018, ratingAvg: 3.7, ratingCount: 960 }],
+  });
 
   const element = await WineDetailPage({
     params: Promise.resolve({ wineId: WINE_ID }),
   });
 
-  expect(mocks.fetchVintageRatings).toHaveBeenCalledWith(expect.anything(), 174177);
-  expect(element.props.vintageRatings).toHaveLength(1);
+  // The bottle's own vintage goes with the request so the ratings window can
+  // never drop it.
+  expect(mocks.fetchVintageRatings).toHaveBeenCalledWith(expect.anything(), 174177, 2018);
+  expect(element.props.vintageRatings.value).toHaveLength(1);
+});
+
+it("throws rather than 404s when the wine query itself fails", async () => {
+  // maybeSingle() returns null for "no such wine" AND for a database outage.
+  // Calling notFound() on the second tells the user their bottle was deleted.
+  const { client } = supabaseReturning(null, [], { wine: { message: "57P01" } });
+  mocks.getAuthContext.mockResolvedValue({ supabase: client, restaurantId: "r-1" });
+
+  await expect(
+    WineDetailPage({ params: Promise.resolve({ wineId: WINE_ID }) }),
+  ).rejects.toMatchObject({ message: "57P01" });
+  expect(mocks.notFound).not.toHaveBeenCalled();
+});
+
+it("throws rather than reporting an empty cellar when the inventory query fails", async () => {
+  // A null inventory reduced to bottleCount 0, which the view renders as
+  // "None on hand" — a stock claim invented out of an outage.
+  const { client } = supabaseReturning(WINE, [], { inventory: { message: "57P01" } });
+  mocks.getAuthContext.mockResolvedValue({ supabase: client, restaurantId: "r-1" });
+
+  await expect(
+    WineDetailPage({ params: Promise.resolve({ wineId: WINE_ID }) }),
+  ).rejects.toMatchObject({ message: "57P01" });
 });

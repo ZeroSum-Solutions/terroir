@@ -1,0 +1,39 @@
+-- match_xwines never used an index. 0131 shipped
+-- `gin (winery_name gin_trgm_ops)` and `gin (name gin_trgm_ops)` on the RAW
+-- columns, but 0132's matcher prefilters on
+-- `lower(xc.winery_name) % lower(p_producer)` — and Postgres cannot serve a
+-- functional expression from a bare-column index. Every call therefore
+-- parallel-seq-scanned all 100,646 rows.
+--
+-- Identical defect, identical remedy as 0078 for
+-- `lwin_catalog.lower(producer)`; this is that fix applied to the corpus that
+-- shipped after it.
+--
+-- Measured on the local corpus (100,646 rows), the matcher's own predicate for
+-- Penfolds / Koonunga Hill, `explain (analyze, buffers)`:
+--
+--   before  Parallel Seq Scan, 33,546 rows removed by filter per worker,
+--           5,348 shared buffer hits, 77.3 ms
+--   after   Bitmap Index Scan on this index (208 rows) -> Bitmap Heap Scan,
+--           233 shared buffer hits, 1.2 ms
+--
+-- ONE index, not two, deliberately. The cuvée half of the predicate is
+-- `similarity(lower(p_name), lower(xc.name)) >= p_threshold * 0.7` — a bare
+-- similarity() call, which gin_trgm_ops does not support (it answers only %,
+-- <->, and the LIKE family). A matching `gin (lower(name) gin_trgm_ops)` was
+-- built and measured here: the planner ignored it entirely, the plan was
+-- byte-identical apart from noise, so it was dropped rather than shipped as an
+-- index nothing can read. 0078 reached the same conclusion for the same
+-- reason.
+--
+-- 0131's two raw-column indexes are now dead weight — nothing queries either
+-- column unlowered. They are left in place: dropping them is a separate,
+-- independently reversible decision and not this fix's business.
+--
+-- Index-only migration. No function body, no grant, no matching semantics
+-- changes; match_xwines returns exactly the rows it returned before, faster.
+--
+-- DOWN: drops the index. See down/0133_xwines_catalog_lower_trgm_indexes.down.sql.
+
+create index if not exists xwines_catalog_winery_lower_trgm_idx
+  on public.xwines_catalog using gin (lower(winery_name) gin_trgm_ops);

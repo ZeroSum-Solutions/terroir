@@ -9,7 +9,7 @@ describe("cellar URL state codec", () => {
   it("EV-4.3: parses the frozen contract and ignores unknown parameters", () => {
     const parsed = parseCellarUrlState(
       new URLSearchParams(
-        "q=cote&filter=low&producer=Jamet&region=Rhone&country=France&" +
+        "q=cote&filter=low&colour=red&producer=Jamet&region=Rhone&country=France&" +
           "varietal=Syrah&vintage_min=2016&vintage_max=2020&format=750&" +
           "group_by=producer&health=hold&sort=window&" +
           "wine=123e4567-e89b-42d3-a456-426614174000&ignored=yes",
@@ -19,6 +19,7 @@ describe("cellar URL state codec", () => {
     expect(parsed).toEqual({
       q: "cote",
       filter: "low",
+      colour: "red",
       producer: "Jamet",
       region: "Rhone",
       country: "France",
@@ -43,6 +44,7 @@ describe("cellar URL state codec", () => {
     ).toEqual({
       q: "",
       filter: "all",
+      colour: null,
       producer: null,
       region: null,
       country: null,
@@ -61,6 +63,7 @@ describe("cellar URL state codec", () => {
     const rand = lcg(20260819);
     const values = [null, "Jamet", "Côte & Fils", "Müller"] as const;
     const filters = ["all", "open", "out", "low", "drink-now", "hold"] as const;
+    const colours = [null, "red", "white", "sparkling", "rose"] as const;
     const groups = [null, "producer", "region", "varietal", "vintage"] as const;
     const health = [null, "window_risk", "hold", "dead_stock", "cash_trap", "healthy"] as const;
     const sorts = [null, "producer", "vintage-asc", "vintage-desc", "window", "qty-desc"] as const;
@@ -68,6 +71,7 @@ describe("cellar URL state codec", () => {
       const state: CellarUrlState = {
         q: values[Math.floor(rand() * values.length)] ?? "",
         filter: filters[Math.floor(rand() * filters.length)],
+        colour: colours[Math.floor(rand() * colours.length)],
         producer: values[Math.floor(rand() * values.length)],
         region: values[Math.floor(rand() * values.length)],
         country: values[Math.floor(rand() * values.length)],

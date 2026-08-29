@@ -20,6 +20,7 @@ export type CellarUrlFilter = (typeof CELLAR_FILTERS)[number];
 export type CellarUrlState = CellarFacets & {
   q: string;
   filter: CellarUrlFilter;
+  colour: string | null;
   producer: string | null;
   region: string | null;
   country: string | null;
@@ -49,6 +50,7 @@ export function parseCellarUrlState(params: SearchParamsReader): CellarUrlState 
   return {
     q: parseValue(querySchema, params.get("q")) ?? "",
     filter: parseValue(filterSchema, params.get("filter")) ?? "all",
+    colour: parseValue(textSchema, params.get("colour")),
     producer: parseValue(textSchema, params.get("producer")),
     region: parseValue(textSchema, params.get("region")),
     country: parseValue(textSchema, params.get("country")),
@@ -67,6 +69,7 @@ export function serializeCellarUrlState(state: CellarUrlState): URLSearchParams 
   const params = new URLSearchParams();
   setText(params, "q", state.q);
   params.set("filter", state.filter);
+  setText(params, "colour", state.colour);
   setText(params, "producer", state.producer);
   setText(params, "region", state.region);
   setText(params, "country", state.country);

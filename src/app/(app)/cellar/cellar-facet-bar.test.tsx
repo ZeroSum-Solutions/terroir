@@ -27,6 +27,7 @@ function options(...labels: string[]): FacetCount[] {
 }
 
 const diverseCounts: FacetCounts = {
+  colour: options("Red", "White"),
   producer: options("Alpha Estate", "Beta Cellars", "Canto Verde"),
   region: options("Napa", "Sonoma", "Loire"),
   country: options("USA", "France"),
@@ -130,6 +131,7 @@ describe("CellarFacetBar", () => {
 
   it("renders nothing when every dimension has one option and no facet is applied", async () => {
     const singleOption: FacetCounts = {
+      colour: options("Red"),
       producer: options("Only Producer"),
       region: options("Only Region"),
       country: options("Only Country"),
@@ -318,10 +320,9 @@ async function click(element: HTMLElement) {
 
 function expectFocusOutlinePattern(element: HTMLElement) {
   const classes = element.className.split(/\s+/);
-  expect(classes).toContain("focus-visible:outline");
-  expect(classes).toContain("focus-visible:outline-2");
-  expect(classes).toContain("focus-visible:outline-offset-2");
-  expect(classes).toContain("focus-visible:outline-accent");
+  // DESIGN.md — Focus: one solid token, one recipe, :focus-visible only.
+  expect(classes).toContain("focus-ring");
+  expect(element.className).not.toMatch(/focus(-visible)?:(ring|outline)/);
   // The banned pattern this replaces: `.glass`'s unlayered CSS beats a
   // layered Tailwind ring, so outline-none + a ring is an automatic fail.
   expect(classes).not.toContain("outline-none");

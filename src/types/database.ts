@@ -2248,7 +2248,12 @@ export type Database = {
         }[]
       }
       match_xwines: {
-        Args: { p_name: string; p_producer: string; p_threshold?: number }
+        Args: {
+          p_limit?: number
+          p_name: string
+          p_producer: string
+          p_threshold?: number
+        }
         Returns: {
           country: string
           name: string

@@ -242,3 +242,50 @@ function lcg(seed: number) {
     return state / 2 ** 32;
   };
 }
+
+describe("colour dimension", () => {
+  const poured = [
+    wine({ wine_id: "c-1", colour: "fortified" }),
+    wine({ wine_id: "c-2", colour: "red" }),
+    wine({ wine_id: "c-3", colour: "rose" }),
+    wine({ wine_id: "c-4", colour: "white" }),
+    wine({ wine_id: "c-5", colour: "red" }),
+    wine({ wine_id: "c-6", colour: "sparkling" }),
+    wine({ wine_id: "c-7", colour: "dessert" }),
+  ];
+
+  it("orders colours the way a wine list prints them, not alphabetically", () => {
+    expect(facetCounts(poured, {}).colour.map((option) => option.label)).toEqual([
+      "Red",
+      "White",
+      "Sparkling",
+      "Rosé",
+      "Dessert",
+      "Fortified",
+    ]);
+  });
+
+  it("restores the accent on rosé while filtering on the stored value", () => {
+    const rose = facetCounts(poured, {}).colour.find((o) => o.label === "Rosé");
+    expect(rose).toMatchObject({ value: "rose", count: 1 });
+    expect(applyFacets(poured, { colour: "rose" }).map((r) => r.wine_id)).toEqual(["c-3"]);
+  });
+
+  it("counts colours ignoring the colour facet itself, so the rail stays usable", () => {
+    // Picking "Red" must not collapse every other colour's count to zero —
+    // otherwise you can never switch from Red to White without clearing first.
+    const counts = facetCounts(poured, { colour: "red" });
+    expect(counts.colour.find((o) => o.label === "Red")?.count).toBe(2);
+    expect(counts.colour.find((o) => o.label === "White")?.count).toBe(1);
+  });
+
+  it("sorts an unrecognised colour after the six known ones", () => {
+    const counts = facetCounts([...poured, wine({ wine_id: "c-8", colour: "orange" })], {});
+    expect(counts.colour.at(-1)).toMatchObject({ label: "Orange", value: "orange" });
+  });
+
+  it("treats a row with no colour as Unknown rather than dropping it", () => {
+    const counts = facetCounts([...poured, wine({ wine_id: "c-9", colour: null })], {});
+    expect(counts.colour.at(-1)).toMatchObject({ label: "Unknown", isUnknown: true });
+  });
+});

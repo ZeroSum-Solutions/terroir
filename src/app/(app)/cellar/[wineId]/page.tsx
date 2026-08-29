@@ -4,6 +4,8 @@ import { getAuthContext } from "@/lib/auth-context";
 import {
   fetchVintageRatings,
   resolveXWinesProfile,
+  type CorpusRead,
+  type VintageRating,
 } from "@/lib/wine-intelligence/xwines-profile";
 import { WineDetailView } from "./wine-detail-view";
 
@@ -37,16 +39,21 @@ export default async function WineDetailPage({ params }: { params: Params }) {
   // restaurant_id is filtered explicitly as well as by RLS: a detail page keyed
   // on a UUID from the URL is exactly where a tenant-scoping slip would leak a
   // neighbouring restaurant's wine.
-  const { data: wine } = await supabase
+  const { data: wine, error: wineError } = await supabase
     .from("wines")
     .select(WINE_COLUMNS)
     .eq("id", wineId)
     .eq("restaurant_id", restaurantId)
     .maybeSingle();
 
+  // A failed query and an absent wine are different facts. maybeSingle() hands
+  // back null for both, and calling notFound() on a database outage tells the
+  // user their bottle has been deleted. Throw instead and let the route's error
+  // boundary say the truthful thing.
+  if (wineError) throw wineError;
   if (!wine) notFound();
 
-  const [{ data: inventory }, profile] = await Promise.all([
+  const [inventoryResult, profile] = await Promise.all([
     supabase
       .from("inventory_items")
       .select("quantity, bin_location, section")
@@ -60,19 +67,26 @@ export default async function WineDetailPage({ params }: { params: Params }) {
     }),
   ]);
 
+  // Same reasoning as the wine query, with a worse failure mode: a null here
+  // renders as "None on hand", which is a stock claim invented out of an
+  // outage.
+  if (inventoryResult.error) throw inventoryResult.error;
+  const inventory = inventoryResult.data ?? [];
+
   // Only reached when a profile exists, so an unmatched wine costs one query,
   // not two.
-  const vintageRatings = profile
-    ? await fetchVintageRatings(supabase, profile.wineId)
-    : [];
+  const vintageRatings =
+    profile.status === "ok" && profile.value !== null
+      ? await fetchVintageRatings(supabase, profile.value.wineId, wine.vintage)
+      : ({ status: "ok", value: [] } satisfies CorpusRead<VintageRating[]>);
 
-  const bottleCount = (inventory ?? []).reduce(
+  const bottleCount = inventory.reduce(
     (total, item) => total + (item.quantity ?? 0),
     0,
   );
   const locations = [
     ...new Set(
-      (inventory ?? [])
+      inventory
         .map((item) => item.bin_location ?? item.section)
         .filter((value): value is string => Boolean(value)),
     ),
