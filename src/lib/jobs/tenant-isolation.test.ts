@@ -16,6 +16,7 @@
 import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { assertLiveDbTargetIsLocal } from "@/test/live-db-target";
 
 const mockProcessInvoiceScanOnce = vi.fn();
 vi.mock("@/domains/scanning/invoice-scan-service", () => ({
@@ -32,6 +33,10 @@ const { processOneInvoiceExtractJob } = await import("@/lib/jobs/run-once");
 const hasLiveDb = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
 );
+
+// Refuse to point the destructive, RLS-bypassing live suites at anything
+// but a throwaway local stack. See src/test/live-db-target.ts.
+if (hasLiveDb) assertLiveDbTargetIsLocal(process.env.NEXT_PUBLIC_SUPABASE_URL!);
 // Fail LOUD, never skip, when the live stack should be there (integration
 // critic finding): a silent describe.skipIf here once let a full run
 // report green with every MANDATORY live-DB suite unexecuted. CI always

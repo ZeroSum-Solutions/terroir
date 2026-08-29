@@ -15,12 +15,17 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { assertLiveDbTargetIsLocal } from "@/test/live-db-target";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const hasLiveDb = Boolean(supabaseUrl && publishableKey && serviceRoleKey);
+
+// Refuse to point the destructive, RLS-bypassing live suites at anything
+// but a throwaway local stack. See src/test/live-db-target.ts.
+if (hasLiveDb) assertLiveDbTargetIsLocal(supabaseUrl!);
 const MERGE_BATCH_DIGEST = "b".repeat(64);
 // Fail LOUD, never skip, when the live stack should be there (integration
 // critic finding): a silent describe.skipIf here once let a full run

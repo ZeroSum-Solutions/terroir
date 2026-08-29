@@ -18,12 +18,17 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { confirmImportBatch, applyImportBatchChunk, resolveImportBatchRow, revertImportBatch } from "./batch-service";
 import { buildImportPreview } from "./preview-service";
+import { assertLiveDbTargetIsLocal } from "@/test/live-db-target";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const hasLiveDb = Boolean(supabaseUrl && publishableKey && serviceRoleKey);
+
+// Refuse to point the destructive, RLS-bypassing live suites at anything
+// but a throwaway local stack. See src/test/live-db-target.ts.
+if (hasLiveDb) assertLiveDbTargetIsLocal(supabaseUrl!);
 // Fail LOUD, never skip, when the live stack should be there (integration
 // critic finding): a silent describe.skipIf here once let a full run
 // report green with every MANDATORY live-DB suite unexecuted. CI always
