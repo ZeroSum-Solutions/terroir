@@ -58,7 +58,9 @@ function ToastContainer({ items }: { items: ToastItem[] }) {
   if (items.length === 0) return null;
   return (
     <div
-      aria-live="polite"
+      // No aria-live here: each toast carries its own role (status for
+      // success/info, alert for errors), and a live region nested inside
+      // another gets announced twice on some screen-reader pairings.
       className={cn(
         // `toast` sits above `dialog` on purpose: feedback about an action
         // must be visible over the surface that triggered it (DESIGN.md —

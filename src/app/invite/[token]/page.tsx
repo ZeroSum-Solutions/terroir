@@ -53,7 +53,7 @@ export default function AcceptInvitePage() {
     <main className="dawn-gradient flex min-h-screen items-center justify-center px-md py-lg sm:px-lg sm:py-xl">
       <div className="glass w-full max-w-[420px] rounded-card p-lg text-center sm:p-xl">
         <div className="mb-lg font-sans text-[13px] font-medium uppercase tracking-[0.22em] text-ink">
-          TERR<span className="text-accent">OIR</span>
+          TERR<span className="text-mark">OIR</span>
         </div>
         {status === "loading" && (
           <>
@@ -63,8 +63,8 @@ export default function AcceptInvitePage() {
         )}
         {status === "success" && (
           <>
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-sage-wash">
-              <Check className="h-6 w-6 text-sage-ink" strokeWidth={2.5} aria-hidden="true" />
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-ready-wash">
+              <Check className="h-6 w-6 text-ready-ink" strokeWidth={2.5} aria-hidden="true" />
             </div>
             <p className="mt-md font-serif text-[19px] font-medium text-ink">{message}</p>
             <p className="mt-xs text-[13px] text-grey">
@@ -74,8 +74,8 @@ export default function AcceptInvitePage() {
         )}
         {status === "error" && (
           <>
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blush-wash">
-              <X className="h-6 w-6 text-accent" strokeWidth={2.5} aria-hidden="true" />
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-risk-wash">
+              <X className="h-6 w-6 text-risk-ink" strokeWidth={2.5} aria-hidden="true" />
             </div>
             <p className="mt-md text-[15px] font-medium text-ink">{message}</p>
             <button

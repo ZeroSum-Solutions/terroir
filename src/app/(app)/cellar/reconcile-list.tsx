@@ -22,15 +22,15 @@ const FRACTIONS: Array<{ label: string; value: number }> = [
 ];
 
 const badgeToneClasses = {
-  positive: "bg-sage-wash text-sage-ink",
-  negative: "bg-blush-wash text-accent",
-  neutral: "bg-bridge-surface text-grey",
+  positive: "bg-ready-wash text-ready-ink",
+  negative: "bg-risk-wash text-risk-ink",
+  neutral: "bg-wash text-grey",
 } as const;
 
 const flaggedCardClasses = {
-  positive: "border-sage-ink/30 bg-sage-wash",
-  negative: "border-accent/40 bg-blush-wash",
-  neutral: "border-hairline bg-surface",
+  positive: "border-ready-ink/30 bg-ready-wash",
+  negative: "border-risk-ink/40 bg-risk-wash",
+  neutral: "border-rule bg-surface",
 } as const;
 
 type PendingChange = { newRemainingMl: number; note?: string };
@@ -113,7 +113,7 @@ export function ReconcileList({
         ))}
       </ul>
 
-      <div className="fixed bottom-[calc(var(--chrome-tabbar-total)+var(--spacing-xs))] left-0 right-0 z-[var(--z-chrome)] border-t border-hairline bg-surface px-lg py-sm md:static md:mt-lg md:border-0 md:px-0 md:py-0">
+      <div className="fixed bottom-[calc(var(--chrome-tabbar-total)+var(--spacing-xs))] left-0 right-0 z-[var(--z-chrome)] border-t border-rule bg-surface px-lg py-sm md:static md:mt-lg md:border-0 md:px-0 md:py-0">
         <button
           type="button"
           onClick={onSaveAll}
@@ -122,7 +122,7 @@ export function ReconcileList({
             "h-[48px] w-full rounded-pill font-medium transition-colors",
             changedCount > 0 && !saving
               ? "bg-primary text-seal-ink hover:bg-primary-hover"
-              : "bg-bridge-surface text-grey",
+              : "bg-wash text-grey",
           )}
         >
           {saving
@@ -182,7 +182,7 @@ function ReconcileRow({
               )}
             </div>
             <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-grey">
-              <span className="rounded-pill bg-beige px-sm py-2xs font-mono">
+              <span className="rounded-pill bg-surface-sunken px-sm py-2xs font-mono">
                 {formatBottleSize(item.size_ml)}
               </span>
               {item.opened_at && (
@@ -195,7 +195,7 @@ function ReconcileRow({
         </div>
       </div>
 
-      <div className="mb-sm rounded-md bg-bridge-surface px-sm py-sm">
+      <div className="mb-sm rounded-md bg-wash px-sm py-sm">
         <div className="flex flex-wrap items-baseline gap-sm">
           <span className="text-[12px] text-grey">Tracked:</span>
           <span className="font-mono text-[15px] font-semibold text-ink tabular-nums">
@@ -235,7 +235,7 @@ function ReconcileRow({
                   note: pending?.note,
                 });
               }}
-              className="h-11 w-[96px] rounded-pill border border-hairline bg-surface px-sm text-[14px] font-mono tabular-nums outline-none focus:border-accent focus-ring"
+              className="h-11 w-[96px] rounded-pill border border-rule bg-surface px-sm text-[14px] font-mono tabular-nums outline-none focus:border-accent focus-ring"
               aria-label="Actual remaining volume in ml"
             />
           </label>
@@ -270,7 +270,7 @@ function ReconcileRow({
                 "h-[44px] rounded-pill border text-[12px] font-medium transition-colors",
                 isActive
                   ? "border-accent bg-primary text-seal-ink"
-                  : "border-hairline bg-surface text-ink hover:bg-bridge-surface",
+                  : "border-rule bg-surface text-ink hover:bg-wash",
               )}
             >
               {f.label}
@@ -295,7 +295,7 @@ function ReconcileRow({
               })
             }
             placeholder="spill, miscount, etc."
-            className="h-11 flex-1 rounded-pill border border-hairline bg-surface px-sm text-[13px] outline-none focus:border-accent focus-ring"
+            className="h-11 flex-1 rounded-pill border border-rule bg-surface px-sm text-[13px] outline-none focus:border-accent focus-ring"
           />
         </label>
       </div>

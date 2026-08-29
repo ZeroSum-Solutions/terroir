@@ -92,7 +92,7 @@ export function MobileNavLinks({ role }: { role: Role }) {
               "flex min-h-[64px] flex-1 flex-col items-center justify-center gap-xs px-2xs py-sm text-[11px] font-medium transition-colors",
               active
                 ? "border-t-2 border-mark text-mark"
-                : "border-t-2 border-transparent text-grey active:bg-bridge-surface",
+                : "border-t-2 border-transparent text-grey active:bg-wash",
             )}
           >
             <Icon

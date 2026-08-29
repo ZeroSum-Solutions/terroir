@@ -38,7 +38,7 @@ export function MemberAnalyticsSection({
       </p>
     );
   }
-  if (!data) return <div className="mt-lg h-32 animate-pulse rounded-card bg-bridge-surface" />;
+  if (!data) return <div className="mt-lg h-32 animate-pulse rounded-card bg-wash" />;
   return <MemberAnalyticsTable data={data} identities={identities} />;
 }
 
@@ -69,12 +69,12 @@ export function MemberAnalyticsTable({
                 email: "Email unavailable",
               };
               return (
-                <tr id={`member-${memberToken}`} key={member.memberId} className="border-t border-hairline align-top hover:bg-bridge-surface">
+                <tr id={`member-${memberToken}`} key={member.memberId} className="border-t border-rule align-top hover:bg-wash">
                   <td className="py-sm pr-md">
                     <span className="block font-medium text-ink">{identity.name}</span>
                     <span className="block break-all text-grey">{identity.email}</span>
                     <span className="mt-2xs block capitalize text-grey">{member.role}</span>
-                    {member.requiresVarianceInvestigation && <span className="mt-xs block w-fit rounded-pill bg-amber-wash px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide text-amber">Variance investigation</span>}
+                    {member.requiresVarianceInvestigation && <span className="mt-xs block w-fit rounded-pill bg-risk-wash px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide text-risk-ink">Variance investigation</span>}
                   </td>
                   <Metric href={anchor} name={`member-${memberToken}-pours`}>{member.pourCount} · {member.pourMl.toLocaleString()} ml</Metric>
                   <Metric href={anchor} name={`member-${memberToken}-comps`}>{member.compCount}</Metric>
@@ -91,7 +91,7 @@ export function MemberAnalyticsTable({
 }
 
 function Metric({ href, name, children }: { href: string; name: string; children: React.ReactNode }) {
-  return <td data-metric={name} className="py-sm pr-md"><Link href={href} className="tabular inline-flex min-h-11 min-w-11 items-center rounded-sm text-ink underline decoration-beige-deep underline-offset-2 focus-ring">{children}</Link></td>;
+  return <td data-metric={name} className="py-sm pr-md"><Link href={href} className="tabular inline-flex min-h-11 min-w-11 items-center rounded-sm text-ink underline decoration-rule-strong underline-offset-2 focus-ring">{children}</Link></td>;
 }
 
 function formatRate(rate: number) {

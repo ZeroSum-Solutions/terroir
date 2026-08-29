@@ -101,9 +101,9 @@ export function CellarFilterSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}
-        className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-card bg-surface md:max-w-[440px] md:rounded-card md:border md:border-hairline"
+        className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-card bg-surface md:max-w-[440px] md:rounded-card md:border md:border-rule"
       >
-        <header className="flex items-center justify-between border-b border-hairline px-md py-sm">
+        <header className="flex items-center justify-between border-b border-rule px-md py-sm">
           <h2 id={headingId} className="font-serif text-[19px] font-medium text-ink">
             Filters
           </h2>
@@ -111,7 +111,7 @@ export function CellarFilterSheet({
             type="button"
             onClick={onClose}
             aria-label="Close filters"
-            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-ring"
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-wash focus-ring"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
@@ -192,11 +192,14 @@ export function CellarFilterSheet({
           </div>
         </div>
 
-        <footer className="flex items-center gap-sm border-t border-hairline px-md py-sm">
+        <footer
+          className="flex items-center gap-sm border-t border-rule px-md py-sm"
+          style={{ paddingBottom: "calc(var(--safe-bottom) + var(--spacing-sm))" }}
+        >
           <button
             type="button"
             onClick={handleReset}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill border border-edge text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill border border-edge text-[13px] font-medium text-ink hover:bg-wash focus-ring"
           >
             Reset
           </button>
@@ -214,7 +217,7 @@ export function CellarFilterSheet({
 }
 
 const fieldSelectClassName =
-  "h-11 w-full rounded-pill border border-edge bg-surface px-sm text-[13px] text-ink hover:bg-bridge-surface focus-ring";
+  "h-11 w-full rounded-pill border border-edge bg-surface px-sm text-[13px] text-ink hover:bg-wash focus-ring";
 
 function SheetField({
   label,

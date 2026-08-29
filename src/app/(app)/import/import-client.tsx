@@ -1000,7 +1000,7 @@ export function ImportClient() {
           aria-hidden="true"
           className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center bg-scrim p-lg"
         >
-          <div className="rounded-card border-2 border-dashed border-beige bg-surface px-xl py-lg text-center">
+          <div className="rounded-card border-2 border-dashed border-surface-sunken bg-surface px-xl py-lg text-center">
             <p className="font-serif text-[20px] text-ink">Drop your cellar file</p>
             <p className="mt-xs text-[13px] text-grey">.csv or .xlsx — one file at a time</p>
           </div>
@@ -1183,7 +1183,7 @@ function UploadStep({
     <div className="rounded-card card-surface p-lg">
       <label
         htmlFor="import-file"
-        className="flex min-h-11 cursor-pointer flex-col items-center justify-center gap-sm rounded-card border-2 border-dashed border-beige-deep bg-bridge-surface px-lg py-xl text-center transition-colors hover:border-accent hover:bg-blush-wash/40 focus-ring"
+        className="flex min-h-11 cursor-pointer flex-col items-center justify-center gap-sm rounded-card border-2 border-dashed border-rule-strong bg-wash px-lg py-xl text-center transition-colors hover:border-risk-ink/40 hover:bg-risk-wash/40 focus-ring"
       >
         <input
           ref={fileInputRef}
@@ -1257,7 +1257,7 @@ function UploadStep({
       <a
         href={`data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE_CSV)}`}
         download="cellar-import-template.csv"
-        className="mt-md flex min-h-11 items-center justify-center text-[13px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink focus-ring"
+        className="mt-md flex min-h-11 items-center justify-center text-[13px] font-medium text-grey underline underline-offset-4 hover:text-ink focus-ring"
       >
         Download CSV template
       </a>
@@ -1606,7 +1606,7 @@ export function PreviewStep({
           <h3 className="text-caption font-medium uppercase tracking-[0.18em] text-grey">Chunk breakdown</h3>
           <ul className="mt-xs space-y-2xs">
             {chunkBreakdown.map((chunk) => (
-              <li key={chunk.index} className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
+              <li key={chunk.index} className="rounded-md bg-wash px-sm py-xs text-[13px] text-ink">
                 Chunk {chunk.index} (rows {chunk.startRow}–{chunk.endRow}): {chunk.summary.validRows} valid,{" "}
                 {chunk.summary.errorRows} error(s)
               </li>
@@ -1659,7 +1659,7 @@ export function PreviewStep({
               <button
                 type="button"
                 onClick={() => setShownCount((count) => count + MAX_SHOWN_ERROR_ROWS)}
-                className="mt-xs min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-ring"
+                className="mt-xs min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-wash focus-ring"
               >
                 Show {Math.min(hiddenCount, MAX_SHOWN_ERROR_ROWS)} more row(s) with errors
               </button>
@@ -1699,7 +1699,7 @@ export function PreviewStep({
             <button
               type="button"
               onClick={() => setShownMatchedCount((count) => count + MAX_SHOWN_MATCHED_ROWS)}
-              className="mt-xs min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-ring"
+              className="mt-xs min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-wash focus-ring"
             >
               Show {Math.min(hiddenMatchedCount, MAX_SHOWN_MATCHED_ROWS)} more matched row(s)
             </button>
@@ -1731,7 +1731,7 @@ export function PreviewStep({
             <button
               type="button"
               onClick={() => setShownBelowThresholdCount((count) => count + MAX_SHOWN_MATCHED_ROWS)}
-              className="mt-xs min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-ring"
+              className="mt-xs min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink transition-colors hover:bg-wash focus-ring"
             >
               Show {Math.min(hiddenBelowThresholdCount, MAX_SHOWN_MATCHED_ROWS)} more row(s)
             </button>
@@ -1775,7 +1775,7 @@ export function PreviewStep({
           type="button"
           onClick={onBack}
           disabled={confirming}
-          className="min-h-11 flex-1 rounded-pill border border-edge bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-11 flex-1 rounded-pill border border-edge bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-wash focus-ring disabled:cursor-not-allowed disabled:opacity-60"
         >
           Choose a different file
         </button>
@@ -1854,7 +1854,7 @@ function RowFixItem({
       : `Row ${row.rowNumber}`;
 
   return (
-    <li className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
+    <li className="rounded-md bg-wash px-sm py-xs text-[13px] text-ink">
       <div className="flex items-center gap-xs">
         <span>{label}</span>
         {!disabled && live.state === "valid" && (
@@ -1887,7 +1887,7 @@ function RowFixItem({
               disabled={disabled}
               readOnly={disabled}
               className={cn(
-                "min-h-11 w-32 rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink focus:border-accent focus-ring",
+                "min-h-11 w-32 rounded-pill border border-rule bg-surface px-sm text-[13px] text-ink focus:border-accent focus-ring",
                 disabled && "cursor-not-allowed opacity-60",
               )}
             />
@@ -1936,7 +1936,7 @@ function MatchedLwinRowItem({
     ? `Chunk ${row.chunkIndex}, data row ${row.chunkRowNumber}`
     : `Row ${row.rowNumber}`;
   return (
-    <li className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
+    <li className="rounded-md bg-wash px-sm py-xs text-[13px] text-ink">
       <div className="flex flex-wrap items-center justify-between gap-sm">
         <div>
           <span>{label}</span>
@@ -1954,7 +1954,7 @@ function MatchedLwinRowItem({
           type="button"
           onClick={() => onToggle(row.rowNumber)}
           disabled={disabled}
-          className="min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring disabled:cursor-not-allowed disabled:opacity-60"
         >
           {rejected ? "Undo reject" : "Reject match"}
         </button>
@@ -1974,7 +1974,7 @@ function BelowThresholdLwinRowItem({ row }: { row: MatchedLwinRowEntry }) {
     ? `Chunk ${row.chunkIndex}, data row ${row.chunkRowNumber}`
     : `Row ${row.rowNumber}`;
   return (
-    <li className="rounded-md bg-bridge-surface px-sm py-xs text-[13px] text-ink">
+    <li className="rounded-md bg-wash px-sm py-xs text-[13px] text-ink">
       <span>{label}</span>
       <p className="mt-2xs text-caption text-grey">
         {row.lwinDisplayName ?? "Catalog entry (name unavailable)"} — match score {row.lwinScore.toFixed(2)}, will
@@ -2224,7 +2224,7 @@ export function BatchStep({
                       placeholder="Unit cost"
                       value={manualCostDrafts[row.id] ?? ""}
                       onChange={(e) => setManualCostDrafts((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                      className="min-h-11 w-28 rounded-pill border border-hairline bg-surface px-sm text-[14px] focus:border-accent focus-ring"
+                      className="min-h-11 w-28 rounded-pill border border-rule bg-surface px-sm text-[14px] focus:border-accent focus-ring"
                     />
                   )}
                   <button
@@ -2242,7 +2242,7 @@ export function BatchStep({
                   <button
                     type="button"
                     onClick={() => void resolveRow(row.id, "exclude")}
-                    className="min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+                    className="min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
                   >
                     Exclude
                   </button>
@@ -2306,7 +2306,7 @@ export function BatchStep({
           <button
             type="button"
             onClick={() => setRevertDialogOpen(true)}
-            className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-edge bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-ring"
+            className="flex min-h-11 items-center justify-center gap-xs rounded-pill border border-edge bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-wash focus-ring"
           >
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
             Revert this import
@@ -2316,7 +2316,7 @@ export function BatchStep({
         <button
           type="button"
           onClick={onDone}
-          className="min-h-11 rounded-pill px-lg text-[14px] font-medium text-ink-muted underline underline-offset-4 hover:text-ink focus-ring"
+          className="min-h-11 rounded-pill px-lg text-[14px] font-medium text-grey underline underline-offset-4 hover:text-ink focus-ring"
         >
           Start a new import
         </button>
@@ -2343,7 +2343,7 @@ function StatusBadge({ status }: { status: BatchSummary["status"] }) {
     reverted: "Reverted",
   }[status];
   return (
-    <span className="inline-flex items-center gap-2xs rounded-pill bg-bridge-surface px-sm py-2xs text-caption font-medium text-ink">
+    <span className="inline-flex items-center gap-2xs rounded-pill bg-wash px-sm py-2xs text-caption font-medium text-ink">
       {status === "completed" && <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
       {label}
     </span>
@@ -2376,7 +2376,7 @@ function RecentImports({
               type="button"
               onClick={() => onOpen(b.id)}
               className={cn(
-                "flex min-h-11 w-full items-center justify-between rounded-card card-surface px-sm text-left text-[13px] text-ink transition-colors hover:bg-bridge-surface focus-ring",
+                "flex min-h-11 w-full items-center justify-between rounded-card card-surface px-sm text-left text-[13px] text-ink transition-colors hover:bg-wash focus-ring",
               )}
             >
               <span className="truncate">{b.filename}</span>

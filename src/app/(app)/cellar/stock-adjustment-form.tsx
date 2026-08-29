@@ -82,14 +82,14 @@ function StockAdjustmentFields({
       <div className="mt-sm grid grid-cols-2 gap-xs">
         <label className="text-[12px] text-grey">
           Kind
-          <select name="kind" value={form.kind} onChange={(event) => form.setKind(event.target.value as typeof form.kind)} className="mt-xs h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink">
+          <select name="kind" value={form.kind} onChange={(event) => form.setKind(event.target.value as typeof form.kind)} className="mt-xs h-11 w-full rounded-pill border border-rule bg-surface px-sm text-[13px] text-ink">
             <option value="comp">Comp</option>
             <option value="adjustment">Adjustment</option>
           </select>
         </label>
         <label className="text-[12px] text-grey">
           Unit
-          <select name="unit" value={form.unit} onChange={(event) => form.setUnit(event.target.value as typeof form.unit)} className="mt-xs h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink">
+          <select name="unit" value={form.unit} onChange={(event) => form.setUnit(event.target.value as typeof form.unit)} className="mt-xs h-11 w-full rounded-pill border border-rule bg-surface px-sm text-[13px] text-ink">
             <option value="bottles">Bottles</option>
             <option value="ml">ml</option>
           </select>
@@ -97,21 +97,21 @@ function StockAdjustmentFields({
       </div>
       <label className="mt-sm block text-[12px] text-grey">
         Quantity
-        <input name="quantity" type="number" step="1" value={form.quantity} onChange={(event) => form.setQuantity(event.target.value)} className="mt-xs h-11 w-full rounded-pill border border-hairline bg-surface px-sm font-mono text-[13px] text-ink" />
+        <input name="quantity" type="number" step="1" value={form.quantity} onChange={(event) => form.setQuantity(event.target.value)} className="mt-xs h-11 w-full rounded-pill border border-rule bg-surface px-sm font-mono text-[13px] text-ink" />
       </label>
       <label className="mt-sm block text-[12px] text-grey">
         Reason
-        <select name="reason_code_id" value={form.reasonId} onChange={(event) => form.setReasonId(event.target.value)} className="mt-xs h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink">
+        <select name="reason_code_id" value={form.reasonId} onChange={(event) => form.setReasonId(event.target.value)} className="mt-xs h-11 w-full rounded-pill border border-rule bg-surface px-sm text-[13px] text-ink">
           <option value="">Select a reason</option>
           {reasons.filter((reason) => (form.kind === "comp" ? reason.category === "comp" : reason.category !== "comp")).map((reason) => <option key={reason.id} value={reason.id}>{reason.label}</option>)}
         </select>
       </label>
       <label className="mt-sm block text-[12px] text-grey">
         Note
-        <input name="note" maxLength={500} value={form.note} onChange={(event) => form.setNote(event.target.value)} className="mt-xs h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[13px] text-ink" />
+        <input name="note" maxLength={500} value={form.note} onChange={(event) => form.setNote(event.target.value)} className="mt-xs h-11 w-full rounded-pill border border-rule bg-surface px-sm text-[13px] text-ink" />
       </label>
       {form.message && <p role="status" className="mt-sm text-[12px] text-grey">{form.message}</p>}
-      <button type="button" disabled={form.busy || form.invalid} onClick={form.submit} className="mt-sm h-11 w-full rounded-pill border border-edge bg-surface text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-50">
+      <button type="button" disabled={form.busy || form.invalid} onClick={form.submit} className="mt-sm h-11 w-full rounded-pill border border-edge bg-surface text-[13px] font-medium text-ink hover:bg-wash disabled:opacity-50">
         {form.busy ? "Recording…" : "Record event"}
       </button>
     </>

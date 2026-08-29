@@ -54,7 +54,7 @@ export function PublicMenuShare({ title, text }: PublicMenuShareProps) {
         <span
           role="status"
           aria-live="polite"
-          className="mt-xs block text-[12px] text-ink-muted print:hidden"
+          className="mt-xs block text-[12px] text-grey print:hidden"
         >
           {status}
         </span>

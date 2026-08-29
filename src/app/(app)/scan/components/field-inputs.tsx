@@ -13,7 +13,7 @@ export function formatMoney(n: number) {
 }
 
 const FIELD_WRAP =
-  "relative flex w-full items-center rounded-sm border border-transparent bg-transparent px-sm py-xs transition-colors focus-within:border-accent focus-within:bg-surface focus-ring hover:border-hairline hover:bg-surface";
+  "relative flex w-full items-center rounded-sm border border-transparent bg-transparent px-sm py-xs transition-colors focus-within:border-accent focus-within:bg-surface focus-ring hover:border-rule hover:bg-surface";
 
 interface FieldWrapProps {
   low?: boolean;
@@ -158,15 +158,18 @@ export function VintageInput({
       setError(null);
       return onCommit(null);
     }
-    const n = parseInt(trimmed, 10);
-    if (!Number.isFinite(n)) {
+    // parseInt("2024abc") is 2024. Validate the whole string first, then
+    // convert — a scanned invoice is exactly where a half-parsed year becomes
+    // a wrong bottle.
+    const n = /^\d{4}$/.test(trimmed) ? Number(trimmed) : NaN;
+    if (!Number.isFinite(n) || n < 1800 || n > new Date().getFullYear() + 2) {
       // Validation used to be suppressed without an `id`, because there was
       // nowhere to render the message — so the desktop scan table, which
       // passes neither id nor label, silently coerced "twenty-ten" to NV
       // while the mobile cards rejected it. An error state reachable on one
       // viewport and not the other is a data-integrity bug, not a styling
       // one (DESIGN.md — State).
-      setError("Enter a year or NV.");
+      setError("Enter a four-digit year or NV.");
       return;
     }
     setError(null);
@@ -230,7 +233,9 @@ export function MoneyInput({
   }
   const errorId = useId();
   const commit = () => {
-    const n = parseFloat(val.replace(/,/g, ""));
+    // Same reasoning as the vintage: parseFloat("12abc") is 12.
+    const cleaned = val.trim().replace(/^\$/, "").replace(/,/g, "");
+    const n = /^\d*\.?\d+$/.test(cleaned) ? Number(cleaned) : NaN;
     if (!Number.isFinite(n)) {
       // Same reasoning as VintageInput: the message is shown whether or not
       // the caller supplied an id.
@@ -242,7 +247,7 @@ export function MoneyInput({
   };
   const input = (a11y?: FieldA11yProps) => (
     <FieldWrap low={low} edited={edited} invalid={error !== null}>
-      <span className="mr-2xs font-mono text-[13px] text-ink-subtle">$</span>
+      <span className="mr-2xs font-mono text-[13px] text-grey">$</span>
       <input
         aria-invalid={error !== null || undefined}
         aria-describedby={error !== null ? errorId : undefined}
@@ -275,12 +280,12 @@ interface QtyStepperProps {
 
 export function QtyStepper({ value, onChange }: QtyStepperProps) {
   return (
-    <div className="inline-flex items-center overflow-hidden rounded-pill border border-hairline bg-surface">
+    <div className="inline-flex items-center overflow-hidden rounded-pill border border-rule bg-surface">
       <button
         type="button"
         aria-label="Decrease quantity"
         onClick={() => onChange(Math.max(1, value - 1))}
-        className="flex h-11 w-11 items-center justify-center text-ink-muted hover:text-ink focus-ring"
+        className="flex h-11 w-11 items-center justify-center text-grey hover:text-ink focus-ring-inset"
       >
         <Minus className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
       </button>
@@ -291,7 +296,7 @@ export function QtyStepper({ value, onChange }: QtyStepperProps) {
         type="button"
         aria-label="Increase quantity"
         onClick={() => onChange(value + 1)}
-        className="flex h-11 w-11 items-center justify-center text-ink-muted hover:text-ink focus-ring"
+        className="flex h-11 w-11 items-center justify-center text-grey hover:text-ink focus-ring-inset"
       >
         <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
       </button>

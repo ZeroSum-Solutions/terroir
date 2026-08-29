@@ -34,7 +34,7 @@ export function RouteDataError({
   return (
     <section
       role="alert"
-      className="rounded-card shadow-card border border-hairline bg-risk-wash p-lg text-ink"
+      className="rounded-card shadow-card border border-rule bg-risk-wash p-lg text-ink"
     >
       <h2 className="text-[16px] font-medium">{title}</h2>
       <p className="mt-xs text-[14px] text-grey">{description}</p>
@@ -65,7 +65,7 @@ export function RouteDataEmpty({
       aria-label={title}
       className="rounded-card card-surface p-xl text-center text-ink"
     >
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blush-wash text-accent">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-risk-wash text-risk-ink">
         {icon}
       </div>
       <h2 className="mt-md text-[16px] font-medium">{title}</h2>

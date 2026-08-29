@@ -179,7 +179,7 @@ export function ScanReview({
             <button
               type="button"
               onClick={handleExportCsv}
-              className="flex h-11 items-center justify-center gap-sm rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+              className="flex h-11 items-center justify-center gap-sm rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
               title="Download line items as CSV"
             >
               <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -212,7 +212,7 @@ export function ScanReview({
               </div>
             </div>
           </div>
-          <div className="mt-md flex flex-wrap items-center gap-md border-t border-dashed border-hairline pt-md text-[13px] text-grey">
+          <div className="mt-md flex flex-wrap items-center gap-md border-t border-dashed border-rule pt-md text-[13px] text-grey">
             <span>{itemCount} wines</span>
             <span aria-hidden className="text-grey">·</span>
             <span>{bottles} bottles</span>
@@ -221,7 +221,7 @@ export function ScanReview({
             {lowC > 0 && (
               <>
                 <span aria-hidden className="text-grey">·</span>
-                <span className="inline-flex items-center gap-xs rounded-pill bg-blush-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-accent">
+                <span className="inline-flex items-center gap-xs rounded-pill bg-risk-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-risk-ink">
                   <AlertTriangle className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" />
                   {lowC} to review
                 </span>
@@ -234,7 +234,7 @@ export function ScanReview({
           <div className="rounded-card card-surface p-md md:sticky md:top-[72px] md:self-start">
             <div className="mb-sm text-caption font-medium uppercase tracking-[0.18em] text-grey">Original invoice</div>
             {imageLoading ? (
-              <div className="flex h-[200px] items-center justify-center rounded-lg bg-bridge-surface">
+              <div className="flex h-[200px] items-center justify-center rounded-lg bg-wash">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               </div>
             ) : imageUrl ? (
@@ -266,7 +266,7 @@ export function ScanReview({
                 </a>
               </>
             ) : (
-              <div className="flex h-[200px] items-center justify-center rounded-lg bg-bridge-surface text-[13px] text-grey">Image unavailable</div>
+              <div className="flex h-[200px] items-center justify-center rounded-lg bg-wash text-[13px] text-grey">Image unavailable</div>
             )}
           </div>
         )}
@@ -282,7 +282,7 @@ export function ScanReview({
             <div className="overflow-hidden rounded-card card-surface">
               <table className="w-full border-collapse text-[14px]">
                 <thead>
-                  <tr className="bg-bridge-surface">
+                  <tr className="bg-wash">
                     <th className="px-sm py-sm text-left text-caption font-medium uppercase tracking-[0.18em] text-grey w-[32%]">Wine</th>
                     <th className="px-sm py-sm text-left text-caption font-medium uppercase tracking-[0.18em] text-grey w-[14%]">Varietal</th>
                     <th className="px-sm py-sm text-left text-caption font-medium uppercase tracking-[0.18em] text-grey w-[9%]">Vintage</th>
@@ -294,7 +294,7 @@ export function ScanReview({
                 </thead>
                 <tbody>
                   {items.map((it) => (
-                    <tr key={it.id} className="border-t border-hairline align-middle hover:bg-bridge-surface">
+                    <tr key={it.id} className="border-t border-rule align-middle hover:bg-wash">
                       <td className="p-sm">
                         <TextInput value={it.name} low={isLow(it, "name")} edited={isEdited(it, "name")} onCommit={(v) => updateField(it.id, "name", v)} className="font-serif text-[17px] font-medium" label="Wine name" />
                         <div className="mt-2xs">
@@ -332,7 +332,7 @@ export function ScanReview({
           </div>
 
           {/* Action bar */}
-          <div className="sticky bottom-[var(--chrome-tabbar-total)] z-[var(--z-sticky)] mt-md flex flex-col gap-sm rounded-card card-surface p-md md:static md:bottom-auto md:mt-lg md:flex-row md:items-center md:justify-between" style={{ marginBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}>
+          <div className="sticky bottom-[var(--chrome-tabbar-total)] z-[var(--z-sticky)] mt-md flex flex-col gap-sm rounded-card card-surface p-md md:static md:bottom-auto md:mt-lg md:flex-row md:items-center md:justify-between" style={{ marginBottom: "calc(var(--safe-bottom) + var(--spacing-xs))" }}>
             <div className="text-[13px] text-grey md:text-[14px]">
               <span className="font-medium text-ink">{items.length} wines</span>
               <span className="mx-xs text-grey">·</span>
@@ -343,7 +343,7 @@ export function ScanReview({
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
+                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-wash focus-ring disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
               >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : <Save className="h-4 w-4" strokeWidth={2} aria-hidden="true" />}
                 <span>{isSaving ? "Saving..." : "Save Edits"}</span>

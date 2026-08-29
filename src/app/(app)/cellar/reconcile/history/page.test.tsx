@@ -124,17 +124,17 @@ describe("ReconcileHistoryPage variance presentation", () => {
 
     expectPresentation(container, "positive", {
       copy: "−0.7 oz · under expected",
-      background: "bg-blush-wash",
-      text: "text-accent",
+      background: "bg-risk-wash",
+      text: "text-risk-ink",
     });
     expectPresentation(container, "negative", {
       copy: "+0.7 oz · over expected",
-      background: "bg-sage-wash",
-      text: "text-sage-ink",
+      background: "bg-ready-wash",
+      text: "text-ready-ink",
     });
     expectPresentation(container, "zero", {
       copy: "0.0 oz · exact",
-      background: "bg-bridge-surface",
+      background: "bg-wash",
       text: "text-grey",
     });
   });

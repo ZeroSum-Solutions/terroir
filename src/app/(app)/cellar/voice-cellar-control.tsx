@@ -268,9 +268,9 @@ function VoiceDisambiguationSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}
-        className="w-full rounded-t-card bg-surface md:max-w-[440px] md:rounded-card md:border md:border-hairline"
+        className="w-full rounded-t-card bg-surface pb-[var(--safe-bottom)] md:max-w-[440px] md:rounded-card md:border md:border-rule md:pb-0"
       >
-        <header className="flex items-start justify-between gap-sm border-b border-hairline px-md py-sm">
+        <header className="flex items-start justify-between gap-sm border-b border-rule px-md py-sm">
           <div>
             <h2 id={headingId} className="font-serif text-[19px] font-medium text-ink">
               Which cellar wine?
@@ -281,7 +281,7 @@ function VoiceDisambiguationSheet({
             type="button"
             onClick={onClose}
             aria-label="Close wine choices"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-ring"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-wash focus-ring"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
@@ -292,7 +292,7 @@ function VoiceDisambiguationSheet({
               key={candidate.itemId}
               type="button"
               onClick={() => onChoose(candidate)}
-              className="min-h-11 rounded-card card-surface px-md py-sm text-left hover:bg-bridge-surface focus-ring"
+              className="min-h-11 rounded-card card-surface px-md py-sm text-left hover:bg-wash focus-ring"
             >
               <span className="block text-[14px] font-medium text-ink">
                 {candidate.producer} · {candidate.name}

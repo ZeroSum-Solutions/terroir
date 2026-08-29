@@ -101,7 +101,7 @@ function FabInner() {
           "hover:bg-primary-hover active:scale-95 focus-ring",
           open && "rotate-45",
         )}
-        style={{ bottom: "calc(env(safe-area-inset-bottom) + 80px)" }}
+        style={{ bottom: "calc(var(--chrome-tabbar-total) + var(--spacing-md))" }}
       >
         {/* Single icon that rotates 45° to become close. Avoids icon
             swap flicker. */}
@@ -118,7 +118,7 @@ function FabInner() {
           "pointer-events-none absolute right-md flex flex-col-reverse items-end gap-sm transition-opacity",
           open ? "opacity-100" : "opacity-0",
         )}
-        style={{ bottom: "calc(env(safe-area-inset-bottom) + 152px)" }}
+        style={{ bottom: "calc(var(--chrome-tabbar-total) + var(--chrome-fab) + var(--spacing-xl))" }}
         role="menu"
         aria-label="Primary actions"
         aria-hidden={!open}
@@ -168,7 +168,7 @@ function ActionPill({
       <span className="text-[12px] uppercase tracking-[0.06em] text-grey">
         {label}
       </span>
-      <span className="grid h-9 w-9 place-items-center rounded-pill bg-blush-wash text-accent">
+      <span className="grid h-9 w-9 place-items-center rounded-pill bg-risk-wash text-risk-ink">
         <Icon className="h-4 w-4" strokeWidth={2} />
       </span>
     </span>

@@ -11,15 +11,16 @@ const LABELS: Record<CellarHealthSegment, string> = {
   healthy: "Healthy",
 };
 
-// Wax & Counter (DESIGN.md 2026-08-26): segment tint is an urgency ramp
-// on the one accent, not four competing hues. Healthy and hold stay
-// quiet neutrals, window risk carries the gold time-marker, and the two
-// capital-at-risk segments step up in burgundy intensity.
+// The segment tint is an urgency ramp, not four competing hues (DESIGN.md —
+// Status). Healthy and hold stay quiet neutrals; the three that cost money
+// step up through the risk wash to the claret fill. It used to separate
+// dead_stock from cash_trap by 10% vs 20% of `accent` — which is bone in
+// Nocturne, so both rendered as the same faint grey.
 const SEGMENT_BG: Record<CellarHealthSegment, string> = {
-  window_risk: "bg-gold/10",
-  hold: "bg-bridge-surface",
-  dead_stock: "bg-accent/10",
-  cash_trap: "bg-accent/20",
+  window_risk: "bg-mark/15",
+  hold: "bg-wash",
+  dead_stock: "bg-risk-wash",
+  cash_trap: "bg-primary/25",
   healthy: "bg-surface",
 };
 
@@ -52,11 +53,11 @@ export function CellarHealthPanel({
         {summary.map((item) => {
           const href = `/cellar?health=${item.segment}`;
           return (
-            <div key={item.segment} className={`rounded-md border border-hairline p-sm ${SEGMENT_BG[item.segment]}`}>
+            <div key={item.segment} className={`rounded-md border border-rule p-sm ${SEGMENT_BG[item.segment]}`}>
               <h3 className="text-[12px] font-medium text-ink">{LABELS[item.segment]}</h3>
               <div className="mt-xs grid grid-cols-2 gap-xs">
                 <div data-metric={`cellar-health-${item.segment}-value`}>
-                  <Link href={href} className="block rounded-sm hover:bg-beige">
+                  <Link href={href} className="block rounded-sm hover:bg-surface-sunken">
                     <span className="block font-mono text-[16px] font-medium tabular text-ink">
                       {formatMoney(item.value)}
                     </span>
@@ -66,7 +67,7 @@ export function CellarHealthPanel({
                   </Link>
                 </div>
                 <div data-metric={`cellar-health-${item.segment}-count`}>
-                  <Link href={href} className="block rounded-sm hover:bg-beige">
+                  <Link href={href} className="block rounded-sm hover:bg-surface-sunken">
                     <span className="block font-mono text-[16px] font-medium tabular text-ink">{item.count}</span>
                     <span className="text-[10px] uppercase tracking-[0.06em] text-grey">
                       wines

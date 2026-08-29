@@ -238,7 +238,7 @@ export function CellarShell({
           {restaurantName} · Cellar
         </p>
         <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink max-[359px]:mt-2xs max-[359px]:text-[22px] md:text-heading lg:max-w-[820px] lg:text-display">
-          A cellar beyond the <em className="italic font-normal text-accent">ordinary</em>
+          A cellar beyond the <em className="italic font-normal text-mark">ordinary</em>
         </h1>
 
         {/* Counters-as-navigation — one compact row is both the hero's KPI
@@ -253,7 +253,7 @@ export function CellarShell({
       </div>
 
       {/* Bridge Band */}
-      <div className="-mx-md mb-md flex flex-wrap items-center gap-sm bg-beige px-md py-sm md:-mx-lg md:px-lg">
+      <div className="-mx-md mb-md flex flex-wrap items-center gap-sm bg-surface-sunken px-md py-sm md:-mx-lg md:px-lg">
         <div className="flex w-full flex-wrap items-center gap-xs md:ml-auto md:w-auto md:flex-nowrap">
           <Link
             href="/cellar/open"
@@ -404,7 +404,7 @@ export function CellarShell({
       {alerts.lowCount > 0 && view === "list" && (
         <div
           role="status"
-          className="mb-md flex items-center justify-between gap-md rounded-md border border-hairline bg-amber-wash px-md py-sm text-body-sm text-amber"
+          className="mb-md flex items-center justify-between gap-md rounded-md border border-rule bg-risk-wash px-md py-sm text-body-sm text-risk-ink"
         >
           <span>
             {alerts.lowCount} wine{alerts.lowCount === 1 ? "" : "s"} low on stock
@@ -412,7 +412,7 @@ export function CellarShell({
           <button
             type="button"
             onClick={() => replaceUrlState({ filter: "low" })}
-            className="inline-flex min-h-11 items-center rounded-pill border border-amber/30 px-sm text-[11.5px] font-medium text-amber hover:bg-surface/60"
+            className="inline-flex min-h-11 items-center rounded-pill border border-risk-ink/30 px-sm text-[11.5px] font-medium text-risk-ink hover:bg-surface/60"
           >
             Show
           </button>
@@ -583,7 +583,7 @@ function SearchInput({
         showHint && (
           <kbd
             aria-hidden
-            className="pointer-events-none absolute right-sm top-1/2 hidden h-[20px] -translate-y-1/2 items-center rounded-md border border-hairline bg-surface/60 px-2xs font-sans text-[11px] text-grey md:inline-flex"
+            className="pointer-events-none absolute right-sm top-1/2 hidden h-[20px] -translate-y-1/2 items-center rounded-md border border-rule bg-surface/60 px-2xs font-sans text-[11px] text-grey md:inline-flex"
           >
             /
           </kbd>

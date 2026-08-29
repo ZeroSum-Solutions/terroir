@@ -21,11 +21,11 @@ export default function PublicWineListNotFound() {
       <h1 className="mt-sm font-serif text-heading-sm text-ink">
         This list isn&rsquo;t available
       </h1>
-      <p className="mt-md text-[15px] leading-relaxed text-ink-muted">
+      <p className="mt-md text-[15px] leading-relaxed text-grey">
         The link may be out of date, or the restaurant may have unpublished
         their list. Ask them for an updated link and try again.
       </p>
-      <p className="mt-2xl text-[12px] text-ink-subtle">
+      <p className="mt-2xl text-[12px] text-grey">
         Powered by{" "}
         <span className="font-serif font-medium text-primary">Terroir</span>
       </p>

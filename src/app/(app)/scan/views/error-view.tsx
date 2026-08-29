@@ -39,7 +39,7 @@ export function ErrorView({ mode, message, onRetry, onNewPhoto, hasFile, onManua
             <button
               type="button"
               onClick={onNewPhoto}
-              className="flex h-11 items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+              className="flex h-11 items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-wash focus-ring"
             >
               <Camera className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               New photo
@@ -48,7 +48,7 @@ export function ErrorView({ mode, message, onRetry, onNewPhoto, hasFile, onManua
               <button
                 type="button"
                 onClick={onManual}
-                className="flex h-11 items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+                className="flex h-11 items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-wash focus-ring"
               >
                 Enter manually
               </button>

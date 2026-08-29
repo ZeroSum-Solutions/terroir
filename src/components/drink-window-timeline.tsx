@@ -90,7 +90,7 @@ export function DrinkWindowTimeline({
           <span className="absolute left-0">{start}</span>
           {!isMini && peakPct != null && (
             <span
-              className="absolute -translate-x-1/2 font-medium text-accent"
+              className="absolute -translate-x-1/2 font-medium text-mark"
               style={{ left: `${peakPct}%` }}
             >
               Peak {peak}

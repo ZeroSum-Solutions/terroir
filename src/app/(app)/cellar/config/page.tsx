@@ -201,7 +201,7 @@ export default function CellarConfigPage() {
           type="button"
           onClick={() => router.back()}
           aria-label="Back to cellar"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-ring"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-wash focus-ring"
         >
           <ArrowLeft className="h-5 w-5" strokeWidth={2} aria-hidden />
         </button>
@@ -233,7 +233,7 @@ export default function CellarConfigPage() {
             items={sections.map((s) => s.id)}
             strategy={verticalListSortingStrategy}
           >
-            <ul className="mb-lg divide-y divide-hairline rounded-card card-surface">
+            <ul className="mb-lg divide-y divide-rule rounded-card card-surface">
               {sections.map((section) => (
                 <SortableSectionItem
                   key={section.id}
@@ -266,7 +266,7 @@ export default function CellarConfigPage() {
             if (e.key === "Enter") addSection();
           }}
           placeholder="New section name (e.g. Reds by Region)"
-          className="min-w-0 flex-1 rounded-pill border border-hairline px-sm py-sm text-[14px] text-ink placeholder:text-grey focus-ring"
+          className="min-w-0 flex-1 rounded-pill border border-rule px-sm py-sm text-[14px] text-ink placeholder:text-grey focus-ring"
           disabled={busy}
         />
         <button
@@ -312,7 +312,7 @@ export default function CellarConfigPage() {
                 type="button"
                 onClick={() => setDeleteTarget(null)}
                 disabled={busy}
-                className="min-h-11 flex-1 rounded-pill border border-edge px-md py-sm text-[14px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60 focus-ring"
+                className="min-h-11 flex-1 rounded-pill border border-edge px-md py-sm text-[14px] font-medium text-ink hover:bg-wash disabled:opacity-60 focus-ring"
               >
                 Cancel
               </button>
@@ -376,7 +376,7 @@ function SortableSectionItem({
       style={style}
       className={cn(
         "flex items-center justify-between px-md py-sm",
-        isDragging && "touch-none bg-bridge-surface rounded-md",
+        isDragging && "touch-none bg-wash rounded-md",
       )}
     >
       {editingId === section.id ? (
@@ -389,7 +389,7 @@ function SortableSectionItem({
               if (e.key === "Enter") onCommitEdit(section.id);
               if (e.key === "Escape") onCancelEdit();
             }}
-            className="min-h-11 min-w-0 flex-1 rounded-pill border border-hairline px-sm py-sm text-[14px] text-ink focus-ring"
+            className="min-h-11 min-w-0 flex-1 rounded-pill border border-rule px-sm py-sm text-[14px] text-ink focus-ring"
             autoFocus
           />
           <button
@@ -397,7 +397,7 @@ function SortableSectionItem({
             onClick={() => onCommitEdit(section.id)}
             disabled={!editName.trim()}
             aria-label="Save rename"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-sage-ink hover:bg-sage-wash disabled:opacity-40 focus-ring"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-ready-ink hover:bg-ready-wash disabled:opacity-40 focus-ring"
           >
             <Check className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
@@ -405,7 +405,7 @@ function SortableSectionItem({
             type="button"
             onClick={onCancelEdit}
             aria-label="Cancel rename"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-ring"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-wash focus-ring"
           >
             <X className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
@@ -433,7 +433,7 @@ function SortableSectionItem({
               onClick={() => onStartEdit(section)}
               disabled={busy}
               aria-label={`Rename ${section.name}`}
-              className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface disabled:opacity-40 focus-ring"
+              className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-wash disabled:opacity-40 focus-ring"
             >
               <Pencil className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
@@ -442,7 +442,7 @@ function SortableSectionItem({
               onClick={() => onDelete(section)}
               disabled={busy}
               aria-label={`Delete ${section.name}`}
-              className="flex h-11 w-11 items-center justify-center rounded-pill text-accent/70 hover:bg-blush-wash hover:text-accent disabled:opacity-40 focus-ring"
+              className="flex h-11 w-11 items-center justify-center rounded-pill text-risk-ink/70 hover:bg-risk-wash hover:text-risk-ink disabled:opacity-40 focus-ring"
             >
               <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>

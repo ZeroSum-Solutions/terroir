@@ -160,14 +160,14 @@ export default async function PrintWineListPage({
         <main className="mx-auto max-w-[800px] px-lg py-2xl">
 
           {/* No-print notice — shown on screen, hidden when printing */}
-          <div className="mb-xl rounded-card border border-hairline bg-bridge-surface px-md py-sm text-center print:no-print">
-            <p className="text-[13px] text-ink-muted">
+          <div className="mb-xl rounded-card border border-rule bg-wash px-md py-sm text-center print:no-print">
+            <p className="text-[13px] text-grey">
               Print-optimized view. Press{" "}
-              <kbd className="rounded-md border border-hairline bg-white px-1.5 py-0.5 text-[11px] font-mono">
+              <kbd className="rounded-md border border-rule bg-white px-1.5 py-0.5 text-[11px] font-mono">
                 ⌘P
               </kbd>{" "}
               or{" "}
-              <kbd className="rounded-md border border-hairline bg-white px-1.5 py-0.5 text-[11px] font-mono">
+              <kbd className="rounded-md border border-rule bg-white px-1.5 py-0.5 text-[11px] font-mono">
                 Ctrl+P
               </kbd>{" "}
               to print.

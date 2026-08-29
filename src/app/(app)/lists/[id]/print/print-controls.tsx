@@ -8,7 +8,7 @@ export function PrintControls({ listId }: { listId: string }) {
     <div className="mb-lg flex items-center justify-between print:hidden">
       <Link
         href={`/lists/${listId}`}
-        className="inline-flex items-center gap-xs text-[13px] text-ink-muted hover:text-ink no-underline"
+        className="inline-flex items-center gap-xs text-[13px] text-grey hover:text-ink no-underline"
       >
         <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
         Back to editor

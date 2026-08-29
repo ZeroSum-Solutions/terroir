@@ -50,7 +50,7 @@ export default async function OpenBottlesPage() {
       <header className="mb-lg flex items-center gap-sm">
         <Link
           href="/cellar"
-          className="flex h-[44px] w-[44px] items-center justify-center rounded-pill text-grey hover:bg-bridge-surface transition-colors"
+          className="flex h-[44px] w-[44px] items-center justify-center rounded-pill text-grey hover:bg-wash transition-colors"
           aria-label="Back to cellar"
         >
           <ArrowLeft className="h-5 w-5" strokeWidth={2} />
@@ -81,7 +81,7 @@ export default async function OpenBottlesPage() {
 
       {openBottles.length > 0 && (
         <div className="rounded-card card-surface overflow-hidden">
-          <div className="hidden md:grid md:grid-cols-[1fr_120px_160px_120px_100px] gap-md px-lg py-sm border-b border-hairline bg-bridge-surface">
+          <div className="hidden md:grid md:grid-cols-[1fr_120px_160px_120px_100px] gap-md px-lg py-sm border-b border-rule bg-wash">
             <span className="text-caption font-medium text-grey uppercase">Wine</span>
             <span className="text-caption font-medium text-grey uppercase">Format</span>
             <span className="text-caption font-medium text-grey uppercase">Opened</span>
@@ -89,7 +89,7 @@ export default async function OpenBottlesPage() {
             <span className="text-caption font-medium text-grey uppercase text-right">Action</span>
           </div>
 
-          <ul className="divide-y divide-hairline">
+          <ul className="divide-y divide-rule">
             {openBottles.map((bottle) => {
               const wine = bottle.wines;
               const sizeMl = wine?.size_ml ?? 750;
@@ -113,7 +113,7 @@ export default async function OpenBottlesPage() {
                 <li key={bottle.id}>
                   <Link
                     href={`/cellar?wine=${bottle.wine_id}`}
-                    className="block px-lg py-md hover:bg-bridge-surface transition-colors focus-ring"
+                    className="block px-lg py-md hover:bg-wash transition-colors focus-ring"
                   >
                     <div className="md:hidden">
                       <div className="flex items-start justify-between gap-sm">
@@ -145,14 +145,14 @@ export default async function OpenBottlesPage() {
                         </span>
                       </div>
                       <div className="mt-sm flex items-center gap-sm">
-                        <div className="flex-1 h-[6px] rounded-pill bg-bridge-surface overflow-hidden">
+                        <div className="flex-1 h-[6px] rounded-pill bg-wash overflow-hidden">
                           <div
                             className={cn(
                               "h-full rounded-pill transition-all",
                               remainingPct > 25
-                                ? "bg-sage"
+                                ? "bg-ready"
                                 : remainingPct > 10
-                                  ? "bg-amber"
+                                  ? "bg-risk-ink"
                                   : "bg-primary",
                             )}
                             style={{
@@ -194,14 +194,14 @@ export default async function OpenBottlesPage() {
                       </div>
                       <div className="text-right">
                         <div className="flex items-center justify-end gap-sm">
-                          <div className="w-16 h-[6px] rounded-pill bg-bridge-surface overflow-hidden">
+                          <div className="w-16 h-[6px] rounded-pill bg-wash overflow-hidden">
                             <div
                               className={cn(
                                 "h-full rounded-pill",
                                 remainingPct > 25
-                                  ? "bg-sage"
+                                  ? "bg-ready"
                                   : remainingPct > 10
-                                    ? "bg-amber"
+                                    ? "bg-risk-ink"
                                     : "bg-primary",
                               )}
                               style={{

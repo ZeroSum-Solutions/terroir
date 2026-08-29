@@ -116,11 +116,11 @@ export function BrandKitPanel({
             <Palette className="h-4 w-4 text-accent" aria-hidden />
             <h2 className="font-serif text-[20px] font-medium text-ink">Brand kit</h2>
           </div>
-          <p className="mt-xs max-w-[576px] text-[13px] text-ink-muted">
+          <p className="mt-xs max-w-[576px] text-[13px] text-grey">
             Upload a logo, extract its palette, then generate accessible menu themes.
           </p>
         </div>
-        <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-xs rounded-pill border border-hairline bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring">
+        <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-xs rounded-pill border border-rule bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring">
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
           {uploading ? "Extracting…" : "Upload logo"}
           <input
@@ -139,7 +139,7 @@ export function BrandKitPanel({
       </div>
 
       {(logoUrl || palette) && (
-        <div className="mt-md flex flex-wrap items-center gap-md rounded-md bg-bridge-surface p-sm">
+        <div className="mt-md flex flex-wrap items-center gap-md rounded-md bg-wash p-sm">
           {logoUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt="Uploaded restaurant logo" className="h-12 w-24 object-contain" />
@@ -169,7 +169,7 @@ export function BrandKitPanel({
           {generating ? "Designing…" : "Generate themes"}
         </button>
         {status && (
-          <p role="status" className={`text-[13px] ${status.kind === "error" ? "text-accent" : "text-sage-ink"}`}>
+          <p role="status" className={`text-[13px] ${status.kind === "error" ? "text-risk-ink" : "text-ready-ink"}`}>
             {status.message}
           </p>
         )}
@@ -180,18 +180,18 @@ export function BrandKitPanel({
           {proposals.map((theme, index) => (
             <article
               key={index}
-              className="overflow-hidden rounded-card shadow-card border border-hairline"
+              className="overflow-hidden rounded-card shadow-card border border-rule"
               style={themeCssVariables(theme)}
             >
               <div className="bg-canvas p-md text-ink">
                 <p className="text-caption uppercase text-grey">Wine list</p>
                 <h3 className="mt-xs font-serif text-[20px]">{theme.name}</h3>
-                <div className="mt-md border-t border-hairline pt-sm">
-                  <p className="font-serif text-[17px]">Estate Pinot Noir <span className="font-sans text-[12px] text-ink-muted">2021</span></p>
-                  <p className="mt-xs text-[12px] text-ink-muted">Willamette Valley</p>
+                <div className="mt-md border-t border-rule pt-sm">
+                  <p className="font-serif text-[17px]">Estate Pinot Noir <span className="font-sans text-[12px] text-grey">2021</span></p>
+                  <p className="mt-xs text-[12px] text-grey">Willamette Valley</p>
                 </div>
               </div>
-              <div className="flex items-center gap-xs border-t border-hairline bg-surface p-sm">
+              <div className="flex items-center gap-xs border-t border-rule bg-surface p-sm">
                 <button
                   type="button"
                   aria-label={`Apply ${theme.name}`}
@@ -205,7 +205,7 @@ export function BrandKitPanel({
                   type="button"
                   disabled={generating}
                   onClick={() => void generateThemes(theme)}
-                  className="h-11 rounded-pill border border-hairline px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:opacity-50"
+                  className="h-11 rounded-pill border border-rule px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring disabled:opacity-50"
                 >
                   Refine
                 </button>

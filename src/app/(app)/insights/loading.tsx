@@ -25,7 +25,7 @@ export default function InsightsLoading() {
         <div key={i} className="rounded-card card-surface p-lg">
           <Skeleton className="h-[16px] w-40 mb-md" />
           {Array.from({ length: 5 }, (_, j) => (
-            <div key={j} className="flex justify-between py-sm border-b border-hairline/50">
+            <div key={j} className="flex justify-between py-sm border-b border-rule/50">
               <Skeleton className="h-[13px] w-32" />
               <Skeleton className="h-[13px] w-16" />
             </div>

@@ -65,10 +65,10 @@ export function ReconcileModal({
       aria-labelledby={headingId}
       className="fixed inset-0 z-[var(--z-dialog)] flex flex-col bg-canvas md:items-center md:justify-center md:bg-scrim md:p-lg"
     >
-      <div className="flex h-full w-full flex-col overflow-hidden bg-surface md:h-[min(720px,90vh)] md:max-w-[640px] md:rounded-card md:border md:border-hairline">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-surface md:h-[min(720px,90vh)] md:max-w-[640px] md:rounded-card md:border md:border-rule">
         <header
-          className="flex items-center justify-between border-b border-hairline px-md py-md md:px-lg"
-          style={{ paddingTop: "calc(env(safe-area-inset-top) + 1rem)" }}
+          className="flex items-center justify-between border-b border-rule px-md py-md md:px-lg"
+          style={{ paddingTop: "calc(var(--safe-top) + var(--spacing-lg))" }}
         >
           <div>
             <h2
@@ -86,7 +86,7 @@ export function ReconcileModal({
             type="button"
             onClick={onClose}
             aria-label="Close reconcile mode"
-            className="ml-md flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
+            className="ml-md flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-wash"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>

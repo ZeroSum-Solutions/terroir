@@ -263,6 +263,16 @@ CI. A ban nobody can run is a preference.
    ≥ `#C0`), so it can only ever be a bright mark on a dark ground. A warm
    mid-tone is exactly how brown starts.
 
+The same gate reads **every colour literal in `src/`**, because checking only
+the frontmatter is how a Cantina brown (`#8B6914`) and a Cantina cream
+(`#E3D9CB`) survived an entire palette migration inside one component's inline
+styles. Source literals are judged in HSL rather than by channel, since brown
+is not a dark *neutral* — it is a saturated warm mid-tone, and the channel
+tests would wave it through. A warm hue (15–60°) that is too dark to be a
+colour (L < 0.72) is brown; one too pale to be a colour (L ≥ 0.80) is cream.
+Printed menus, the standalone HTML export and the brand-kit fixtures are
+excluded by name: those carry the *client's* palette, on paper.
+
 ## The contrast law
 
 Every pair in this system is measured, not judged by eye. The rules:
@@ -307,7 +317,14 @@ boundary you are not able to see. That is what `edge` exists to fix.
 ### Focus
 
 One focus token, solid, and one recipe: `2px solid` at `2px` offset, on
-`:focus-visible` only.
+`:focus-visible` only. It ships as the `.focus-ring` class, defined outside
+Tailwind's layers so that no utility — and no `.glass` background — can win
+against it.
+
+There is exactly one variant, `.focus-ring-inset`, which draws the same
+indicator at a **negative** offset. It exists for one reason: an outline at a
+positive offset is clipped by an `overflow: hidden` ancestor, which is the
+shape of every segmented control and stepper in the app. Use it only there.
 
 - Nocturne: `dark-focus` `#E6DCAE` — 12.67–14.51:1.
 - Daylight: `focus` `#96122A` — 7.20–8.69:1.
@@ -385,8 +402,21 @@ The scale is not a suggestion, and this is the mechanism that makes it hold:
   boundaries 3:1, focus 3:1. `rule` is excluded by name, because 1.4.11 exempts
   it and forcing it would produce scaffolding. The claim that "every pair in
   this system is measured" is only true while this script runs.
+- `check-design-token-sync.mjs` also walks `src/` for `var(--t-…)` references
+  the stylesheet no longer declares. A dangling custom property does not error;
+  the declaration resolves to nothing and the element renders unstyled. That is
+  how the price band's entire three-zone track went invisible during this
+  migration without a single failing test.
 - All three exposed as `pnpm check:design` and wired into CI, alongside the
   existing `check-design-palette.mjs`. Four gates, one command.
+
+**There are no aliases.** The Cantina vocabulary — `hairline`, `beige`,
+`bridge-surface`, `sage`, `powder`, `amber`, `blush-wash`, `gold`,
+`success`/`warning`/`danger` — was carried through the migration as a shim and
+then removed once all 113 remaining call sites were renamed. One role, one
+name. A second spelling is a second opinion, and the one that reads as a
+synonym is always the one that drifts: `danger` resolved to the claret *fill*
+and was being used as 12px text at 3.24:1.
 
 ## Spacing, rhythm and density
 

@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
+  useDroppable,
   closestCenter,
   PointerSensor,
   TouchSensor,
@@ -69,6 +70,9 @@ export const FILTER_LABELS: Record<Exclude<CellarFilter, "all">, string> = {
 };
 
 type CellarSection = { id: string; name: string };
+/** The bucket for wines with no section, and the key its droppable carries. */
+const UNCATEGORIZED = "__uncategorized__";
+
 const CELLAR_PAGE_SIZE = 50;
 
 /**
@@ -171,6 +175,10 @@ export function CellarList({
     [visibleRows, groupBy],
   );
 
+  // A dropped row moves immediately through this override map rather than by
+  // mutating the `rows` prop, so a failed PATCH can put it back.
+  const [sectionOverrides, setSectionOverrides] = useState<Record<string, string | null>>({});
+
   // BND-063: group filtered wines by section. "Uncategorized" for wines
   // without a section. If no sections are configured, all wines go into
   // a single uncategorized group.
@@ -183,27 +191,31 @@ export function CellarList({
       groups.set(s.name, { name: s.name, wines: [] });
     }
     // Always have uncategorized at the end
-    groups.set("__uncategorized__", { name: "Uncategorized", wines: [] });
+    groups.set(UNCATEGORIZED, { name: "Uncategorized", wines: [] });
 
     for (const wine of visibleRows) {
-      const key = wine.section && sectionMap.has(wine.section) ? wine.section : "__uncategorized__";
+      // A drop moves the row immediately, but through an override map rather
+      // than by mutating the `rows` prop — a failed PATCH has to be able to
+      // put the wine back where it came from.
+      const section = wine.wine_id in sectionOverrides ? sectionOverrides[wine.wine_id] : wine.section;
+      const key = section && sectionMap.has(section) ? section : UNCATEGORIZED;
       const group = groups.get(key);
       if (group) {
         group.wines.push(wine);
       } else {
-        groups.get("__uncategorized__")!.wines.push(wine);
+        groups.get(UNCATEGORIZED)!.wines.push(wine);
       }
     }
 
     // Remove empty groups (except uncategorized)
     const result: Array<{ key: string; name: string; wines: CellarWineRow[] }> = [];
     for (const [key, group] of groups) {
-      if (group.wines.length > 0 || key === "__uncategorized__") {
+      if (group.wines.length > 0 || key === UNCATEGORIZED) {
         result.push({ key, name: group.name, wines: group.wines });
       }
     }
     return result;
-  }, [visibleRows, sections]);
+  }, [visibleRows, sections, sectionOverrides]);
 
   // BND-063: handle DnD — when a wine is dropped into a different section
   /**
@@ -236,35 +248,47 @@ export function CellarList({
       const { active, over } = event;
       if (!over || active.id === over.id) return;
 
+      // The target is read from the droppable's own `data`, never parsed out
+      // of `over.id`. Sections used to carry only an HTML `id` and were never
+      // registered with dnd-kit at all, so `over.id` was always another row's
+      // UUID — which failed the old `startsWith("wine-")` guard and got
+      // written to the database as the section NAME. Dropping onto a row now
+      // resolves to that row's section, which is also what a user expects.
+      const target = over.data.current as
+        | { type: "section" | "wine"; sectionKey: string }
+        | undefined;
+      if (!target) return;
+      const targetKey = target.sectionKey;
+
       const wineId = String(active.id);
-      const targetSection = String(over.id); // over.id is the section key
-
-      if (targetSection.startsWith("wine-")) return; // dropped on another wine, not a section
-
-      // Find current section for this wine
       const wine = rows.find((r) => r.wine_id === wineId);
       if (!wine) return;
-      if (wine.section === targetSection.replace("section-", "")) return;
 
-      // Optimistic update: update the wine's section locally
-      wine.section = targetSection === "section-__uncategorized__" ? null : targetSection.replace("section-", "");
+      const nextSection = targetKey === UNCATEGORIZED ? null : targetKey;
+      const currentSection =
+        wineId in sectionOverrides ? sectionOverrides[wineId] : wine.section;
+      if (currentSection === nextSection) return;
 
-      // Persist via API
+      setSectionOverrides((prev) => ({ ...prev, [wineId]: nextSection }));
+
       try {
         const res = await fetch(`/api/cellar/${wineId}/section`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ section: wine.section ?? sections?.find((s) => s.name === wine.section)?.name ?? "" }),
+          body: JSON.stringify({ section: nextSection ?? "" }),
         });
         if (!res.ok) {
           throw new Error(`Failed (${res.status})`);
         }
         router.refresh();
       } catch {
+        // Put it back. An optimistic move that silently sticks after a failed
+        // write is a lie about where the bottle is.
+        setSectionOverrides((prev) => ({ ...prev, [wineId]: currentSection }));
         toast.error("Failed to move wine");
       }
     },
-    [rows, sections, router, toast],
+    [rows, sectionOverrides, router, toast],
   );
 
   // BND-064: bulk assign selected wines to a section
@@ -334,13 +358,13 @@ export function CellarList({
           <div className="flex flex-wrap items-center justify-center gap-sm">
             <Link
               href="/scan?mode=bottle"
-              className="inline-flex min-h-11 items-center justify-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+              className="inline-flex min-h-11 items-center justify-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
             >
               Scan a bottle
             </Link>
             <Link
               href="/import"
-              className="inline-flex min-h-11 items-center justify-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+              className="inline-flex min-h-11 items-center justify-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
             >
               Import a CSV
             </Link>
@@ -377,7 +401,7 @@ export function CellarList({
           <button
             type="button"
             onClick={onResetFilters}
-            className="mt-sm inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-md text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+            className="mt-sm inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-md text-[12px] font-medium text-ink hover:bg-wash focus-ring"
           >
             Clear filters & search
           </button>
@@ -402,7 +426,7 @@ export function CellarList({
             <button
               type="button"
               onClick={() => setSelectMode(true)}
-              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface transition-colors"
+              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-wash transition-colors"
             >
               <CheckSquare className="h-4 w-4" strokeWidth={2} aria-hidden />
               Select wines
@@ -412,7 +436,7 @@ export function CellarList({
               <button
                 type="button"
                 onClick={selectAll}
-                className="inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface"
+                className="inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-wash"
               >
                 Select all ({filtered.length})
               </button>
@@ -420,7 +444,7 @@ export function CellarList({
                 <button
                   type="button"
                   onClick={deselectAll}
-                  className="inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
+                  className="inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-wash"
                 >
                   Clear
                 </button>
@@ -443,7 +467,7 @@ export function CellarList({
                           key={s.id}
                           type="button"
                           onClick={() => setAssignTarget(s.name)}
-                          className="block min-h-11 w-full px-sm py-xs text-left text-[13px] text-ink hover:bg-bridge-surface"
+                          className="block min-h-11 w-full px-sm py-xs text-left text-[13px] text-ink hover:bg-wash"
                         >
                           {s.name}
                         </button>
@@ -469,7 +493,7 @@ export function CellarList({
                     type="button"
                     onClick={() => setAssignTarget(null)}
                     disabled={busy}
-                    className="inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface disabled:opacity-60"
+                    className="inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-wash disabled:opacity-60"
                   >
                     <X className="h-3 w-3" strokeWidth={2} aria-hidden />
                   </button>
@@ -478,7 +502,7 @@ export function CellarList({
               <button
                 type="button"
                 onClick={() => { setSelectMode(false); setSelectedIds(new Set()); setAssignTarget(null); }}
-                className="ml-auto inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-bridge-surface"
+                className="ml-auto inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-wash"
               >
                 Done
               </button>
@@ -548,12 +572,12 @@ export function CellarList({
             )}
         </DndContext>
       ) : (
-        <div className="flex flex-col divide-y divide-hairline overflow-hidden rounded-card card-surface">
+        <div className="flex flex-col divide-y divide-rule overflow-hidden rounded-card card-surface">
           {/* Ledger-table header — desktop workspace only */}
           <div
             aria-hidden
             className={cn(
-              "hidden items-center gap-md bg-bridge-surface px-md py-xs lg:grid",
+              "hidden items-center gap-md bg-wash px-md py-xs lg:grid",
               LEDGER_COLS,
             )}
           >
@@ -587,7 +611,7 @@ export function CellarList({
                 count: visibleCount + CELLAR_PAGE_SIZE,
               })
             }
-            className="inline-flex min-h-11 items-center justify-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+            className="inline-flex min-h-11 items-center justify-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
           >
             Show {Math.min(CELLAR_PAGE_SIZE, filtered.length - visibleRows.length)} more · {visibleRows.length} of {filtered.length}
           </button>
@@ -614,7 +638,7 @@ function TaxonomyGroup({
       data-group-value={group.key}
       className="overflow-hidden rounded-card card-surface"
     >
-      <header className="flex items-center justify-between gap-md border-b border-beige-deep bg-beige px-md py-sm">
+      <header className="flex items-center justify-between gap-md border-b border-rule-strong bg-surface-sunken px-md py-sm">
         <h2 className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-soft">
           {group.label}
         </h2>
@@ -626,7 +650,7 @@ function TaxonomyGroup({
           bottle{group.totalBottles === 1 ? "" : "s"}
         </span>
       </header>
-      <div className="divide-y divide-hairline">
+      <div className="divide-y divide-rule">
         <LineageBlockList
           wines={group.wines}
           preserveOrder={sortActive}
@@ -750,7 +774,7 @@ function LineageBlockList({
               data-lineage-header
               onClick={() => toggle(block.lineageId)}
               aria-expanded={!collapsed.has(block.lineageId)}
-              className="flex w-full items-center gap-sm px-md py-sm text-left bg-beige hover:bg-beige-deep/60 transition-colors"
+              className="flex w-full items-center gap-sm px-md py-sm text-left bg-surface-sunken hover:bg-rule-strong/60 transition-colors"
             >
               <ChevronDown
                 className={cn(
@@ -780,7 +804,7 @@ function LineageBlockList({
             {!collapsed.has(block.lineageId) && (
               <div
                 data-lineage-children
-                className="ml-md border-l-2 border-beige-deep divide-y divide-hairline"
+                className="ml-md border-l-2 border-rule-strong divide-y divide-rule"
               >
                 {block.rows.map((row) => (
                   <div key={row.wine_id}>{renderRow(row)}</div>
@@ -819,15 +843,23 @@ function SectionGroup({
   onToggleSelect: (wineId: string) => void;
   sortActive?: boolean;
 }) {
-  const dropId = `section-${sectionKey}`;
+  // The whole card is the drop target, not just its header: a two-line header
+  // is a hard thing to hit while dragging a row on a phone.
+  const { setNodeRef, isOver } = useDroppable({
+    id: `section-${sectionKey}`,
+    data: { type: "section", sectionKey },
+  });
 
   return (
-    <div className="rounded-card card-surface overflow-hidden">
-      {/* Section header — acts as drop target */}
-      <div
-        id={dropId}
-        className="flex items-center gap-sm px-md py-sm bg-beige border-b border-beige-deep"
-      >
+    <div
+      ref={setNodeRef}
+      data-drop-over={isOver ? "" : undefined}
+      className={cn(
+        "rounded-card card-surface overflow-hidden transition-colors",
+        isOver && "bg-surface-raised",
+      )}
+    >
+      <div className="flex items-center gap-sm px-md py-sm bg-surface-sunken border-b border-rule-strong">
         <h3 className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-soft">
           {sectionName}
         </h3>
@@ -838,12 +870,13 @@ function SectionGroup({
 
       {/* Wine rows in this section */}
       {wines.length > 0 ? (
-        <div className="divide-y divide-hairline">
+        <div className="divide-y divide-rule">
           <LineageBlockList
             wines={wines}
             preserveOrder={sortActive}
             renderRow={(row) => (
               <DraggableWineRow
+                sectionKey={sectionKey}
                 row={row}
                 lowStockThreshold={lowStockThreshold}
                 onSelect={() => onSelectWine(row)}
@@ -868,6 +901,7 @@ function SectionGroup({
  */
 function DraggableWineRow({
   row,
+  sectionKey,
   lowStockThreshold,
   onSelect,
   selectMode,
@@ -875,6 +909,7 @@ function DraggableWineRow({
   onToggleSelect,
 }: {
   row: CellarWineRow;
+  sectionKey: string;
   lowStockThreshold?: number;
   onSelect: () => void;
   selectMode: boolean;
@@ -882,7 +917,7 @@ function DraggableWineRow({
   onToggleSelect: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: row.wine_id });
+    useSortable({ id: row.wine_id, data: { type: "wine", sectionKey } });
 
   // While dragging, the row keeps its space in the list but hands its
   // appearance to the portalled DragOverlay — a local z-index cannot escape
@@ -957,7 +992,7 @@ function CellarRow({
           aria-label={selected ? "Deselect" : "Select"}
         >
           {selected ? (
-            <CheckSquare className="h-5 w-5 text-accent" strokeWidth={2} aria-hidden />
+            <CheckSquare className="h-5 w-5 text-mark" strokeWidth={2} aria-hidden />
           ) : (
             <Square className="h-5 w-5" strokeWidth={2} aria-hidden />
           )}
@@ -982,7 +1017,7 @@ function CellarRow({
       <button
         type="button"
         onClick={selectMode ? undefined : onSelect}
-        className="flex-1 min-w-0 px-md py-sm text-left transition-colors hover:bg-bridge-surface focus-ring rounded-md"
+        className="flex-1 min-w-0 px-md py-sm text-left transition-colors hover:bg-wash focus-ring rounded-md"
       >
         {/* Mobile ledger row — two lines, location top-right, quantity in
             the Courier column (Kimi audit row anatomy: ~6–7 rows per

@@ -155,7 +155,7 @@ export function PricingTargetOverride({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between rounded-pill px-2xs py-2xs text-[12px] font-medium text-grey hover:bg-bridge-surface"
+        className="flex w-full items-center justify-between rounded-pill px-2xs py-2xs text-[12px] font-medium text-grey hover:bg-wash"
       >
         <span>
           {hasOverride
@@ -173,7 +173,7 @@ export function PricingTargetOverride({
       </button>
 
       {open && (
-        <div className="mt-xs rounded-md border border-hairline bg-bridge-surface p-sm">
+        <div className="mt-xs rounded-md border border-rule bg-wash p-sm">
           <div className="grid grid-cols-2 gap-sm">
             <label className="flex flex-col gap-2xs">
               <span className="text-caption font-medium uppercase text-grey">
@@ -195,7 +195,7 @@ export function PricingTargetOverride({
                       (e.target as HTMLInputElement).blur();
                   }}
                   aria-label="Per-wine pour cost target"
-                  className="h-[30px] w-full rounded-pill border border-hairline bg-surface px-xs text-right font-mono text-[13px]"
+                  className="h-[30px] w-full rounded-pill border border-rule bg-surface px-xs text-right font-mono text-[13px]"
                 />
                 <span className="text-[11px] text-grey">%</span>
               </div>
@@ -224,7 +224,7 @@ export function PricingTargetOverride({
                       (e.target as HTMLInputElement).blur();
                   }}
                   aria-label="Per-wine markup ratio target"
-                  className="h-[30px] w-full rounded-pill border border-hairline bg-surface px-xs text-right font-mono text-[13px]"
+                  className="h-[30px] w-full rounded-pill border border-rule bg-surface px-xs text-right font-mono text-[13px]"
                 />
                 <span className="text-[11px] text-grey">×</span>
               </div>

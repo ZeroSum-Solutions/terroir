@@ -19,7 +19,7 @@ export function SortControls({ current }: { current: { field: string | null; dir
   };
 
   return (
-    <button type="button" onClick={cycle} className={`flex items-center gap-xs rounded-pill border border-edge px-sm py-xs text-[11px] font-medium uppercase tracking-wide transition-colors hover:bg-bridge-surface focus-ring ${isActive ? "border-accent text-accent" : "text-ink-subtle"}`}>
+    <button type="button" onClick={cycle} className={`flex items-center gap-xs rounded-pill border border-edge px-sm py-xs text-[11px] font-medium uppercase tracking-wide transition-colors hover:bg-wash focus-ring ${isActive ? "border-accent text-accent" : "text-grey"}`}>
       Variance
       <ArrowUpDown className="h-3 w-3" strokeWidth={isActive ? 2.5 : 1.5} />
       {isActive && (

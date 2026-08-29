@@ -137,7 +137,7 @@ export function CellarFacetBar({
           <button
             type="button"
             onClick={() => setSheetOpen(true)}
-            className="inline-flex h-11 shrink-0 items-center gap-xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+            className="inline-flex h-11 shrink-0 items-center gap-xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring"
           >
             <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             Filters
@@ -155,7 +155,7 @@ export function CellarFacetBar({
           {appliedChips.map((chip) => (
             <span
               key={chip.key}
-              className="inline-flex h-8 items-center gap-2xs rounded-pill bg-bridge-surface pl-sm pr-2xs text-[11.5px] font-medium text-ink-soft"
+              className="inline-flex h-8 items-center gap-2xs rounded-pill bg-wash pl-sm pr-2xs text-[11.5px] font-medium text-ink-soft"
             >
               {chip.label}
               <button
@@ -174,7 +174,7 @@ export function CellarFacetBar({
               onFacetsChange(CLEAR_ALL_PATCH);
               onGroupByChange(null);
             }}
-            className="flex h-11 shrink-0 -my-[6px] items-center justify-center rounded-pill px-sm text-[11.5px] font-medium text-grey hover:bg-bridge-surface focus-ring"
+            className="flex h-11 shrink-0 -my-[6px] items-center justify-center rounded-pill px-sm text-[11.5px] font-medium text-grey hover:bg-wash focus-ring"
           >
             Clear all
           </button>
@@ -335,4 +335,4 @@ function FacetSelect({
 // one row down to 320px (each select would otherwise size toward its widest
 // option's text); md: restores the roomier desktop width.
 const selectClassName =
-  "h-11 max-w-[104px] md:max-w-[180px] rounded-pill border border-edge bg-surface px-sm text-[12px] text-ink hover:bg-bridge-surface focus-ring";
+  "h-11 max-w-[104px] md:max-w-[180px] rounded-pill border border-edge bg-surface px-sm text-[12px] text-ink hover:bg-wash focus-ring";

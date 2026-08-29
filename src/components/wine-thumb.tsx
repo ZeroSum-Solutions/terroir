@@ -16,16 +16,16 @@ import { cn } from "@/lib/utils";
  * the values that actually appear; anything else takes the neutral tint rather
  * than guessing. */
 const TINTS: Record<string, { surface: string; ink: string }> = {
-  red: { surface: "bg-blush-wash", ink: "text-accent" },
-  white: { surface: "bg-amber-wash", ink: "text-gold" },
-  rose: { surface: "bg-blush-wash", ink: "text-accent" },
-  rosé: { surface: "bg-blush-wash", ink: "text-accent" },
-  sparkling: { surface: "bg-powder-wash", ink: "text-powder-ink" },
-  fortified: { surface: "bg-amber-wash", ink: "text-gold" },
-  sweet: { surface: "bg-amber-wash", ink: "text-gold" },
+  red: { surface: "bg-risk-wash", ink: "text-risk-ink" },
+  white: { surface: "bg-risk-wash", ink: "text-mark" },
+  rose: { surface: "bg-risk-wash", ink: "text-risk-ink" },
+  rosé: { surface: "bg-risk-wash", ink: "text-risk-ink" },
+  sparkling: { surface: "bg-hold-wash", ink: "text-hold-ink" },
+  fortified: { surface: "bg-risk-wash", ink: "text-mark" },
+  sweet: { surface: "bg-risk-wash", ink: "text-mark" },
 };
 
-const NEUTRAL = { surface: "bg-bridge-surface", ink: "text-grey" };
+const NEUTRAL = { surface: "bg-wash", ink: "text-grey" };
 
 export function wineTint(colour: string | null | undefined) {
   return TINTS[colour?.trim().toLocaleLowerCase() ?? ""] ?? NEUTRAL;

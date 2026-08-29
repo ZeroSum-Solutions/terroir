@@ -193,7 +193,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
             <h2 id="publish-title" className="font-serif text-[22px] text-ink">
               Publish wine list
             </h2>
-            <p className="mt-xs text-[13px] text-ink-muted">
+            <p className="mt-xs text-[13px] text-grey">
               This will create a public page anyone can view. You can unpublish
               at any time.
             </p>
@@ -203,11 +203,11 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
               <label htmlFor="publish-slug" className="block text-[13px] font-medium text-ink">
                 Public URL slug
               </label>
-              <p className="mt-0.5 text-[12px] text-ink-muted">
+              <p className="mt-0.5 text-[12px] text-grey">
                 Leave blank to auto-generate from your restaurant name.
               </p>
-              <div className="mt-sm flex items-center gap-0 rounded-pill border border-hairline bg-surface focus-within:border-accent focus-ring">
-                <span className="pl-md text-[13px] text-ink-muted select-none">/list/</span>
+              <div className="mt-sm flex items-center gap-0 rounded-pill border border-rule bg-surface focus-within:border-accent focus-ring">
+                <span className="pl-md text-[13px] text-grey select-none">/list/</span>
                 <input
                   id="publish-slug"
                   type="text"
@@ -217,7 +217,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                     setSlugError(null);
                   }}
                   placeholder="spring-2026"
-                  className="h-11 flex-1 bg-transparent px-0 pr-md text-[14px] text-ink placeholder:text-ink-muted/50"
+                  className="h-11 flex-1 bg-transparent px-0 pr-md text-[14px] text-ink outline-none placeholder:text-grey/50"
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -233,7 +233,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
               <button
                 type="button"
                 onClick={onClose}
-                className="h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+                className="h-11 rounded-pill border border-rule px-md text-[14px] font-medium text-ink hover:bg-wash focus-ring"
               >
                 Cancel
               </button>
@@ -261,14 +261,14 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
 
             {publicUrl && (
               <div className="mt-lg">
-                <div className="flex items-center gap-sm rounded-pill border border-hairline bg-bridge-surface px-md py-xs">
-                  <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink-muted">
+                <div className="flex items-center gap-sm rounded-pill border border-rule bg-wash px-md py-xs">
+                  <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-grey">
                     {publicUrl}
                   </span>
                   <button
                     type="button"
                     onClick={copyUrl}
-                    className="inline-flex min-h-11 shrink-0 items-center rounded-pill px-sm py-xs text-[12px] font-medium text-accent hover:bg-blush-wash focus-ring"
+                    className="inline-flex min-h-11 shrink-0 items-center rounded-pill px-sm py-xs text-[12px] font-medium text-risk-ink hover:bg-risk-wash focus-ring"
                   >
                     {copied ? "Copied!" : "Copy"}
                   </button>
@@ -276,7 +276,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                 <button
                   type="button"
                   onClick={downloadQr}
-                  className="mt-sm inline-flex h-11 items-center rounded-pill border border-hairline bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+                  className="mt-sm inline-flex h-11 items-center rounded-pill border border-rule bg-surface px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring"
                 >
                   Download QR (PNG)
                 </button>
@@ -289,8 +289,8 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                 Slug
               </label>
               <div className="mt-sm flex items-center gap-sm">
-                <div className="flex flex-1 items-center gap-0 rounded-pill border border-hairline bg-surface focus-within:border-accent focus-ring">
-                  <span className="pl-md text-[13px] text-ink-muted select-none">/list/</span>
+                <div className="flex flex-1 items-center gap-0 rounded-pill border border-rule bg-surface focus-within:border-accent focus-ring">
+                  <span className="pl-md text-[13px] text-grey select-none">/list/</span>
                   <input
                     id="edit-slug"
                     type="text"
@@ -309,7 +309,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                   type="button"
                   onClick={saveSlug}
                   disabled={publishing || slugInput.trim().toLowerCase() === slug}
-                  className="h-11 shrink-0 rounded-pill border border-hairline px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:opacity-40"
+                  className="h-11 shrink-0 rounded-pill border border-rule px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring disabled:opacity-40"
                 >
                   {publishing ? "..." : "Save"}
                 </button>
@@ -320,7 +320,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                 </p>
               )}
               {slugSuccess && (
-                <p className="mt-xs text-[12px] text-sage-ink">
+                <p className="mt-xs text-[12px] text-ready-ink">
                   Slug updated.
                 </p>
               )}
@@ -343,7 +343,7 @@ export function PublishModal({ listId, listName, currentSlug, isPublished, onClo
                     setUnpublishOpen(true);
                   }}
                   disabled={publishing}
-                  className="h-11 rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:opacity-60"
+                  className="h-11 rounded-pill border border-rule px-md text-[14px] font-medium text-ink hover:bg-wash focus-ring disabled:opacity-60"
                 >
                   {publishing ? "Unpublishing..." : "Unpublish"}
                 </button>

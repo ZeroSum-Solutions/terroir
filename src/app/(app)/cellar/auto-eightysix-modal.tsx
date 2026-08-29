@@ -72,8 +72,8 @@ export function AutoEightysixModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-lg border-t border-x border-hairline bg-surface md:max-h-[80vh] md:max-w-[560px] md:rounded-card md:border">
-        <header className="flex shrink-0 items-center justify-between border-b border-hairline px-md py-md md:px-lg">
+      <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-lg border-t border-x border-rule bg-surface md:max-h-[80vh] md:max-w-[560px] md:rounded-card md:border">
+        <header className="flex shrink-0 items-center justify-between border-b border-rule px-md py-md md:px-lg">
           <h2 id={headingId} className="font-serif text-[18px] font-medium text-ink">
             Cellar settings
           </h2>
@@ -81,14 +81,14 @@ export function AutoEightysixModal({
             type="button"
             onClick={onClose}
             aria-label="Close settings"
-            className="flex h-9 w-9 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-wash focus-ring"
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
         </header>
         <div
           className="flex flex-col gap-md overflow-y-auto overscroll-contain px-md py-md md:gap-lg md:px-lg md:py-lg"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
+          style={{ paddingBottom: "calc(var(--safe-bottom) + var(--spacing-lg))" }}
         >
           <PricingTargetsPanel
             restaurantId={restaurantId}
@@ -105,7 +105,7 @@ export function AutoEightysixModal({
           <Link
             href="/cellar/config"
             onClick={onClose}
-            className="flex items-center justify-center gap-xs rounded-pill border border-edge bg-surface py-sm text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface"
+            className="flex items-center justify-center gap-xs rounded-pill border border-edge bg-surface py-sm text-[14px] font-medium text-ink transition-colors hover:bg-wash"
           >
             <Layers className="h-4 w-4" strokeWidth={2} aria-hidden />
             Manage cellar sections

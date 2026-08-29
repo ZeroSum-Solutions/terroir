@@ -74,7 +74,7 @@ export default async function WineListPrintPage({
       <PrintControls listId={id} />
 
       <header className="mb-2xl border-b border-rule-strong pb-lg print:mb-xl print:pb-md">
-        <p className="text-[11px] uppercase tracking-[0.12em] text-ink-subtle">
+        <p className="text-[11px] uppercase tracking-[0.12em] text-grey">
           {restaurantName}
         </p>
         <h1 className="mt-sm font-serif text-[32px] text-ink print:text-[26px]">
@@ -83,7 +83,7 @@ export default async function WineListPrintPage({
       </header>
 
       {sections.length === 0 && (
-        <p className="font-sans text-[14px] italic text-ink-muted">
+        <p className="font-sans text-[14px] italic text-grey">
           No wines to print.
         </p>
       )}
@@ -107,14 +107,14 @@ export default async function WineListPrintPage({
                         {wine.producer} {wine.name}
                       </span>
                       {wine.vintage && (
-                        <span className="ml-xs font-mono text-[12px] text-ink-muted print:text-[11px]">
+                        <span className="ml-xs font-mono text-[12px] text-grey print:text-[11px]">
                           {wine.vintage}
                         </span>
                       )}
                     </div>
                     <div className="flex shrink-0 items-baseline gap-md font-mono text-[14px] print:text-[12px]">
                       {item.glass_price != null && (
-                        <span className="text-ink-muted">${item.glass_price}</span>
+                        <span className="text-grey">${item.glass_price}</span>
                       )}
                       {item.bottle_price != null && (
                         <span className="text-ink">${item.bottle_price}</span>
@@ -122,13 +122,13 @@ export default async function WineListPrintPage({
                     </div>
                   </div>
                   {(wine.region || wine.varietal) && (
-                    <p className="mt-2xs text-[12px] text-ink-muted print:text-[10px]">
+                    <p className="mt-2xs text-[12px] text-grey print:text-[10px]">
                       {wine.region}
                       {wine.varietal && (wine.region ? ` · ${wine.varietal}` : wine.varietal)}
                     </p>
                   )}
                   {item.blurb && (
-                    <p className="mt-2xs font-sans text-[12px] italic text-ink-muted print:text-[10px]">
+                    <p className="mt-2xs font-sans text-[12px] italic text-grey print:text-[10px]">
                       {item.blurb}
                     </p>
                   )}

@@ -33,7 +33,7 @@ export function StatusChip({
       data-tone={tone}
       className={cn(
         "inline-flex items-center gap-2xs whitespace-nowrap rounded-pill border px-sm py-2xs text-[10px] font-medium uppercase tracking-[0.13em]",
-        tone === "muted" && "border-transparent bg-bridge-surface text-grey",
+        tone === "muted" && "border-transparent bg-wash text-grey",
         tone === "neutral" && "border-edge bg-transparent text-ink-soft",
         tone === "optimal" && "border-rule-strong bg-peak-wash text-peak-ink",
         tone === "attention" && "border-risk-ink/40 bg-risk-wash text-risk-ink",

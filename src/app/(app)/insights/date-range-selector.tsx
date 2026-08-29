@@ -137,7 +137,7 @@ export default function DateRangeSelector() {
                 "min-h-11 min-w-11 rounded-pill border px-sm py-2xs text-[12px] font-medium transition-colors " +
                 (isActive
                   ? "border-ink bg-ink text-on-inverse"
-                  : "border-edge text-ink hover:bg-bridge-surface")
+                  : "border-edge text-ink hover:bg-wash")
               }
             >
               {opt.label}

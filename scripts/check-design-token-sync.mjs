@@ -136,6 +136,13 @@ const norm = (v) =>
 const ALIAS = { champagne: "mark", "shadow-card": "glass-shadow" };
 
 /**
+ * Documented colours that globals.css composes rather than declares as a flat
+ * runtime variable. The list is explicit so that a token missing by ACCIDENT
+ * cannot be mistaken for one missing by design.
+ */
+const COMPOSED = new Set(["glass"]);
+
+/**
  * Runtime values that are consumed directly by CSS or by an inline style
  * (`var(--t-…)`) rather than by a utility. They are implementation, not
  * contract, so they are not required to appear in @theme.
@@ -156,11 +163,18 @@ for (const [name, value] of Object.entries(colors)) {
   const where = isDark ? "Nocturne" : "Daylight";
   const actual = scope[`--t-${cssName}`];
   if (actual === undefined) {
-    // Not every documented colour is a runtime variable — `glass` and the
-    // shadows are composed in CSS. Only complain about ones the CSS declares
-    // in the *other* mode, which means a genuine half-migration.
+    // A token absent from BOTH rooms is not "composed in CSS", it is missing.
+    // Anything genuinely composed rather than declared is named explicitly in
+    // COMPOSED below, so a typo in DESIGN.md cannot buy itself an exemption.
     const twin = (isDark ? light : dark)[`--t-${cssName}`];
-    if (twin !== undefined) fail(`${where}: --t-${cssName} is missing (DESIGN.md says ${value})`);
+    if (twin !== undefined) {
+      fail(`${where}: --t-${cssName} is missing (DESIGN.md says ${value})`);
+    } else if (!COMPOSED.has(cssName)) {
+      fail(
+        `${where}: --t-${cssName} appears in neither room (DESIGN.md says ${value}) — ` +
+          "add it to globals.css, or to COMPOSED in this script if it is genuinely derived",
+      );
+    }
     continue;
   }
   if (norm(actual) !== norm(value)) {
@@ -181,9 +195,12 @@ if (norm(light["--t-mark"]) !== norm(light["--t-focus"])) {
 for (const key of Object.keys(light)) {
   if (!key.startsWith("--t-") || NOT_UTILITIES.has(key)) continue;
   const bare = key.slice(4);
-  const exposed = Object.entries(theme).some(
-    ([k, v]) => k === `--color-${bare}` || v === `var(${key})`,
-  );
+  const named = theme[`--color-${bare}`];
+  if (named !== undefined && named !== `var(${key})`) {
+    fail(`--color-${bare} maps to ${named}, not var(${key}) — the utility renders another token`);
+    continue;
+  }
+  const exposed = named !== undefined || Object.values(theme).includes(`var(${key})`);
   if (!exposed) fail(`${key} is defined but never mapped into @theme — no utility can reach it`);
 }
 

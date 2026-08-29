@@ -87,8 +87,8 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
                 type="button"
                 onClick={() => handleConfirm(ml)}
                 className={isDefault
-                  ? "min-h-11 rounded-pill border-2 border-accent bg-blush-wash text-[14px] font-semibold text-accent hover:bg-blush-wash/70"
-                  : "min-h-11 rounded-pill border border-hairline bg-surface text-[14px] font-medium text-ink hover:bg-bridge-surface"
+                  ? "min-h-11 rounded-pill border-2 border-risk-ink/40 bg-risk-wash text-[14px] font-semibold text-risk-ink hover:bg-risk-wash/70"
+                  : "min-h-11 rounded-pill border border-rule bg-surface text-[14px] font-medium text-ink hover:bg-wash"
                 }
               >
                 {oz} oz
@@ -128,7 +128,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
                   }
                 }}
                 placeholder="5.0"
-                className="min-h-11 w-[80px] rounded-pill border border-hairline bg-surface px-sm text-[14px] outline-none focus:border-accent focus-ring"
+                className="min-h-11 w-[80px] rounded-pill border border-rule bg-surface px-sm text-[14px] outline-none focus:border-accent focus-ring"
               />
             )}
           </Field>
@@ -157,7 +157,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
               maxLength={500}
               rows={2}
               placeholder="e.g., comp for VIP"
-              className="mt-xs min-h-11 w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
+              className="mt-xs min-h-11 w-full rounded-md border border-rule bg-canvas px-sm py-xs text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
             />
           )}
         </Field>
@@ -166,7 +166,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
           <button
             type="button"
             onClick={handleCancel}
-            className="min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface"
+            className="min-h-11 rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash"
           >
             Cancel
           </button>

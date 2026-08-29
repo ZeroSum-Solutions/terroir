@@ -76,12 +76,19 @@ export function EditMetadataModal({
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const requestClose = useCallback(() => {
     if (busy) return;
+    // Escape backs out of the confirmation rather than re-asking it. Without
+    // this the handler saw `dirty`, set the flag it had already set, and the
+    // question could not be dismissed with the keyboard.
+    if (confirmingDiscard) {
+      setConfirmingDiscard(false);
+      return;
+    }
     if (dirty) {
       setConfirmingDiscard(true);
       return;
     }
     onClose();
-  }, [busy, dirty, onClose]);
+  }, [busy, confirmingDiscard, dirty, onClose]);
 
   useFocusTrap({
     containerRef: dialogRef,
@@ -175,10 +182,10 @@ export function EditMetadataModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="edit-metadata-heading"
-      className="fixed inset-x-0 bottom-0 z-[var(--z-dialog)] flex max-h-[85dvh] flex-col rounded-t-lg bg-surface md:inset-0 md:m-auto md:h-fit md:max-h-[90dvh] md:w-[480px] md:rounded-card md:border md:border-hairline"
+      className="fixed inset-x-0 bottom-0 z-[var(--z-dialog)] flex max-h-[85dvh] flex-col rounded-t-lg bg-surface md:inset-0 md:m-auto md:h-fit md:max-h-[90dvh] md:w-[480px] md:rounded-card md:border md:border-rule"
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-hairline px-md py-sm shrink-0">
+      <div className="flex items-center justify-between border-b border-rule px-md py-sm shrink-0">
         <h2
           id="edit-metadata-heading"
           className="font-serif text-[17px] font-medium text-ink"
@@ -190,7 +197,7 @@ export function EditMetadataModal({
           onClick={requestClose}
           aria-label="Close"
           disabled={busy}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-wash"
         >
           <X className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>
@@ -205,7 +212,7 @@ export function EditMetadataModal({
             type="text"
             value={producer}
             onChange={(e) => setProducer(e.target.value)}
-            className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
+            className="h-11 w-full rounded-pill border border-rule bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
           />
         </Field>
 
@@ -216,7 +223,7 @@ export function EditMetadataModal({
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
+            className="h-11 w-full rounded-pill border border-rule bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
           />
         </Field>
 
@@ -230,7 +237,7 @@ export function EditMetadataModal({
             value={vintage}
             onChange={(e) => setVintage(e.target.value)}
             placeholder="e.g. 2020"
-            className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
+            className="h-11 w-full rounded-pill border border-rule bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
           />
         </Field>
 
@@ -242,7 +249,7 @@ export function EditMetadataModal({
             value={varietal}
             onChange={(e) => setVarietal(e.target.value)}
             placeholder="e.g. Cabernet Sauvignon"
-            className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
+            className="h-11 w-full rounded-pill border border-rule bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
           />
         </Field>
 
@@ -254,7 +261,7 @@ export function EditMetadataModal({
             value={region}
             onChange={(e) => setRegion(e.target.value)}
             placeholder="e.g. Napa Valley"
-            className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
+            className="h-11 w-full rounded-pill border border-rule bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
           />
         </Field>
 
@@ -266,12 +273,12 @@ export function EditMetadataModal({
             onChange={(e) => setTastingNotes(e.target.value)}
             placeholder="Enter free-form tasting notes..."
             rows={4}
-            className="w-full rounded-md border border-hairline bg-surface px-sm py-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring resize-y"
+            className="w-full rounded-md border border-rule bg-surface px-sm py-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring resize-y"
           />
         </Field>
 
         {/* BND-277 — drink-window override (#72) */}
-        <fieldset className="rounded-md border border-hairline p-sm">
+        <fieldset className="rounded-md border border-rule p-sm">
           <legend className="text-[12px] font-medium text-grey px-xs">
             Drink window (manual override)
           </legend>
@@ -289,7 +296,7 @@ export function EditMetadataModal({
                 value={dwStart}
                 onChange={(e) => setDwStart(e.target.value)}
                 placeholder="e.g. 2025"
-                className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
+                className="h-11 w-full rounded-pill border border-rule bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
               />
             </Field>
             <Field label="Peak year" htmlFor="edit-dw-peak">
@@ -301,7 +308,7 @@ export function EditMetadataModal({
                 value={dwPeak}
                 onChange={(e) => setDwPeak(e.target.value)}
                 placeholder="e.g. 2030"
-                className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
+                className="h-11 w-full rounded-pill border border-rule bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
               />
             </Field>
             <Field label="End year" htmlFor="edit-dw-end">
@@ -313,7 +320,7 @@ export function EditMetadataModal({
                 value={dwEnd}
                 onChange={(e) => setDwEnd(e.target.value)}
                 placeholder="e.g. 2035"
-                className="h-11 w-full rounded-pill border border-hairline bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
+                className="h-11 w-full rounded-pill border border-rule bg-surface px-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring"
               />
             </Field>
           </div>
@@ -331,10 +338,11 @@ export function EditMetadataModal({
 
       {/* Footer */}
       {confirmingDiscard ? (
+        // Not role="alertdialog": the form behind it stays reachable, and
+        // claiming modality that isn't there is worse than not claiming it.
         <div
-          role="alertdialog"
-          aria-label="Discard changes"
-          className="flex flex-wrap items-center justify-end gap-sm border-t border-rule bg-risk-wash px-md py-sm shrink-0"
+          role="alert"
+          className="flex flex-wrap items-center justify-end gap-sm border-t border-rule bg-risk-wash px-md py-sm pb-[calc(var(--safe-bottom)+var(--spacing-sm))] shrink-0 md:pb-sm"
         >
           <p className="mr-auto text-body-sm text-risk-ink">
             Discard your changes to this wine?
@@ -343,7 +351,7 @@ export function EditMetadataModal({
             type="button"
             onClick={() => setConfirmingDiscard(false)}
             autoFocus
-            className="flex h-11 items-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+            className="flex h-11 items-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
           >
             Keep editing
           </button>
@@ -356,12 +364,12 @@ export function EditMetadataModal({
           </button>
         </div>
       ) : (
-      <div className="flex justify-end gap-sm border-t border-hairline px-md py-sm shrink-0">
+      <div className="flex justify-end gap-sm border-t border-rule px-md py-sm pb-[calc(var(--safe-bottom)+var(--spacing-sm))] shrink-0 md:pb-sm">
         <button
           type="button"
           onClick={requestClose}
           disabled={busy}
-          className="flex h-11 items-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface disabled:opacity-60 focus-ring"
+          className="flex h-11 items-center rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash disabled:opacity-60 focus-ring"
         >
           Cancel
         </button>

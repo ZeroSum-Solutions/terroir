@@ -108,7 +108,7 @@ export function WineDetailView({
                 className="h-auto w-[min(62vw,240px)] object-contain drop-shadow-2xl md:w-full"
               />
             ) : (
-              <div className="flex h-[300px] w-[132px] items-center justify-center rounded-card border border-hairline bg-surface md:h-[380px] md:w-[168px]">
+              <div className="flex h-[300px] w-[132px] items-center justify-center rounded-card border border-rule bg-surface md:h-[380px] md:w-[168px]">
                 <WineThumb
                   src={null}
                   colour={wine.colour}
@@ -122,7 +122,7 @@ export function WineDetailView({
           </div>
 
           <div className="flex flex-col justify-center">
-            <p className="text-caption uppercase text-accent">{wine.producer}</p>
+            <p className="text-caption uppercase text-mark">{wine.producer}</p>
             <h1 className="mt-sm font-serif text-heading-sm leading-[1.06] text-ink md:text-heading lg:text-display">
               {wine.name}
             </h1>
@@ -134,7 +134,7 @@ export function WineDetailView({
               <ul className="mt-md flex flex-wrap items-center gap-x-sm gap-y-xs text-body-sm text-ink-soft">
                 {facets.map((facet, index) => (
                   <li key={facet} className="flex items-center gap-x-sm">
-                    {index > 0 && <span aria-hidden="true" className="text-hairline">·</span>}
+                    {index > 0 && <span aria-hidden="true" className="text-rule">·</span>}
                     {facet}
                   </li>
                 ))}
@@ -180,7 +180,7 @@ export function WineDetailView({
               {profile.pairings.map((pairing) => (
                 <li
                   key={pairing}
-                  className="rounded-pill border border-hairline bg-surface px-md py-xs text-body-sm text-ink-soft"
+                  className="rounded-pill border border-rule bg-surface px-md py-xs text-body-sm text-ink-soft"
                 >
                   {pairing}
                 </li>
@@ -258,7 +258,7 @@ export function WineDetailView({
                 Community rating by vintage for {profile?.matchedName}
               </caption>
               <thead>
-                <tr className="border-b border-hairline text-caption uppercase text-grey">
+                <tr className="border-b border-rule text-caption uppercase text-grey">
                   <th scope="col" className="py-sm text-left font-medium">Vintage</th>
                   <th scope="col" className="py-sm text-left font-medium">Rating</th>
                   <th scope="col" className="py-sm text-right font-medium">Ratings</th>
@@ -270,11 +270,11 @@ export function WineDetailView({
                   return (
                     <tr
                       key={row.vintage}
-                      className={`border-b border-hairline ${isThisBottle ? "bg-amber-wash" : ""}`}
+                      className={`border-b border-rule ${isThisBottle ? "bg-risk-wash" : ""}`}
                     >
                       <th
                         scope="row"
-                        className={`py-sm text-left font-mono text-ledger ${isThisBottle ? "text-accent" : "text-ink"}`}
+                        className={`py-sm text-left font-mono text-ledger ${isThisBottle ? "text-mark" : "text-ink"}`}
                       >
                         {row.vintage}
                         {isThisBottle && (
@@ -332,7 +332,7 @@ export function WineDetailView({
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border-t border-hairline pt-xl mt-xl md:pt-2xl md:mt-2xl">
+    <section className="border-t border-rule pt-xl mt-xl md:pt-2xl md:mt-2xl">
       <h2 className="mb-lg font-serif text-heading-sm text-ink">{title}</h2>
       {children}
     </section>
@@ -348,7 +348,7 @@ function Fact({
 }) {
   if (value === null || value === "") return null;
   return (
-    <div className="flex items-baseline justify-between gap-md border-b border-hairline py-md last:border-b-0 sm:odd:border-b">
+    <div className="flex items-baseline justify-between gap-md border-b border-rule py-md last:border-b-0 sm:odd:border-b">
       <dt className="text-caption uppercase text-grey">{label}</dt>
       <dd className="text-right text-body-sm text-ink">{value}</dd>
     </div>
@@ -385,7 +385,7 @@ function AxisBar({ axis }: { axis: TasteAxis }) {
 function Stars({ value }: { value: number }) {
   return (
     <span className="flex items-center gap-xs">
-      <Star aria-hidden="true" className="h-3.5 w-3.5 fill-accent text-accent" />
+      <Star aria-hidden="true" className="h-3.5 w-3.5 fill-mark text-mark" />
       <span className="font-mono text-ledger text-ink">{value.toFixed(1)}</span>
     </span>
   );
@@ -404,7 +404,7 @@ function CommunityRating({ avg, count }: { avg: number; count: number }) {
 
 function StockBadge({ count }: { count: number }) {
   return (
-    <span className="rounded-pill border border-hairline bg-surface px-md py-xs text-body-sm text-ink-soft">
+    <span className="rounded-pill border border-rule bg-surface px-md py-xs text-body-sm text-ink-soft">
       {count === 0 ? "None on hand" : `${count} on hand`}
     </span>
   );
@@ -418,7 +418,7 @@ function StockBadge({ count }: { count: number }) {
  */
 function CorpusUnavailableNote() {
   return (
-    <p className="mt-xl rounded-card border border-hairline bg-surface-sunken px-lg py-md text-body-sm text-grey">
+    <p className="mt-xl rounded-card border border-rule bg-surface-sunken px-lg py-md text-body-sm text-grey">
       The reference corpus couldn&rsquo;t be reached, so taste structure, grapes
       and pairings aren&rsquo;t shown for this bottle. That&rsquo;s a problem at
       our end rather than a gap in the reference — try again shortly.
@@ -433,7 +433,7 @@ function CorpusUnavailableNote() {
  */
 function NoProfileNote({ producer }: { producer: string }) {
   return (
-    <p className="mt-xl rounded-card border border-hairline bg-surface-sunken px-lg py-md text-body-sm text-grey">
+    <p className="mt-xl rounded-card border border-rule bg-surface-sunken px-lg py-md text-body-sm text-grey">
       No reference entry matched {`${producer} `}closely enough to trust, so
       taste structure, grapes and pairings aren&rsquo;t shown for this bottle.
     </p>

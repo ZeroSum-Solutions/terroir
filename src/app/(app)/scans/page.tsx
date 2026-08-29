@@ -62,13 +62,13 @@ function statusLabel(status: string) {
 function statusBadge(status: string) {
   switch (status) {
     case "complete":
-      return "bg-sage-wash text-sage-ink";
+      return "bg-ready-wash text-ready-ink";
     case "processing":
-      return "bg-powder-wash text-powder-ink";
+      return "bg-hold-wash text-hold-ink";
     case "failed":
       return "bg-primary text-seal-ink";
     default:
-      return "bg-bridge-surface text-grey";
+      return "bg-wash text-grey";
   }
 }
 
@@ -155,7 +155,7 @@ export default async function ScansPage({
             className={`inline-flex min-h-11 items-center gap-xs rounded-pill border px-md text-[12px] font-medium transition-colors focus-ring ${
               active
                 ? "border-ink bg-ink text-on-inverse"
-                : "border-edge bg-surface text-grey hover:bg-bridge-surface"
+                : "border-edge bg-surface text-grey hover:bg-wash"
             }`}
           >
             <span>{f.label}</span>
@@ -186,7 +186,7 @@ export default async function ScansPage({
         <h1 className="font-serif text-heading-sm text-ink md:text-heading">Scan history</h1>
         <div className="flex items-center gap-sm">
           {rows.length > 0 && (
-            <span className="rounded-pill bg-bridge-surface px-sm py-xs text-[11px] font-medium uppercase tracking-[0.1em] text-grey">
+            <span className="rounded-pill bg-wash px-sm py-xs text-[11px] font-medium uppercase tracking-[0.1em] text-grey">
               {offset + 1}–{offset + rows.length} of {total}
             </span>
           )}
@@ -247,7 +247,7 @@ export default async function ScansPage({
       <div className="hidden overflow-hidden rounded-card card-surface md:block">
         <table className="w-full border-collapse text-[14px]">
           <thead>
-            <tr className="bg-bridge-surface">
+            <tr className="bg-wash">
               <th scope="col" className="px-md py-sm text-left text-caption font-medium uppercase tracking-[0.18em] text-grey">
                 Date
               </th>
@@ -272,7 +272,7 @@ export default async function ScansPage({
             {rows.map((s, i) => (
               <tr
                 key={s.id}
-                className={`border-t border-hairline hover:bg-bridge-surface ${
+                className={`border-t border-rule hover:bg-wash ${
                   i === 0 ? "border-t-0" : ""
                 }`}
               >
@@ -340,9 +340,9 @@ export default async function ScansPage({
           <Link
             key={s.id}
             href={`/scan/${s.id}`}
-            className="flex items-center gap-md rounded-card card-surface p-md hover:bg-bridge-surface focus-ring"
+            className="flex items-center gap-md rounded-card card-surface p-md hover:bg-wash focus-ring"
           >
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-bridge-surface">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-wash">
               <FileText className="h-5 w-5 text-grey" strokeWidth={1.5} />
             </div>
             <div className="min-w-0 flex-1">
@@ -383,13 +383,13 @@ export default async function ScansPage({
         {page > 1 ? (
           <Link
             href={`/scans${buildQuery({ page: page - 1, status })}`}
-            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={2} />
             Previous
           </Link>
         ) : (
-          <span className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-surface px-md text-[13px] font-medium text-grey opacity-50">
+          <span className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-rule bg-surface px-md text-[13px] font-medium text-grey opacity-50">
             <ChevronLeft className="h-4 w-4" strokeWidth={2} />
             Previous
           </span>
@@ -400,13 +400,13 @@ export default async function ScansPage({
         {hasMore ? (
           <Link
             href={`/scans${buildQuery({ page: page + 1, status })}`}
-            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+            className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
           >
             Next
             <ChevronRight className="h-4 w-4" strokeWidth={2} />
           </Link>
         ) : (
-          <span className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-surface px-md text-[13px] font-medium text-grey opacity-50">
+          <span className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-rule bg-surface px-md text-[13px] font-medium text-grey opacity-50">
             Next
             <ChevronRight className="h-4 w-4" strokeWidth={2} />
           </span>

@@ -120,8 +120,8 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
             }}
             className={`flex-1 rounded-pill border px-sm py-xs text-[13px] font-medium transition-colors ${
               setupRows === preset.r && setupCols === preset.c
-                ? "border-accent bg-blush-wash text-accent"
-                : "border-edge bg-surface text-grey hover:border-beige-deep"
+                ? "border-risk-ink/40 bg-risk-wash text-risk-ink"
+                : "border-edge bg-surface text-grey hover:border-rule-strong"
             }`}
           >
             {preset.label}
@@ -133,7 +133,7 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
         type="button"
         onClick={createCellar}
         disabled={creating}
-        className="flex h-[38px] w-full items-center justify-center gap-xs rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-60"
+        className="flex h-11 w-full items-center justify-center gap-xs rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-60"
       >
         {creating && (
           <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
@@ -280,7 +280,7 @@ export function CellarGridView({
                 type="button"
                 onClick={() => setSelectedBin(null)}
                 aria-label="Close bin detail"
-                className="flex h-8 w-8 items-center justify-center rounded-pill text-grey hover:bg-bridge-surface"
+                className="flex h-11 w-11 items-center justify-center rounded-pill text-grey hover:bg-wash focus-ring"
               >
                 <X className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
               </button>
@@ -296,7 +296,7 @@ export function CellarGridView({
                   {selectedData.wines.map((w, i) => (
                     <div
                       key={`${w.wineId}-${i}`}
-                      className="rounded-md border border-hairline px-sm py-sm"
+                      className="rounded-md border border-rule px-sm py-sm"
                     >
                       <div className="font-serif text-[17px] font-medium leading-snug text-ink">
                         {w.producer}, {w.name}
@@ -329,8 +329,9 @@ export function CellarGridView({
 
       {/* Legend — the same runtime vars the cells are filled with. It used to
           carry three hardcoded Cantina hexes, so after any palette change the
-          legend quietly described a map that no longer existed (and one of
-          them, #8B6914, was a brown). */}
+          legend quietly described a map that no longer existed. One of them
+          was a brown, which is exactly what check-design-palette now catches
+          in source as well as in DESIGN.md. */}
       <div className="mt-lg flex items-center gap-lg text-[12px] text-grey">
         <div className="flex items-center gap-xs">
           <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: "var(--t-ready)" }} />

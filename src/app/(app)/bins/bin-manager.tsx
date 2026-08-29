@@ -48,7 +48,7 @@ function ManagerToolbar({ query, onQueryChange, canManage, onCreate }: { query: 
 
 function UnplacedAnchor({ count }: { count: number }) {
   if (count === 0) return null;
-  return <a id="unplaced" href="#unplaced" className="mb-lg flex min-h-11 items-center justify-between rounded-md border border-hairline bg-bridge-surface px-md py-sm text-[13px] text-ink"><span className="font-medium">Unplaced inventory</span><span className="tabular text-grey">{count} {count === 1 ? "bottle" : "bottles"}</span></a>;
+  return <a id="unplaced" href="#unplaced" className="mb-lg flex min-h-11 items-center justify-between rounded-md border border-rule bg-wash px-md py-sm text-[13px] text-ink"><span className="font-medium">Unplaced inventory</span><span className="tabular text-grey">{count} {count === 1 ? "bottle" : "bottles"}</span></a>;
 }
 
 function SearchBox({ query, onChange }: { query: string; onChange: (value: string) => void }) {
@@ -62,7 +62,7 @@ function SearchBox({ query, onChange }: { query: string; onChange: (value: strin
         value={query}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Find a bottle by wine or producer"
-        className="h-11 w-full rounded-pill border border-hairline bg-surface pl-[40px] pr-sm text-[14px] text-ink placeholder:text-grey focus:border-accent focus-ring"
+        className="h-11 w-full rounded-pill border border-rule bg-surface pl-[40px] pr-sm text-[14px] text-ink placeholder:text-grey focus:border-accent focus-ring"
       />
     </label>
   );
@@ -77,7 +77,7 @@ function SearchResults({ matches }: { matches: Match[] }) {
         <p className="px-md py-md text-[13px] text-grey">No placed bottles match.</p>
       ) : (
         matches.map((match) => (
-          <div key={`${match.wineId}:${match.binId}`} data-bottle-match className="flex items-center justify-between gap-md border-b border-hairline px-md py-sm last:border-b-0">
+          <div key={`${match.wineId}:${match.binId}`} data-bottle-match className="flex items-center justify-between gap-md border-b border-rule px-md py-sm last:border-b-0">
             <div className="min-w-0">
               <p className="truncate font-serif text-[17px] font-medium text-ink">{match.name}</p>
               <p className="truncate text-[12px] text-grey">{match.producer}</p>
@@ -111,7 +111,7 @@ function BinTable(props: TableProps) {
     <div className="overflow-hidden rounded-card card-surface">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-[13px]">
-          <thead><tr className="bg-bridge-surface text-[11px] font-medium uppercase tracking-[0.18em] text-grey"><th className="px-md py-sm text-left">Code</th><th className="px-md py-sm text-left">Zone</th><th className="px-md py-sm text-left">Occupancy</th><th className="px-md py-sm text-right">Capacity</th><th className="px-md py-sm text-right">Priority</th>{props.canManage && <th className="w-[104px] px-sm py-sm" />}</tr></thead>
+          <thead><tr className="bg-wash text-[11px] font-medium uppercase tracking-[0.18em] text-grey"><th className="px-md py-sm text-left">Code</th><th className="px-md py-sm text-left">Zone</th><th className="px-md py-sm text-left">Occupancy</th><th className="px-md py-sm text-right">Capacity</th><th className="px-md py-sm text-right">Priority</th>{props.canManage && <th className="w-[104px] px-sm py-sm" />}</tr></thead>
           <tbody>{props.bins.map((bin) => <BinRow key={bin.id} bin={bin} {...props} />)}</tbody>
         </table>
       </div>
@@ -122,16 +122,16 @@ function BinTable(props: TableProps) {
 
 function BinRow({ bin, canManage, busy, editingId, draft, onDraftChange, onEdit, onCancel, onSave, onRetire }: TableProps & { bin: BinViewModel }) {
   if (editingId === bin.id) {
-    return <tr data-bin-row className="border-t border-hairline"><td colSpan={6} className="bg-bridge-surface px-md py-md"><BinForm draft={draft} busy={busy} submitLabel="Save changes" onChange={onDraftChange} onCancel={onCancel} onSubmit={onSave} /></td></tr>;
+    return <tr data-bin-row className="border-t border-rule"><td colSpan={6} className="bg-wash px-md py-md"><BinForm draft={draft} busy={busy} submitLabel="Save changes" onChange={onDraftChange} onCancel={onCancel} onSubmit={onSave} /></td></tr>;
   }
   return (
-    <tr data-bin-row className="border-t border-hairline hover:bg-bridge-surface">
+    <tr data-bin-row className="border-t border-rule hover:bg-wash">
       <td className="px-md py-sm font-mono font-medium text-ink">{bin.code}</td>
       <td className="px-md py-sm text-grey">{bin.zone ?? "—"}</td>
       <td className="px-md py-sm text-ink">
         <div>{bin.occupancy}</div>
         {bin.capacity != null && bin.capacity > 0 && (
-          <div className="mt-2xs h-1.5 w-full max-w-[160px] overflow-hidden rounded-pill bg-beige">
+          <div className="mt-2xs h-1.5 w-full max-w-[160px] overflow-hidden rounded-pill bg-surface-sunken">
             <div
               className="h-full rounded-pill bg-primary"
               style={{ width: `${Math.min(100, (bin.bottleCount / bin.capacity) * 100)}%` }}
@@ -141,7 +141,7 @@ function BinRow({ bin, canManage, busy, editingId, draft, onDraftChange, onEdit,
       </td>
       <td className="px-md py-sm text-right tabular text-grey">{bin.capacity ?? "—"}</td>
       <td className="px-md py-sm text-right tabular text-grey">{bin.priority}</td>
-      {canManage && <td className="px-sm py-sm"><div className="flex justify-end gap-2xs"><IconButton label={`Edit bin ${bin.code}`} onClick={() => onEdit(bin)} className="rounded-md text-grey hover:bg-bridge-surface hover:text-ink focus-ring"><Pencil className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton><IconButton label={`Retire bin ${bin.code}`} onClick={() => onRetire(bin)} disabled={busy} className="rounded-md text-grey hover:bg-blush-wash hover:text-accent disabled:opacity-50"><Archive className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton></div></td>}
+      {canManage && <td className="px-sm py-sm"><div className="flex justify-end gap-2xs"><IconButton label={`Edit bin ${bin.code}`} onClick={() => onEdit(bin)} className="rounded-md text-grey hover:bg-wash hover:text-ink focus-ring"><Pencil className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton><IconButton label={`Retire bin ${bin.code}`} onClick={() => onRetire(bin)} disabled={busy} className="rounded-md text-grey hover:bg-risk-wash hover:text-risk-ink disabled:opacity-50"><Archive className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton></div></td>}
     </tr>
   );
 }

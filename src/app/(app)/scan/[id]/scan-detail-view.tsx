@@ -112,7 +112,7 @@ export function ScanDetailView({
             <button
               type="button"
               onClick={handleExportCsv}
-              className="flex h-10 items-center justify-center gap-sm rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring md:h-[38px]"
+              className="flex h-11 items-center justify-center gap-sm rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring md:h-[38px]"
               title="Download line items as CSV"
             >
               <Download className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
@@ -162,14 +162,14 @@ export function ScanDetailView({
               </div>
             </div>
           </div>
-          <div className="mt-md flex flex-wrap items-center gap-md border-t border-dashed border-hairline pt-md text-[13px] text-grey">
+          <div className="mt-md flex flex-wrap items-center gap-md border-t border-dashed border-rule pt-md text-[13px] text-grey">
             <span>{itemCount} wines</span>
             <span aria-hidden className="text-grey">·</span>
             <span className="font-mono">${formatMoney(total)}</span>
             {flaggedCount > 0 && (
               <>
                 <span aria-hidden className="text-grey">·</span>
-                <span className="inline-flex items-center gap-xs rounded-pill bg-blush-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-accent">
+                <span className="inline-flex items-center gap-xs rounded-pill bg-risk-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-risk-ink">
                   <AlertTriangle
                     className="h-3 w-3"
                     strokeWidth={2.5}
@@ -203,7 +203,7 @@ export function ScanDetailView({
               />
             </button>
             {ocrOpen && (
-              <div className="border-t border-hairline px-md pb-md pt-sm">
+              <div className="border-t border-rule px-md pb-md pt-sm">
                 <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-grey">
                   {JSON.stringify(ocrText, null, 2)}
                 </pre>
@@ -219,7 +219,7 @@ export function ScanDetailView({
               Original invoice
             </div>
             {imageLoading ? (
-              <div className="flex h-[200px] items-center justify-center rounded-lg bg-bridge-surface">
+              <div className="flex h-[200px] items-center justify-center rounded-lg bg-wash">
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               </div>
             ) : imageUrl ? (
@@ -252,7 +252,7 @@ export function ScanDetailView({
                 </a>
               </>
             ) : (
-              <div className="flex h-[200px] items-center justify-center rounded-lg bg-bridge-surface text-[13px] text-grey">
+              <div className="flex h-[200px] items-center justify-center rounded-lg bg-wash text-[13px] text-grey">
                 Image unavailable
               </div>
             )}
@@ -269,7 +269,7 @@ export function ScanDetailView({
           <div className="hidden md:block">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="bg-bridge-surface text-caption font-medium uppercase tracking-[0.18em] text-grey">
+                <tr className="bg-wash text-caption font-medium uppercase tracking-[0.18em] text-grey">
                   <th scope="col" className="px-sm py-sm text-left font-medium">Wine</th>
                   <th scope="col" className="px-sm py-sm text-left font-medium">Producer</th>
                   <th scope="col" className="px-sm py-sm text-right font-medium">Vintage</th>
@@ -286,15 +286,15 @@ export function ScanDetailView({
                   return (
                   <tr
                     key={it.id}
-                    className={`${i > 0 ? "border-t border-hairline" : ""} ${
-                      lowConf ? "bg-blush-wash/40" : ""
+                    className={`${i > 0 ? "border-t border-rule" : ""} ${
+                      lowConf ? "bg-risk-wash/40" : ""
                     }`}
                   >
                     <td className="px-sm py-sm font-serif text-[17px] font-medium text-ink">
                       <span className="inline-flex items-center gap-xs">
                         {lowConf && (
                           <AlertTriangle
-                            className="h-3.5 w-3.5 shrink-0 text-accent"
+                            className="h-3.5 w-3.5 shrink-0 text-risk-ink"
                             strokeWidth={2.5}
                             aria-label={`Low confidence (${Math.round(it.confidence * 100)}%) — review`}
                           />
@@ -323,7 +323,7 @@ export function ScanDetailView({
               </tbody>
               {items.length > 0 && (
                 <tfoot>
-                  <tr className="border-t border-hairline">
+                  <tr className="border-t border-rule">
                     <td
                       colSpan={7}
                       className="px-sm py-sm text-right text-caption font-medium uppercase tracking-[0.18em] text-grey"
@@ -348,14 +348,14 @@ export function ScanDetailView({
                 key={it.id}
                 className={`rounded-card shadow-card border p-md ${
                   lowConf
-                    ? "border-accent/30 bg-blush-wash/40"
-                    : "border-hairline bg-surface"
+                    ? "border-risk-ink/30 bg-risk-wash/40"
+                    : "border-rule bg-surface"
                 }`}
               >
                 <div className="flex items-start gap-xs">
                   {lowConf && (
                     <AlertTriangle
-                      className="mt-2xs h-4 w-4 shrink-0 text-accent"
+                      className="mt-2xs h-4 w-4 shrink-0 text-risk-ink"
                       strokeWidth={2.5}
                       aria-label={`Low confidence (${Math.round(it.confidence * 100)}%) — review`}
                     />
@@ -370,7 +370,7 @@ export function ScanDetailView({
                   <span>{it.varietal}</span>
                   <span>{it.region}</span>
                 </div>
-                <div className="mt-sm flex items-center justify-between border-t border-dashed border-hairline pt-sm">
+                <div className="mt-sm flex items-center justify-between border-t border-dashed border-rule pt-sm">
                   <span className="font-mono text-[13px] text-ink">
                     {it.qty} × ${formatMoney(it.unitCost)}
                   </span>
@@ -385,7 +385,7 @@ export function ScanDetailView({
               );
             })}
             {items.length > 0 && (
-              <div className="mt-xs flex items-center justify-between border-t border-hairline px-md pt-md">
+              <div className="mt-xs flex items-center justify-between border-t border-rule px-md pt-md">
                 <span className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
                   Total
                 </span>
@@ -408,7 +408,7 @@ export function ScanDetailView({
             <div className="hidden md:block">
               <table className="w-full text-[13px]">
                 <thead>
-                  <tr className="bg-bridge-surface text-caption font-medium uppercase tracking-[0.18em] text-grey">
+                  <tr className="bg-wash text-caption font-medium uppercase tracking-[0.18em] text-grey">
                     <th scope="col" className="px-sm py-sm text-left font-medium">Wine</th>
                     <th scope="col" className="px-sm py-sm text-left font-medium">Producer</th>
                     <th scope="col" className="px-sm py-sm text-right font-medium">Vintage</th>
@@ -421,7 +421,7 @@ export function ScanDetailView({
                   {inventoryItems.map((ii, i) => (
                     <tr
                       key={ii.id}
-                      className={i > 0 ? "border-t border-hairline" : ""}
+                      className={i > 0 ? "border-t border-rule" : ""}
                     >
                       <td className="px-sm py-sm font-serif text-[17px] font-medium text-ink">
                         <Link
@@ -458,10 +458,10 @@ export function ScanDetailView({
                 <Link
                   key={ii.id}
                   href={`/cellar?wine=${ii.wine_id}`}
-                  className="rounded-card card-surface p-md hover:bg-bridge-surface focus-ring"
+                  className="rounded-card card-surface p-md hover:bg-wash focus-ring"
                 >
                   <div className="flex items-start gap-md">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill bg-bridge-surface">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill bg-wash">
                       <Package className="h-5 w-5 text-grey" strokeWidth={1.5} />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -474,7 +474,7 @@ export function ScanDetailView({
                       </div>
                     </div>
                   </div>
-                  <div className="mt-sm flex items-center justify-between border-t border-dashed border-hairline pt-sm">
+                  <div className="mt-sm flex items-center justify-between border-t border-dashed border-rule pt-sm">
                     <span className="font-mono text-[13px] tabular text-ink">
                       {ii.quantity} ×{" "}
                       {ii.unit_cost != null ? `$${formatMoney(ii.unit_cost)}` : "—"}

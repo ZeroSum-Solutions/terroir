@@ -76,7 +76,7 @@ export function ThemeToggle() {
       <span className="block text-[11px] font-medium uppercase tracking-[0.1em] text-grey">
         Theme
       </span>
-      <div className="mt-xs flex items-stretch overflow-hidden rounded-pill border border-hairline">
+      <div className="mt-xs flex items-stretch overflow-hidden rounded-pill border border-rule">
         {OPTIONS.map(({ value, label, short }) => (
           <button
             key={value}
@@ -87,10 +87,10 @@ export function ThemeToggle() {
               setChoice(value);
               applyChoice(value);
             }}
-            className={`min-h-10 flex-1 px-2xs text-[12px] font-medium transition-colors focus-ring ${
+            className={`min-h-11 flex-1 px-2xs text-[12px] font-medium transition-colors focus-ring-inset ${
               choice === value
                 ? "bg-surface-inverse text-on-inverse"
-                : "text-grey hover:bg-bridge-surface hover:text-ink"
+                : "text-grey hover:bg-wash hover:text-ink"
             }`}
           >
             {short}

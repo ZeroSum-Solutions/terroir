@@ -105,7 +105,7 @@ export function BriefingAlertCard({ alert }: { alert: DrinkWindowAlert }) {
             )}
             {alert.bin_location && (
               <span>
-                · bin <span className="inline-flex rounded-pill bg-beige px-xs py-[1px] text-[11px] text-ink-soft">{alert.bin_location}</span>
+                · bin <span className="inline-flex rounded-pill bg-surface-sunken px-xs py-[1px] text-[11px] text-ink-soft">{alert.bin_location}</span>
               </span>
             )}
           </div>
@@ -128,7 +128,7 @@ export function BriefingAlertCard({ alert }: { alert: DrinkWindowAlert }) {
               disabled={busy}
               onClick={onSnooze}
               className={cn(
-                "inline-flex min-h-11 items-center gap-xs rounded-pill px-md text-[13px] font-medium text-grey hover:bg-bridge-surface focus-ring disabled:opacity-60",
+                "inline-flex min-h-11 items-center gap-xs rounded-pill px-md text-[13px] font-medium text-grey hover:bg-wash focus-ring disabled:opacity-60",
               )}
             >
               <X className="h-4 w-4" strokeWidth={2} aria-hidden />

@@ -21,6 +21,14 @@
  * unless `--allow-growth` is passed, so "just re-baseline it" is a deliberate,
  * reviewable act rather than a reflex.
  *
+ * The fingerprint is a per-file count per violation kind, not a per-occurrence
+ * hash. That is a deliberate trade: line numbers churn on every edit, and a
+ * hash keyed to them would fail on unrelated changes until nobody trusted it.
+ * The consequence is that one `text-[13px]` can be swapped for another in the
+ * same file without the gate noticing. It still cannot grow, which is what
+ * stops the 80% bypass rate from coming back. Editing the committed JSON by
+ * hand also works — that is what review is for.
+ *
  *   node scripts/check-design-typography.mjs            # check (CI)
  *   node scripts/check-design-typography.mjs --update   # after migrating
  */

@@ -171,7 +171,9 @@ describe("Manage Cellar Sections mobile layout", () => {
     // never triggers.
     expect(rename.className).toContain("text-grey");
     expect(del.className).not.toContain("text-grey");
-    expect(del.className).toMatch(/text-accent/);
+    // Destructive rest state is the risk ink, not the link colour: `accent`
+    // is bone in Nocturne, which is the same colour as Rename.
+    expect(del.className).toMatch(/text-risk-ink/);
 
     // And they need real breathing room between them, not a 2px seam.
     const actionsRow = rename.parentElement!;

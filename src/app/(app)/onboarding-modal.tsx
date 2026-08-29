@@ -56,7 +56,7 @@ export function OnboardingModal({
             if (e.key === "Enter") submit();
           }}
           placeholder="Tartine Cellar…"
-          className="mt-lg h-[38px] w-full rounded-pill border border-hairline bg-canvas px-md text-[14px] text-ink placeholder:text-grey focus-visible:border-accent focus-ring"
+          className="mt-lg h-11 w-full rounded-pill border border-edge bg-canvas px-md text-[14px] text-ink placeholder:text-grey focus-visible:border-accent focus-ring"
         />
         <div className="mt-lg flex justify-end">
           <button

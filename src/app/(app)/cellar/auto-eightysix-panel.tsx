@@ -127,14 +127,14 @@ export function AutoEightysixPanel({
             checked={enabled}
             disabled={saving}
             onChange={(e) => void onToggle(e.target.checked)}
-            className="h-5 w-5 rounded-sm border-hairline"
+            className="h-5 w-5 rounded-sm border-rule"
           />
           <span>{enabled ? "Enabled" : "Disabled"}</span>
         </label>
       </div>
 
       {enabled && (
-        <div className="mt-md flex flex-wrap items-center gap-sm border-t border-hairline pt-md">
+        <div className="mt-md flex flex-wrap items-center gap-sm border-t border-rule pt-md">
           <label className="flex items-center gap-xs text-[13px] text-grey">
             Threshold
             <input
@@ -149,7 +149,7 @@ export function AutoEightysixPanel({
                   (e.target as HTMLInputElement).blur();
                 }
               }}
-              className="ml-xs h-[32px] w-[80px] rounded-pill border border-hairline bg-surface px-sm text-right font-mono text-[13px]"
+              className="ml-xs h-[32px] w-[80px] rounded-pill border border-rule bg-surface px-sm text-right font-mono text-[13px]"
             />
             <span className="text-[11px] text-grey">ml</span>
             <span className="text-[11px] text-grey">
@@ -163,7 +163,7 @@ export function AutoEightysixPanel({
       )}
 
       {/* BND-173: 86 display strategy on public wine lists */}
-      <div className="mt-md border-t border-hairline pt-md">
+      <div className="mt-md border-t border-rule pt-md">
         <h3 className="font-serif text-[14px] font-medium text-ink">
           86&rsquo;d wine display on public lists
         </h3>

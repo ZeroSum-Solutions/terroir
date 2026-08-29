@@ -13,9 +13,10 @@
  *  2. @theme inline — maps Tailwind tokens onto the runtime variables, so
  *     every token utility (bg-canvas, text-ink, border-rule…) retints per mode
  *     with zero component changes.
- *  3. Legacy aliases — pre-Nocturne semantic names still used across
- *     components, remapped onto the runtime variables. New/touched code uses
- *     contract tokens; aliases shrink as surfaces migrate.
+ *  The Cantina alias shim (hairline, beige, bridge-surface, sage, powder,
+ *  amber, blush-wash, gold, success/warning/danger) is GONE. Every call site
+ *  was migrated to the contract vocabulary, so there is exactly one name for
+ *  each role and no second spelling for a reviewer to reach for.
  *
  * Two rules govern the boundary tokens and they are not interchangeable:
  *   `rule` — decorative. Alpha is fine. Exempt under WCAG 1.4.11.
@@ -265,40 +266,6 @@
   --color-glass-edge: var(--t-glass-edge);
   --color-glass-shadow: var(--t-glass-shadow);
 
-  /* ── Legacy aliases (remapped onto runtime vars) ──────────── */
-  /* Cantina names still live in unswept components. Each resolves to its
-     Nocturne role so nothing renders an orphaned colour; they shrink as
-     surfaces migrate. */
-  --color-hairline: var(--t-rule);
-  --color-hairline-strong: var(--t-rule-strong);
-  --color-border: var(--t-rule);
-  --color-border-strong: var(--t-rule-strong);
-  --color-beige: var(--t-surface-sunken);
-  --color-beige-deep: var(--t-rule-strong);
-  --color-bridge-surface: var(--t-wash);
-  --color-surface-muted: var(--t-wash);
-  --color-ink-muted: var(--t-grey);
-  --color-ink-subtle: var(--t-grey);
-  --color-accent-hover: var(--t-primary-hover);
-  --color-accent-soft: var(--t-risk-wash);
-  --color-gold: var(--t-mark);
-  --color-sage: var(--t-ready);
-  --color-sage-wash: var(--t-ready-wash);
-  --color-sage-ink: var(--t-ready-ink);
-  --color-powder: var(--t-hold);
-  --color-powder-wash: var(--t-hold-wash);
-  --color-powder-ink: var(--t-hold-ink);
-  /* Nocturne has four states and no fifth hue, so the old amber "caution"
-     resolves to risk — the one colour that already means "needs attention". */
-  --color-amber: var(--t-risk-ink);
-  --color-amber-wash: var(--t-risk-wash);
-  --color-blush-wash: var(--t-risk-wash);
-  --color-success: var(--t-ready-ink);
-  --color-success-soft: var(--t-ready-wash);
-  --color-warning: var(--t-risk-ink);
-  --color-warning-soft: var(--t-risk-wash);
-  --color-danger: var(--t-primary);
-
   /* Typography — fonts injected via next/font in layout.tsx */
   --font-serif: var(--font-source-serif), "Source Serif 4", "Iowan Old Style", Georgia, serif;
   --font-sans: var(--font-source-sans), "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
@@ -415,6 +382,20 @@ body {
   outline-offset: 2px;
 }
 .focus-ring:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/*
+ * Same recipe, drawn inward. An outline at a positive offset is clipped by an
+ * `overflow: hidden` ancestor, which is exactly the shape of a segmented
+ * control or a stepper — a rounded pill with its buttons flush inside it. The
+ * indicator has to sit within the control's own box there.
+ */
+.focus-ring-inset:focus-visible {
+  outline: 2px solid var(--t-focus);
+  outline-offset: -2px;
+}
+.focus-ring-inset:focus:not(:focus-visible) {
   outline: none;
 }
 

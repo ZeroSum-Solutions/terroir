@@ -96,7 +96,7 @@ export function EnrichCellarButton() {
         onClick={onClick}
         disabled={busy}
         className={cn(
-          "inline-flex min-h-11 items-center gap-xs rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:opacity-60",
+          "inline-flex min-h-11 items-center gap-xs rounded-pill border border-edge bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring disabled:opacity-60",
           busy && "cursor-wait",
         )}
       >

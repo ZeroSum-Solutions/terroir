@@ -95,7 +95,7 @@ export function ActionDialog({
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         aria-busy={busy || undefined}
-        className="w-full rounded-t-card card-surface p-lg sm:max-w-[420px] sm:rounded-card"
+        className="w-full rounded-t-card card-surface p-lg pb-[calc(var(--safe-bottom)+var(--spacing-lg))] sm:max-w-[420px] sm:rounded-card sm:pb-lg"
       >
         <h2 id={titleId} className="font-serif text-[24px] font-normal leading-tight text-ink">
           {title}
@@ -115,7 +115,7 @@ export function ActionDialog({
             type="button"
             aria-disabled={busy || undefined}
             onClick={closeWhenIdle}
-            className="min-h-11 rounded-pill border border-hairline bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-bridge-surface focus-ring"
+            className="min-h-11 rounded-pill border border-rule bg-surface px-lg text-[14px] font-medium text-ink transition-colors hover:bg-wash focus-ring"
           >
             {cancelLabel}
           </button>

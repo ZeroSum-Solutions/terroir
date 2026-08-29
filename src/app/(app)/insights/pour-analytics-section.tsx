@@ -49,7 +49,7 @@ function formatMoney(n: number): string {
 function PourBar({ oz, maxOz }: { oz: number; maxOz: number }) {
   const pct = maxOz > 0 ? (oz / maxOz) * 100 : 0;
   return (
-    <div className="h-2.5 flex-1 overflow-hidden rounded-pill bg-beige">
+    <div className="h-2.5 flex-1 overflow-hidden rounded-pill bg-surface-sunken">
       <div
         className="h-full rounded-pill bg-primary transition-all duration-300"
         style={{ width: `${Math.max(pct, 1)}%` }}
@@ -132,8 +132,8 @@ export default function PourAnalyticsSection() {
           <h2 className="text-[15px] font-medium text-ink">Pour analytics</h2>
         </div>
         <div className="grid gap-md md:grid-cols-2">
-          <div className="h-[200px] animate-pulse rounded-md bg-bridge-surface" />
-          <div className="h-[200px] animate-pulse rounded-md bg-bridge-surface" />
+          <div className="h-[200px] animate-pulse rounded-md bg-wash" />
+          <div className="h-[200px] animate-pulse rounded-md bg-wash" />
         </div>
       </section>
     );
@@ -204,7 +204,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
       ) : (
         <div className="grid gap-md md:grid-cols-2">
           {/* Pour volume by section chart */}
-          <div className="min-w-0 rounded-md border border-hairline bg-bridge-surface p-md">
+          <div className="min-w-0 rounded-md border border-rule bg-wash p-md">
             <div className="mb-sm flex items-center gap-xs">
               <TrendingUp className="h-4 w-4 text-grey" strokeWidth={1.5} />
               <h3 className="text-[13px] font-medium text-ink">
@@ -224,7 +224,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
                         {s.section}
                       </span>
                       <PourBar oz={s.oz} maxOz={maxSectionOz} />
-                      <span className="w-[60px] shrink-0 text-right tabular text-[12px] text-ink-muted">
+                      <span className="w-[60px] shrink-0 text-right tabular text-[12px] text-grey">
                         {formatOz(s.oz)}
                       </span>
                     </div>
@@ -235,7 +235,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
           </div>
 
           {/* Top wines by pour count */}
-          <div className="min-w-0 rounded-md border border-hairline bg-bridge-surface p-md">
+          <div className="min-w-0 rounded-md border border-rule bg-wash p-md">
             <div className="mb-sm flex items-center gap-xs">
               <Wine className="h-4 w-4 text-grey" strokeWidth={1.5} />
               <h3 className="text-[13px] font-medium text-ink">
@@ -275,7 +275,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
           </div>
 
           {/* Top wines by revenue — full width on desktop */}
-          <div className="min-w-0 rounded-md border border-hairline bg-bridge-surface p-md md:col-span-2">
+          <div className="min-w-0 rounded-md border border-rule bg-wash p-md md:col-span-2">
             <div className="mb-sm flex items-center gap-xs">
               <DollarSign className="h-4 w-4 text-grey" strokeWidth={1.5} />
               <h3 className="text-[13px] font-medium text-ink">

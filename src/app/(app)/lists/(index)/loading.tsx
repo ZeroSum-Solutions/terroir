@@ -24,7 +24,7 @@ export default function ListsLoading() {
                 <Skeleton className="h-[12px] w-16" />
                 <Skeleton className="h-[12px] w-28" />
               </div>
-              <div className="mt-sm flex items-center gap-xs border-t border-hairline pt-sm">
+              <div className="mt-sm flex items-center gap-xs border-t border-rule pt-sm">
                 <Skeleton className="h-[28px] w-[72px] rounded-pill" />
                 <Skeleton className="h-[28px] w-[28px] rounded-pill" />
               </div>

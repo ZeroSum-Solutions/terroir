@@ -130,7 +130,7 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
       </button>
 
       {open && (
-        <ul className="mt-md flex flex-col divide-y divide-hairline">
+        <ul className="mt-md flex flex-col divide-y divide-rule">
           {entries.map((e) => {
             const key = `${e.wineId}:${e.kind}`;
             const isBusy = busy[key] ?? false;
@@ -181,7 +181,7 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
                   type="button"
                   disabled={isBusy}
                   onClick={() => onUnsnooze(e.wineId, e.kind)}
-                  className="inline-flex h-[30px] items-center gap-2xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:opacity-60"
+                  className="inline-flex min-h-11 items-center gap-2xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring disabled:opacity-60"
                 >
                   <RotateCcw
                     className="h-3 w-3"

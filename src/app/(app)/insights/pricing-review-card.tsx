@@ -92,7 +92,7 @@ export function PricingReviewCard({ alerts }: { alerts: PricingAlertRow[] }) {
         )}
       </p>
 
-      <ul className="mt-md flex flex-col divide-y divide-hairline">
+      <ul className="mt-md flex flex-col divide-y divide-rule">
         {alerts.slice(0, 5).map((alert) => (
           <PricingReviewRow
             key={alert.wine_list_item_id}
@@ -115,7 +115,7 @@ export function PricingReviewCard({ alerts }: { alerts: PricingAlertRow[] }) {
         </p>
       )}
 
-      <p className="mt-md border-t border-hairline pt-md text-[11px] italic text-grey">
+      <p className="mt-md border-t border-rule pt-md text-[11px] italic text-grey">
         Heuristic — based on your house targets + category bands. Velocity-driven
         recommendations available after 12 weeks of pour data.
       </p>
@@ -176,7 +176,7 @@ function PricingReviewRow({
         </span>
         <Link
           href={metricHref("wine", alert.wine_id)}
-          className="inline-flex h-[30px] items-center gap-2xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+          className="inline-flex min-h-11 items-center gap-2xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring"
         >
           Review
           <ChevronRight className="h-3 w-3" strokeWidth={2} aria-hidden />
@@ -186,7 +186,7 @@ function PricingReviewRow({
           onClick={onSnooze}
           disabled={busy}
           aria-label="Snooze 30 days"
-          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-pill text-grey hover:bg-bridge-surface focus-ring disabled:opacity-60"
+          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-pill text-grey hover:bg-wash focus-ring disabled:opacity-60"
         >
           <X className="h-3 w-3" strokeWidth={2} aria-hidden />
         </button>

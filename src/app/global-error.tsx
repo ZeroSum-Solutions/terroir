@@ -24,8 +24,8 @@ const themeInitScript = `try{var t=localStorage.getItem("terroir-theme");if(t===
 
 const palette = `
 :root{--ge-canvas:#F4F5F6;--ge-ink:#0B0D10;--ge-grey:#626B72;--ge-primary:#96122A;color-scheme:light}
-[data-theme="dark"]{--ge-canvas:#07080A;--ge-ink:#EEF1F4;--ge-grey:#79838B;--ge-primary:#F2879C;color-scheme:dark}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]):not([data-theme="dark"]){--ge-canvas:#07080A;--ge-ink:#EEF1F4;--ge-grey:#79838B;--ge-primary:#F2879C;color-scheme:dark}}
+[data-theme="dark"]{--ge-canvas:#07080A;--ge-ink:#EEF1F4;--ge-grey:#79838B;--ge-primary:#D01A3C;color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]):not([data-theme="dark"]){--ge-canvas:#07080A;--ge-ink:#EEF1F4;--ge-grey:#79838B;--ge-primary:#D01A3C;color-scheme:dark}}
 `;
 
 export default function GlobalError({

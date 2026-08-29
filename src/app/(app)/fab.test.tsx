@@ -44,8 +44,10 @@ describe("Fab", () => {
       'button[aria-label="Open actions"]',
     );
 
+    // The offset clears the tab bar AND its safe area, and reads that from
+    // the chrome tokens rather than restating the geometry here.
     expect(trigger?.getAttribute("style")).toContain(
-      "bottom:calc(env(safe-area-inset-bottom) + 80px)",
+      "bottom:calc(var(--chrome-tabbar-total) + var(--spacing-md))",
     );
   });
 

@@ -84,9 +84,9 @@ function PricingGroup({
     <section
       data-pricing-class={recommendationClass}
       aria-labelledby={`pricing-class-${recommendationClass}`}
-      className="border-b border-hairline last:border-b-0"
+      className="border-b border-rule last:border-b-0"
     >
-      <div className="flex items-center justify-between bg-beige px-md py-sm">
+      <div className="flex items-center justify-between bg-surface-sunken px-md py-sm">
         <h3
           id={`pricing-class-${recommendationClass}`}
           className="text-caption font-medium uppercase text-ink-soft"
@@ -95,7 +95,7 @@ function PricingGroup({
         </h3>
         <span className="tabular text-[11px] text-grey">{rows.length}</span>
       </div>
-      <ul className="divide-y divide-hairline bg-surface">
+      <ul className="divide-y divide-rule bg-surface">
         {rows.map((row) => <PricingRow key={row.wineId} row={row} />)}
       </ul>
     </section>

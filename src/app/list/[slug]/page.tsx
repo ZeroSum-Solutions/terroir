@@ -254,7 +254,7 @@ export default async function PublicWineListPage({
             <h1 className="mt-sm font-serif text-heading-sm text-ink print:text-[24px] print:text-black">
               {list.name}
             </h1>
-            <p className="mt-xs text-[12px] text-ink-muted print:text-black">
+            <p className="mt-xs text-[12px] text-grey print:text-black">
               {freshnessLabel}
             </p>
           </div>
@@ -270,11 +270,11 @@ export default async function PublicWineListPage({
           reads as broken to a guest. Hidden in print so a paper copy doesn't
           carry a stray "Nothing to pour" line. */}
       {sections.length === 0 && (
-        <div className="my-3xl rounded-card border border-dashed border-beige-deep bg-bridge-surface px-lg py-2xl text-center print:hidden">
+        <div className="my-3xl rounded-card border border-dashed border-rule-strong bg-wash px-lg py-2xl text-center print:hidden">
           <p className="font-serif text-[18px] text-ink">
             Nothing to pour right now.
           </p>
-          <p className="mt-xs text-[13px] text-ink-muted">
+          <p className="mt-xs text-[13px] text-grey">
             Availability changes during service; check back soon for the latest list.
           </p>
         </div>
@@ -292,7 +292,7 @@ export default async function PublicWineListPage({
                 is. When strategy is 'mark', this count includes 86'd wines
                 (which appear gray/strikethrough). Kept visible in print —
                 a paper menu benefits from the same signal. */}
-            <span className="font-mono text-[13px] font-normal text-ink-muted print:text-black">
+            <span className="font-mono text-[13px] font-normal text-grey print:text-black">
               {section.items.length}
             </span>
           </h2>
@@ -321,20 +321,20 @@ export default async function PublicWineListPage({
                           {item.name_override ?? `${wine.producer} ${wine.name}`}
                         </span>
                         {is86d && (
-                          <span className="ml-xs font-mono text-[11px] uppercase text-ink-subtle print:hidden">
+                          <span className="ml-xs font-mono text-[11px] uppercase text-grey print:hidden">
                             Unavailable
                           </span>
                         )}
                         {wine.vintage && (
                           <span className={cn(
-                            "ml-xs font-mono text-[12px] text-ink-muted print:text-black",
+                            "ml-xs font-mono text-[12px] text-grey print:text-black",
                             is86d && "line-through",
                           )}>
                             {wine.vintage}
                           </span>
                         )}
                         {binCodes.length > 0 && (
-                          <span className="ml-xs font-mono text-[11px] text-ink-subtle print:text-black">
+                          <span className="ml-xs font-mono text-[11px] text-grey print:text-black">
                             {binCodes.length === 1 ? "Bin" : "Bins"} {binCodes.join(", ")}
                           </span>
                         )}
@@ -342,7 +342,7 @@ export default async function PublicWineListPage({
                       <div className="flex shrink-0 items-baseline gap-md font-mono text-[14px]">
                         {item.glass_price != null && (
                           <span className={cn(
-                            "text-ink-muted print:text-black",
+                            "text-grey print:text-black",
                             is86d && "line-through",
                           )}>
                             Glass ${item.glass_price}
@@ -360,13 +360,13 @@ export default async function PublicWineListPage({
                     </div>
                     {(wine.region || wine.serving_temp_label) && (
                       <p className={cn(
-                        "mt-2xs text-[12px] text-ink-muted print:text-black",
+                        "mt-2xs text-[12px] text-grey print:text-black",
                         is86d && "line-through",
                       )}>
                         {wine.region}
                         {wine.varietal && ` · ${wine.varietal}`}
                         {wine.serving_temp_label && wine.serving_temp_min != null && wine.serving_temp_max != null && (
-                          <span className="text-ink-subtle print:text-black">
+                          <span className="text-grey print:text-black">
                             {wine.region ? " · " : ""}{wine.serving_temp_min}–{wine.serving_temp_max}°F
                           </span>
                         )}
@@ -374,7 +374,7 @@ export default async function PublicWineListPage({
                     )}
                     {item.tasting_note && (
                       <p className={cn(
-                        "mt-xs font-sans text-[13px] italic text-ink-muted print:text-black",
+                        "mt-xs font-sans text-[13px] italic text-grey print:text-black",
                         is86d && "line-through",
                       )}>
                         {item.tasting_note}
@@ -383,7 +383,7 @@ export default async function PublicWineListPage({
                     {/* BND-170: blurb renders under wine on public list */}
                     {item.blurb && (
                       <p className={cn(
-                        "mt-xs text-[13px] text-ink-muted leading-relaxed print:text-black",
+                        "mt-xs text-[13px] text-grey leading-relaxed print:text-black",
                         is86d && "line-through",
                       )}>
                         {item.blurb}
@@ -398,7 +398,7 @@ export default async function PublicWineListPage({
 
       {/* Footer — hidden when printing so the menu doesn't carry a
           "Powered by Terroir" line on a paper copy. */}
-      <footer className="mt-3xl border-t border-hairline pt-lg text-center print:hidden">
+      <footer className="mt-3xl border-t border-rule pt-lg text-center print:hidden">
         <p className="text-caption font-medium uppercase text-grey">
           Powered by Terroir
         </p>

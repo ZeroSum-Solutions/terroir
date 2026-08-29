@@ -210,7 +210,7 @@ export function WineListLanding({
     return (
       <div
         key={list.id}
-        className="group rounded-card card-surface transition-all hover:-translate-y-px hover:border-beige-deep"
+        className="group rounded-card card-surface transition-all hover:-translate-y-px hover:border-rule-strong"
       >
         <button
           type="button"
@@ -231,7 +231,7 @@ export function WineListLanding({
                 </StatusChip>
               ) : list.is_published ? (
                 <StatusChip tone="optimal" className="shrink-0">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-gold" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-mark" />
                   Published
                 </StatusChip>
               ) : (
@@ -242,11 +242,11 @@ export function WineListLanding({
             </div>
           </div>
           {list.description && (
-            <p className="mt-xs text-[13px] text-ink-muted line-clamp-2">
+            <p className="mt-xs text-[13px] text-grey line-clamp-2">
               {list.description}
             </p>
           )}
-          <div className="mt-md flex items-center justify-between text-[12px] text-ink-muted">
+          <div className="mt-md flex items-center justify-between text-[12px] text-grey">
             <span>
               <span className="font-medium text-ink">
                 {list.wine_count}
@@ -267,7 +267,7 @@ export function WineListLanding({
             )}
           </div>
         </button>
-        <div className="flex items-center justify-between gap-xs border-t border-hairline px-md py-sm">
+        <div className="flex items-center justify-between gap-xs border-t border-rule px-md py-sm">
           <div className="flex items-center gap-xs">
             {showCopyAction && (
               <>
@@ -275,7 +275,7 @@ export function WineListLanding({
                   type="button"
                   onClick={() => copyListLink(list)}
                   aria-label={`Copy public link for ${list.name}`}
-                  className="inline-flex min-h-11 items-center gap-xs whitespace-nowrap rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+                  className="inline-flex min-h-11 items-center gap-xs whitespace-nowrap rounded-pill border border-rule bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring"
                 >
                   {justCopied ? (
                     <Check
@@ -297,7 +297,7 @@ export function WineListLanding({
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Open public ${list.name} list in a new tab`}
-                  className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+                  className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-rule bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring"
                 >
                   <ExternalLink
                     className="h-3.5 w-3.5"
@@ -314,7 +314,7 @@ export function WineListLanding({
               onClick={() => cloneList(list)}
               disabled={isCloning}
               aria-label={`Clone ${list.name}`}
-              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-hairline bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-bridge-surface focus-ring disabled:opacity-60"
+              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-rule bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring disabled:opacity-60"
             >
               <Files className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               Clone
@@ -330,7 +330,7 @@ export function WineListLanding({
                   ? `Restore ${list.name}`
                   : `Archive ${list.name}`
               }
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-hairline bg-canvas text-ink-subtle hover:bg-bridge-surface hover:text-ink focus-ring disabled:opacity-60"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-rule bg-canvas text-grey hover:bg-wash hover:text-ink focus-ring disabled:opacity-60"
             >
               {list.archived ? (
                 <ArchiveRestore className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -345,7 +345,7 @@ export function WineListLanding({
                 onClick={() => requestDeleteList(list)}
                 disabled={isDeleting}
                 aria-label={`Permanently delete ${list.name}`}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-hairline bg-canvas text-ink-subtle hover:bg-blush-wash hover:text-accent focus-ring disabled:opacity-60"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-rule bg-canvas text-grey hover:bg-risk-wash hover:text-risk-ink focus-ring disabled:opacity-60"
               >
                 <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </button>
@@ -365,7 +365,7 @@ export function WineListLanding({
           <h1 className="font-serif text-heading-sm text-ink">Wine Lists</h1>
           {/* One line — the two-line onboarding pitch pushed the first card
               below ~45% of the mobile viewport (Kimi audit 2026-08-26). */}
-          <p className="mt-xs text-[15px] text-ink-muted">
+          <p className="mt-xs text-[15px] text-grey">
             Published menus sync to inventory automatically.
           </p>
         </div>
@@ -373,7 +373,7 @@ export function WineListLanding({
           {archivedLists.length > 0 && (
             <a
               href={showArchived ? "/lists" : "/lists?show_archived=1"}
-              className="flex h-11 items-center gap-xs rounded-pill border border-edge bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring self-start md:self-auto"
+              className="flex h-11 items-center gap-xs rounded-pill border border-edge bg-transparent px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring self-start md:self-auto"
             >
               <Archive className="h-4 w-4" strokeWidth={2} />
               {showArchived ? "Hide archived" : `Show archived (${archivedLists.length})`}
@@ -400,7 +400,7 @@ export function WineListLanding({
             type="button"
             onClick={() => setDeleteError(null)}
             aria-label="Dismiss error"
-            className="-mr-2xs flex h-6 w-6 shrink-0 items-center justify-center rounded-pill text-accent/70 hover:bg-primary/10 hover:text-accent focus-ring"
+            className="-mr-2xs flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-pill text-risk-ink/70 hover:bg-risk-wash hover:text-risk-ink focus-ring"
           >
             <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           </button>
@@ -432,7 +432,7 @@ export function WineListLanding({
               <button
                 type="button"
                 onClick={() => setShowModal(true)}
-                className="flex flex-col items-center justify-center gap-sm rounded-card border border-dashed border-beige-deep p-xl text-center text-ink-subtle transition-colors hover:border-accent hover:text-accent"
+                className="flex flex-col items-center justify-center gap-sm rounded-card border border-dashed border-rule-strong p-xl text-center text-grey transition-colors hover:border-accent hover:text-accent"
               >
                 <Plus className="h-5 w-5" strokeWidth={2} />
                 <span className="text-[14px] font-medium">Create a new list</span>
@@ -444,7 +444,7 @@ export function WineListLanding({
           {/* Archived lists (shown when toggled) */}
           {showArchived && archivedLists.length > 0 && (
             <div className="mt-xl">
-              <h2 className="mb-md font-serif text-[20px] text-ink-muted">
+              <h2 className="mb-md font-serif text-[20px] text-grey">
                 Archived
               </h2>
               <div className="grid gap-md md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
@@ -455,20 +455,20 @@ export function WineListLanding({
 
           {/* All lists are archived, none active */}
           {lists.length === 0 && !showArchived && archivedLists.length > 0 && (
-            <div className="flex flex-col items-center justify-center rounded-card border border-dashed border-beige-deep bg-bridge-surface px-lg py-3xl text-center">
+            <div className="flex flex-col items-center justify-center rounded-card border border-dashed border-rule-strong bg-wash px-lg py-3xl text-center">
               <Archive
-                className="mb-md h-10 w-10 text-ink-subtle"
+                className="mb-md h-10 w-10 text-grey"
                 strokeWidth={1.5}
               />
               <p className="text-[15px] font-medium text-ink">
                 All wine lists are archived
               </p>
-              <p className="mt-xs text-[13px] text-ink-muted">
+              <p className="mt-xs text-[13px] text-grey">
                 Restore them or create a new one.
               </p>
               <Link
                 href="/lists?show_archived=1"
-                className="mt-lg inline-flex h-11 items-center gap-sm rounded-pill border border-edge bg-transparent px-md text-[13px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+                className="mt-lg inline-flex h-11 items-center gap-sm rounded-pill border border-edge bg-transparent px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
               >
                 <Archive className="h-4 w-4" strokeWidth={2} />
                 Show archived lists
@@ -572,7 +572,7 @@ function CreateListModal({
         >
           New wine list
         </h2>
-        <p className="mt-xs text-[13px] text-ink-muted">
+        <p className="mt-xs text-[13px] text-grey">
           Default sections will be created. You can rename or add more later.
         </p>
         <input
@@ -584,14 +584,14 @@ function CreateListModal({
             if (e.key === "Enter") onCreate();
           }}
           placeholder="Spring 2026 Wine List…"
-          className="mt-lg h-[38px] w-full rounded-pill border border-hairline bg-canvas px-md text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-ring"
+          className="mt-lg h-11 w-full rounded-pill border border-edge bg-canvas px-md text-[14px] text-ink placeholder:text-grey focus-visible:border-accent focus-ring"
         />
         <textarea
           value={newDescription}
           onChange={(e) => setNewDescription(e.target.value)}
           placeholder="Description (optional)"
           rows={3}
-          className="mt-sm w-full rounded-md border border-hairline bg-canvas px-sm py-xs text-[14px] text-ink placeholder:text-ink-subtle focus-visible:border-accent focus-ring resize-none"
+          className="mt-sm w-full rounded-md border border-rule bg-canvas px-sm py-xs text-[14px] text-ink placeholder:text-grey focus-visible:border-accent focus-ring resize-none"
         />
         {error && (
           <p
@@ -605,7 +605,7 @@ function CreateListModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-[38px] rounded-pill border border-hairline px-md text-[14px] font-medium text-ink hover:bg-bridge-surface focus-ring"
+            className="h-[38px] rounded-pill border border-rule px-md text-[14px] font-medium text-ink hover:bg-wash focus-ring"
           >
             Cancel
           </button>
