@@ -3,6 +3,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BottleScanResult, Scan } from "@/lib/scanner/types";
 
+// Scanner navigates to /import when a cellar spreadsheet is dropped on the
+// scanner (a spreadsheet is not a scannable document). These tests render it
+// outside an App Router context, where the real useRouter throws.
+const mockRouterPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockRouterPush }),
+}));
+
+import { takeHandoffFile } from "@/app/(app)/import/spreadsheet-handoff";
 vi.mock("@/lib/context/restaurant", () => ({
   useRestaurant: () => ({ restaurantId: "restaurant-1" }),
 }));
@@ -860,6 +869,44 @@ describe("Scanner double-submit guard", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+  });
+});
+
+describe("Scanner — a cellar spreadsheet is the right file at the wrong door", () => {
+  it("parks a .xlsx and navigates to /import instead of scanning it", async () => {
+    mockRouterPush.mockClear();
+    takeHandoffFile(); // clear anything a previous test parked
+
+    const sheet = new File(["PK"], "cellar.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    await selectReadyFile(sheet);
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/import");
+    // The file must travel with the navigation, or the operator would arrive
+    // at an empty Import screen and have to find it again.
+    expect(takeHandoffFile()).toBe(sheet);
+  });
+
+  it("parks a .csv the same way", async () => {
+    mockRouterPush.mockClear();
+    takeHandoffFile();
+
+    const csv = new File(["producer,wine"], "cellar.csv", { type: "text/csv" });
+    await selectReadyFile(csv);
+
+    expect(mockRouterPush).toHaveBeenCalledWith("/import");
+    expect(takeHandoffFile()).toBe(csv);
+  });
+
+  it("does not navigate for an ordinary invoice image", async () => {
+    mockRouterPush.mockClear();
+    takeHandoffFile();
+
+    await selectReadyFile(new File(["invoice"], "invoice.jpg", { type: "image/jpeg" }));
+
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(takeHandoffFile()).toBeNull();
   });
 });
 

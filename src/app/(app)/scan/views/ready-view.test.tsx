@@ -100,6 +100,7 @@ describe("ReadyView upload limits and selection (M0-1)", () => {
       root.render(
         <ReadyView
           onStart={onStart}
+          onSpreadsheet={vi.fn()}
           mode="invoice"
           onModeChange={() => {}}
           recentScans={[]}
@@ -125,6 +126,81 @@ describe("ReadyView upload limits and selection (M0-1)", () => {
   });
 });
 
+function renderWithSpreadsheetHandler(
+  onStart: (files: File[]) => void,
+  onSpreadsheet: (file: File) => void,
+) {
+  return act(async () => {
+    root.render(
+      <ReadyView
+        onStart={onStart}
+        onSpreadsheet={onSpreadsheet}
+        mode="invoice"
+        onModeChange={() => {}}
+        recentScans={[]}
+        savedResult={null}
+        onDismissSaved={() => {}}
+      />,
+    );
+  });
+}
+
+async function selectFile(file: File) {
+  const input = getUploadInput();
+  Object.defineProperty(input, "files", { configurable: true, value: [file] });
+  Object.defineProperty(input, "value", { configurable: true, get: () => "", set: () => {} });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+}
+
+describe("ReadyView — spreadsheets belong to Import, not the scanner", () => {
+  it("hands a .csv to the import handler instead of starting a scan", async () => {
+    const onStart = vi.fn();
+    const onSpreadsheet = vi.fn();
+    await renderWithSpreadsheetHandler(onStart, onSpreadsheet);
+
+    const file = new File(["producer,wine"], "cellar.csv", { type: "text/csv" });
+    await selectFile(file);
+
+    expect(onSpreadsheet).toHaveBeenCalledWith(file);
+    // Starting a scan on a spreadsheet could only fail: document intelligence
+    // reads photos and PDFs.
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
+  it("hands a .xlsx to the import handler instead of starting a scan", async () => {
+    const onStart = vi.fn();
+    const onSpreadsheet = vi.fn();
+    await renderWithSpreadsheetHandler(onStart, onSpreadsheet);
+
+    const file = new File(["PK"], "cellar.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    await selectFile(file);
+
+    expect(onSpreadsheet).toHaveBeenCalledWith(file);
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
+  it("still scans an ordinary invoice image", async () => {
+    const onStart = vi.fn();
+    const onSpreadsheet = vi.fn();
+    await renderWithSpreadsheetHandler(onStart, onSpreadsheet);
+
+    const file = new File(["invoice"], "invoice.jpg", { type: "image/jpeg" });
+    await selectFile(file);
+
+    expect(onStart).toHaveBeenCalledWith([file]);
+    expect(onSpreadsheet).not.toHaveBeenCalled();
+  });
+
+  it("offers spreadsheets in the invoice file picker", async () => {
+    await renderWithSpreadsheetHandler(vi.fn(), vi.fn());
+    const accept = getUploadInput().getAttribute("accept") ?? "";
+    expect(accept).toContain(".csv");
+    expect(accept).toContain(".xlsx");
+  });
+});
+
 function getUploadInput(): HTMLInputElement {
   const inputs = [...container.querySelectorAll<HTMLInputElement>('input[type="file"]')];
   const input = inputs.at(-1);
@@ -141,6 +217,7 @@ async function renderReady(
     root.render(
       <ReadyView
         onStart={vi.fn()}
+        onSpreadsheet={vi.fn()}
         mode={mode}
         onModeChange={onModeChange}
         recentScans={[recentScan]}
