@@ -91,7 +91,11 @@ begin
   if v_file_digest is not null then
     -- Transaction-scoped: released at commit/rollback, so it cannot leak across
     -- pooled connections. Keyed by tenant + underlying file, so unrelated files
-    -- and unrelated tenants never contend. Repeated chunk calls for the SAME
+    -- and unrelated tenants almost never contend — hashtextextended yields a
+    -- 64-bit key, so a collision between two distinct (tenant, file) strings is
+    -- possible. A collision costs only serialisation latency, never a false
+    -- P0004: the under-lock query below still matches on the exact restaurant
+    -- and the exact digest. Repeated chunk calls for the SAME
     -- batch already serialise on the batch row's `for update` above and take the
     -- same key here without self-conflict (a session re-acquiring its own
     -- advisory lock is a no-op within one transaction).

@@ -43,13 +43,17 @@ async function postApply(params: Params) {
 
   const { data: batch, error: batchError } = await supabase
     .from("import_batches")
-    .select("id, content_sha256")
+    .select("id, content_sha256, status")
     .eq("id", id)
     .eq("restaurant_id", restaurantId)
     .maybeSingle();
   if (batchError) throw batchError;
   if (!batch) return Errors.notFound("Import batch");
-  const contentSha256 = (batch as { id: string; content_sha256: string | null }).content_sha256;
+  const { content_sha256: contentSha256, status: preflightStatus } = batch as {
+    id: string;
+    content_sha256: string | null;
+    status: string | null;
+  };
 
   // Pre-flight guard. This is NOT the enforcement point — migration 0128 put
   // that inside apply_import_batch_chunk itself (advisory lock + under-lock
@@ -69,10 +73,22 @@ async function postApply(params: Params) {
   // granted directly to `authenticated`, so a direct RPC call skips it
   // entirely. Being read-only, it can only ever REFUSE an apply, never destroy
   // a concurrent writer's data.
-  const conflict = await findSiblingWithAppliedRows(supabase, restaurantId, id, contentSha256);
-  if (!conflict.ok) return apiError(409, conflict.error.code, conflict.error.message);
-  if (conflict.conflictBatchId) {
-    return apiError(409, "sibling_already_applied", SIBLING_ALREADY_APPLIED_MESSAGE);
+  // A reverted batch is a no-op in the RPC: 0128 returns before it ever reaches
+  // the barrier. Running the guard here anyway made the two layers disagree —
+  // the route answered 409 sibling_already_applied for a batch the barrier
+  // would have accepted (as a no-op) — so the guard mirrors that early return.
+  if (preflightStatus !== "reverted") {
+    const conflict = await findSiblingWithAppliedRows(supabase, restaurantId, id, contentSha256);
+    // Deliberate, documented divergence: the barrier has no lookup step and so
+    // has no equivalent failure, while this pre-flight can fail to read. It
+    // fails CLOSED, because its entire reason to exist is the window before
+    // 0128 is applied in production, when refusing is the only protection
+    // available. It is therefore strictly more conservative than the barrier,
+    // never less — and it disappears with the guard once 0128 is confirmed live.
+    if (!conflict.ok) return apiError(409, conflict.error.code, conflict.error.message);
+    if (conflict.conflictBatchId) {
+      return apiError(409, "sibling_already_applied", SIBLING_ALREADY_APPLIED_MESSAGE);
+    }
   }
 
   let result;

@@ -32,7 +32,8 @@ const manifestDocument = `
 | 0113 | \`image_licenses.sql\` | licenses | — | SPEC-02 |
 | 0127 | \`match_lwin_deterministic_tiebreak.sql\` | deterministic LWIN tie-break | 0078 | — |
 | 0128 | \`apply_import_batch_chunk_sibling_lock.sql\` | atomic sibling-applied guard | 0108 | — |
-| 0129+ | reserved | future work | per decision | — |
+| 0129 | \`import_batches_digest_boundary.sql\` | digest boundary | 0128 | — |
+| 0130+ | reserved | future work | per decision | — |
 
 ## 2. Spec slices
 `;

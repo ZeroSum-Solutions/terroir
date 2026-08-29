@@ -926,15 +926,33 @@ and only then re-checks for a sibling batch with applied rows, raising `P0004`
 if one exists. Because the lock is transaction-scoped and the re-check happens
 under it, two concurrent sibling applies now serialise: the loser either waits
 and then sees the winner's committed rows, or finds them already present.
-Either way exactly one batch applies. This also covers the case the route
+Either way exactly one batch applies — for batches whose digest the barrier can
+normalise, which since `0129` is every batch that can be created. This also covers the case the route
 guard structurally could not: `apply_import_batch_chunk` is `GRANT EXECUTE`d
 directly to `authenticated`, so a client calling the RPC directly bypasses the
 route entirely — the barrier does not care, because it lives in the function.
 
-*Historic digests stay grandfathered.* A batch whose `content_sha256` is null
-(pre-0103) or unparseable takes no lock and gets no check. Its underlying file
-identity cannot be recovered, and refusing those batches would break existing
-production imports rather than protect anything.
+*Historic digests stay grandfathered — but that state can no longer be
+created.* A batch whose `content_sha256` is null (pre-0103) or unparseable takes
+no lock and gets no check: its underlying file identity cannot be recovered, and
+refusing those rows would break existing production imports rather than protect
+anything.
+
+That grandfathering was a bypass until migration `0129`. `create_import_batch`
+(0107) accepts an unvalidated `p_content_sha256 default null` and is granted to
+`authenticated`, which also holds direct insert/update on `import_batches`
+(0076) — so a caller could manufacture two batches for one file carrying two
+distinct malformed digests, or null out a valid one, and both would skip the
+lock and the check. `0129` closes that with a database boundary rather than a
+route check:
+
+* a `not valid` CHECK constraint requires every NEW digest to match one of the
+  two shapes the barrier can normalise (the `content_sha256 is not null` clause
+  is load-bearing — a CHECK whose expression is NULL *passes*); `not valid`
+  leaves every existing row untouched, so the grandfathering above survives;
+* a `before update` trigger freezes `content_sha256`, raising `P0005`. Without
+  it, rewriting one valid digest into a different valid digest would re-point a
+  batch at another file's identity and defeat the lock just as effectively.
 
 *Existing violations are not repaired by the migration.* It is a function-only
 change and never fails on data that already violates the invariant. If a

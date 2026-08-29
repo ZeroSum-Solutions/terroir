@@ -6,7 +6,8 @@ Supersedes the proposal table in `2026-08-27-camera-first-owner-decisions-brief.
 ## Provenance — read this before relying on anything below
 
 **These decisions were not made by the repo owner personally.** On 2026-08-28 the
-owner explicitly delegated all eleven gates, instructing that the adjudicating
+owner explicitly delegated all twelve gates (D-001..D-011, with D-006 split
+into D-006a and D-006b), instructing that the adjudicating
 model's answer be recorded "instead of my decision." The adjudicator was
 **GPT-5.6 Sol at high reasoning effort**, run read-only against this repository at
 `origin/main` `0e9351c`, with the brief, the PRD, the implementation spec, the

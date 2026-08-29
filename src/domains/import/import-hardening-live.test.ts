@@ -191,7 +191,11 @@ describe.skipIf(!hasLiveDb)("import hardening 0127/0128 (MANDATORY, live Postgre
       }
     });
 
-    it("does not block a DIFFERENT file, or another tenant's identical file", async () => {
+    it("does not block a DIFFERENT file in the same tenant", async () => {
+      // Named for exactly what it exercises. The cross-tenant case is covered
+      // by the lock key and the barrier predicate both including restaurant_id,
+      // but this suite has one tenant fixture and does not demonstrate it —
+      // claiming otherwise in the title was the whole of Sol's WARN 3.
       const applied = await makeBatch(fileDigest());
       await applyImportBatchChunk(userClient, applied);
 
@@ -202,41 +206,64 @@ describe.skipIf(!hasLiveDb)("import hardening 0127/0128 (MANDATORY, live Postgre
       expect(await appliedRowCount(unrelated)).toBe(1);
     });
 
-    it("grandfathers historic null and malformed digests", async () => {
-      // Pre-0103 batches have no digest, and some historic values are not
-      // parseable. Their underlying file identity cannot be recovered, so they
-      // take no lock and get no check — narrowing this would refuse existing
-      // production batches rather than protect anything.
+    it("REFUSES to create a new batch with a null or malformed digest", async () => {
+      // 0128 skips rows whose digest cannot be normalised to a file identity,
+      // on the understanding that such rows are historic pre-0103 leftovers.
+      // Sol's audit showed that was false: create_import_batch takes an
+      // unvalidated `p_content_sha256 default null` and is granted to
+      // `authenticated`, which also holds direct insert/update on the table —
+      // so a caller could MANUFACTURE two unlockable batches for one file and
+      // walk straight past the barrier. 0129 makes that state uncreatable.
       //
-      // Note the pairs below are two DISTINCT values, not one repeated: the
-      // unique index import_batches_content_sha256_idx already forbids two live
-      // batches sharing a non-null content_sha256 within a restaurant, so "the
-      // same malformed digest twice" is not a reachable state. Null is exempt
-      // from that index (Postgres treats nulls as distinct), which is exactly
-      // the historic pre-0103 shape.
-      const grandfathered: Array<[string | null, string | null]> = [
-        [null, null],
-        ["not-a-digest", "also-not-a-digest"],
-        [`overrides-v1:tooshort:alsoshort`, `overrides-v2:tooshort:alsoshort`],
+      // This test previously asserted the OPPOSITE — that two fresh malformed
+      // batches both apply — and passing was the bug.
+      const rejected: Array<string | null> = [
+        null,
+        "not-a-digest",
+        "overrides-v1:tooshort:alsoshort",
+        "ABCDEF0123456789".repeat(4), // uppercase: outside the ^[0-9a-f]{64}$ grammar
       ];
 
-      for (const [firstDigest, secondDigest] of grandfathered) {
-        const first = await makeBatch(firstDigest);
-        await applyImportBatchChunk(userClient, first);
+      for (const digest of rejected) {
+        const { error } = await admin
+          .from("import_batches")
+          .insert({
+            restaurant_id: restaurantId,
+            created_by: userId,
+            filename: "hardening.csv",
+            total_rows: 1,
+            content_sha256: digest,
+          } as never)
+          .select("id")
+          .single();
 
-        const second = await makeBatch(secondDigest);
-        const { error } = await directApply(userClient, second);
-
-        expect(error, `digest ${String(secondDigest)} should be grandfathered`).toBeNull();
-        expect(await appliedRowCount(second)).toBe(1);
+        // 23514 = check_violation. Service role is not exempt: a CHECK is a
+        // table constraint, not an RLS policy.
+        expect(error?.code, `digest ${String(digest)} was accepted`).toBe("23514");
       }
     });
 
+    it("REFUSES to repoint an existing batch at another file's digest", async () => {
+      // The constraint alone still permits rewriting one VALID digest into a
+      // DIFFERENT valid one, which defeats the lock just as effectively: point
+      // batch A at file B's identity and the two stop contending.
+      const batchId = await makeBatch(fileDigest());
+
+      const { error } = await admin
+        .from("import_batches")
+        .update({ content_sha256: fileDigest() } as never)
+        .eq("id", batchId);
+
+      expect(error?.code).toBe("P0005");
+    });
+
     it("lets repeated chunk calls drain ONE batch without self-conflict", async () => {
-      // The batch takes the same advisory lock on every call. Re-acquiring an
-      // advisory lock the transaction already holds is a no-op, and the sibling
-      // check excludes the batch itself — so draining must not deadlock or
-      // refuse itself partway through.
+      // Each chunk call is its own RPC and therefore its own TRANSACTION, so
+      // this is not one transaction re-acquiring a lock it already holds (the
+      // previous comment said that, and it was wrong): each call takes the lock,
+      // does its work, and releases it at commit. What must hold is that the
+      // sibling check excludes the batch itself, so draining never refuses
+      // itself partway through and never deadlocks against its own predecessor.
       const batchId = await makeBatch(fileDigest(), 5);
 
       let drained = 0;
@@ -269,11 +296,20 @@ describe.skipIf(!hasLiveDb)("import hardening 0127/0128 (MANDATORY, live Postgre
     });
 
     it("produces exactly one winner when two siblings apply concurrently", async () => {
-      // Both calls go out together, so they contend for the advisory lock. The
-      // loser either waits and then sees the winner's committed rows, or finds
-      // them already there — either way it must refuse. What must NEVER happen
-      // is both succeeding, which is precisely what the separate-transaction
-      // route guard permitted.
+      // Both calls go out together in independent transactions, so they CAN
+      // contend for the advisory lock. The loser either waits and then sees the
+      // winner's committed rows, or finds them already there — either way it
+      // must refuse. What must NEVER happen is both succeeding, which is
+      // precisely what the separate-transaction route guard permitted.
+      //
+      // HONEST LIMIT (Sol WARN 3): this proves the barrier as a WHOLE, not the
+      // advisory lock in isolation. Nothing here forces both transactions to sit
+      // inside the check simultaneously, so a build with the lock removed but
+      // the under-lock `exists` retained can still pass whenever one call
+      // commits before the other reaches the check. Reverting the full 0128 down
+      // removes lock AND check together, so the red-after-down result does not
+      // isolate the lock either. Isolating it needs two transactions held open
+      // across the check, which this REST-client harness cannot express.
       const digest = fileDigest();
       const batchA = await makeBatch(digest);
       const batchB = await makeBatch(`overrides-v3:${OVERRIDES_COMPONENT}:${digest}`);
