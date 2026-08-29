@@ -159,7 +159,7 @@ export function BottleResultsView({
   return (
     <section>
       <header className="mb-lg md:mb-xl">
-        <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
+        <h1 className="font-serif text-heading-sm text-ink md:text-heading">
           Wine identified
         </h1>
         <p className="mt-xs text-[14px] text-grey md:text-[15px]">
@@ -256,7 +256,7 @@ export function BottleResultsView({
             <InfoRow label="Format" value={active.format ?? ""} low={isLow("format")} />
 
             {active.notes && (
-              <div className="rounded-lg bg-bridge-surface px-md py-sm text-[13px] text-grey">
+              <div className="rounded-md bg-bridge-surface px-md py-sm text-[13px] text-grey">
                 {active.notes}
               </div>
             )}
@@ -328,7 +328,7 @@ export function BottleResultsView({
             </div>
 
             {active.notes && (
-              <div className="rounded-lg bg-bridge-surface px-md py-sm text-[13px] text-grey">
+              <div className="rounded-md bg-bridge-surface px-md py-sm text-[13px] text-grey">
                 {active.notes}
               </div>
             )}

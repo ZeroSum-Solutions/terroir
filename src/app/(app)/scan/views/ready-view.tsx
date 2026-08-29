@@ -28,7 +28,7 @@ function RecentScansList({ scans }: RecentScansListProps) {
           <Link
             key={s.id}
             href={`/scan/${s.id}`}
-            className="block min-h-11 rounded-lg card-surface p-md transition-colors hover:border-accent/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="block min-h-11 rounded-card card-surface p-md transition-colors hover:border-accent/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <div className="mb-sm flex items-center justify-between">
               <TimeAgo iso={s.parsedAt} className="tabular text-[12px] text-ink-muted" />
@@ -202,7 +202,7 @@ export function ReadyView({
       </div>
 
       <header className="mb-lg md:mb-xl">
-        <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
+        <h1 className="font-serif text-heading-sm text-ink md:text-heading">
           {isBottle ? "Scan a bottle label" : "Scan an invoice"}
         </h1>
         <p className="mt-xs text-[14px] text-grey md:text-[15px]">
@@ -213,7 +213,7 @@ export function ReadyView({
       </header>
 
       {savedResult && (
-        <div className="mb-lg flex items-center justify-between rounded-card border border-hairline bg-sage-wash px-md py-sm">
+        <div className="mb-lg flex items-center justify-between rounded-card shadow-card border border-hairline bg-sage-wash px-md py-sm">
           <div className="flex items-center gap-sm">
             <Check className="h-4 w-4 text-sage-ink" strokeWidth={2.5} aria-hidden="true" />
             <span role="status" aria-live="polite" className="text-[14px] text-ink">

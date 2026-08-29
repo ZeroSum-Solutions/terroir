@@ -198,7 +198,7 @@ function QueueError({ message, retry }: { message: string; retry: () => void }) 
 }
 
 function QueueEmpty() {
-  return <div className="rounded-card border border-hairline bg-bridge-surface px-lg py-3xl text-center"><Check className="mx-auto mb-sm h-8 w-8 text-sage-ink" aria-hidden /><p className="font-serif text-[18px] text-ink">Queue is clear</p><p className="mt-xs text-[13px] text-grey">No inventory records need reconciliation.</p></div>;
+  return <div className="rounded-card card-surface px-lg py-3xl text-center"><Check className="mx-auto mb-sm h-8 w-8 text-sage-ink" aria-hidden /><p className="font-serif text-[18px] text-ink">Queue is clear</p><p className="mt-xs text-[13px] text-grey">No inventory records need reconciliation.</p></div>;
 }
 
 function StatusBanner({ message, error }: { message: string | null; error: string | null }) {

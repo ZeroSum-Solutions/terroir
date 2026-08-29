@@ -97,7 +97,7 @@ describe("route data states", () => {
         icon={<span aria-hidden>○</span>}
         title="No wines yet"
         description="Add your first bottle to start tracking inventory."
-        action={<a href="/cellar/add">Add a bottle</a>}
+        action={<button type="button">Add a bottle</button>}
       />,
     );
 

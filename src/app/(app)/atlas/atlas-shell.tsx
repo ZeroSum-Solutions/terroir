@@ -39,11 +39,11 @@ export function AtlasShell({
 
   return (
     <section className="min-w-0 max-w-full overflow-x-hidden">
-      <div className="-mx-md -mt-lg dawn-gradient px-md pb-lg pt-lg md:-mx-lg md:-mt-xl md:px-lg md:pb-xl md:pt-xl">
+      <div className="-mx-md -mt-lg dawn-gradient px-md pb-lg pt-lg md:-mx-lg md:-mt-xl md:px-lg md:pb-2xl md:pt-xl">
         <p className="truncate text-caption font-medium uppercase text-grey">
           {restaurantName} · Atlas
         </p>
-        <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink md:text-heading">
+        <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink md:text-heading lg:max-w-[820px] lg:text-display">
           Every bottle has a <em className="italic font-normal text-accent">home</em>
         </h1>
       </div>

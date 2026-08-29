@@ -296,7 +296,7 @@ export function CellarGridView({
                   {selectedData.wines.map((w, i) => (
                     <div
                       key={`${w.wineId}-${i}`}
-                      className="rounded-lg border border-hairline px-sm py-sm"
+                      className="rounded-md border border-hairline px-sm py-sm"
                     >
                       <div className="font-serif text-[17px] font-medium leading-snug text-ink">
                         {w.producer}, {w.name}

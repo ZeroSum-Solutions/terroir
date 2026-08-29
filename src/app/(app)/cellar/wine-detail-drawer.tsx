@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition, useCallback } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { X, PackageOpen, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2, Upload, Trash2 } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
@@ -446,6 +447,16 @@ export function WineDetailDrawer({
                   {row.vintage}
                 </p>
               )}
+              {/* The drawer stays the place to ACT on a bottle (pour, 86,
+                  adjust stock); the full page is the place to read about the
+                  wine, and carries the reference data the drawer has no room
+                  for. */}
+              <Link
+                href={`/cellar/${row.wine_id}`}
+                className="mt-2xs inline-block text-[11px] uppercase tracking-[0.12em] text-accent hover:underline"
+              >
+                Full detail
+              </Link>
             </div>
             <button
               type="button"

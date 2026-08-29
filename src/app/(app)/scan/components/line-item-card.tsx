@@ -41,7 +41,7 @@ export function LineItemCard({
   onRemove,
 }: LineItemCardProps) {
   return (
-    <article className="rounded-lg card-surface p-md">
+    <article className="rounded-card card-surface p-md">
       <header className="mb-md flex items-start justify-between gap-sm">
         <div className="min-w-0 flex-1">
           <TextInput

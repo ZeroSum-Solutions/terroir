@@ -28,7 +28,7 @@ export default function ScanLoading() {
         </div>
         <div className="grid grid-cols-1 gap-sm md:grid-cols-3 md:gap-md">
           {Array.from({ length: 3 }, (_, i) => (
-            <div key={i} className="rounded-lg card-surface p-md">
+            <div key={i} className="rounded-card card-surface p-md">
               <div className="mb-sm flex items-center justify-between">
                 <Skeleton className="h-[12px] w-16" />
                 <Skeleton className="h-[12px] w-8" />

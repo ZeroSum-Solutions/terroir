@@ -1008,7 +1008,7 @@ export function ImportClient() {
       )}
 
       <header className="mb-lg">
-        <h1 className="font-serif text-[28px] font-normal leading-tight text-ink">Import cellar</h1>
+        <h1 className="font-serif text-heading-sm md:text-heading font-normal leading-tight text-ink">Import cellar</h1>
         <p className="mt-2xs text-[14px] text-grey">
           Upload a CSV or Excel (.xlsx) file of your existing inventory — choose it, drag it in, or paste it. Nothing is written to your cellar until you confirm the preview.
         </p>
@@ -2207,7 +2207,7 @@ export function BatchStep({
           </h3>
           <ul className="mt-xs space-y-sm">
             {pending.map((row) => (
-              <li key={row.id} className="rounded-lg card-surface p-sm">
+              <li key={row.id} className="rounded-card card-surface p-sm">
                 <p className="text-[14px] text-ink">
                   Row {row.row_number}: {row.raw.producer ? `${row.raw.producer} — ` : ""}{row.raw.name}
                 </p>
@@ -2376,7 +2376,7 @@ function RecentImports({
               type="button"
               onClick={() => onOpen(b.id)}
               className={cn(
-                "flex min-h-11 w-full items-center justify-between rounded-lg card-surface px-sm text-left text-[13px] text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25",
+                "flex min-h-11 w-full items-center justify-between rounded-card card-surface px-sm text-left text-[13px] text-ink transition-colors hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25",
               )}
             >
               <span className="truncate">{b.filename}</span>

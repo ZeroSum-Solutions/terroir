@@ -15,7 +15,7 @@ export function StockAdjustmentForm({
 }) {
   const form = useStockAdjustment(wineId, onComplete);
   return (
-    <section aria-label="Stock adjustment" className="rounded-lg card-surface p-sm">
+    <section aria-label="Stock adjustment" className="rounded-card card-surface p-sm">
       <h3 className="text-caption font-medium uppercase text-grey">Record comp or adjustment</h3>
       <StockAdjustmentFields reasons={reasons} form={form} />
     </section>

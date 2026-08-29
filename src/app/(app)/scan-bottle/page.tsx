@@ -717,7 +717,7 @@ export default function ScanBottlePage() {
 
       {phase === "confirmed" && wine && (
         <div className="space-y-md">
-          <div className="flex flex-col items-center gap-lg rounded-card border border-hairline bg-sage-wash/40 px-lg py-2xl text-center">
+          <div className="flex flex-col items-center gap-lg rounded-card shadow-card border border-hairline bg-sage-wash/40 px-lg py-2xl text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-sage-ink">
               <Check className="h-7 w-7 text-sage-wash" strokeWidth={2.5} />
             </div>

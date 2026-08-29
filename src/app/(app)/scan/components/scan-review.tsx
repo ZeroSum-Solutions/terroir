@@ -172,7 +172,7 @@ export function ScanReview({
           Back to scanner
         </Link>
         <div className="flex items-center justify-between gap-md">
-          <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
+          <h1 className="font-serif text-heading-sm text-ink md:text-heading">
             Review scan
           </h1>
           {items.length > 0 && (
@@ -279,7 +279,7 @@ export function ScanReview({
 
           {/* Desktop editable table */}
           <div className="hidden md:block">
-            <div className="overflow-hidden rounded-card border border-hairline">
+            <div className="overflow-hidden rounded-card card-surface">
               <table className="w-full border-collapse text-[14px]">
                 <thead>
                   <tr className="bg-bridge-surface">

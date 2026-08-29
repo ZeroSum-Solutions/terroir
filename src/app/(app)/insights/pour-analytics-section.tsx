@@ -132,8 +132,8 @@ export default function PourAnalyticsSection() {
           <h2 className="text-[15px] font-medium text-ink">Pour analytics</h2>
         </div>
         <div className="grid gap-md md:grid-cols-2">
-          <div className="h-[200px] animate-pulse rounded-lg bg-bridge-surface" />
-          <div className="h-[200px] animate-pulse rounded-lg bg-bridge-surface" />
+          <div className="h-[200px] animate-pulse rounded-md bg-bridge-surface" />
+          <div className="h-[200px] animate-pulse rounded-md bg-bridge-surface" />
         </div>
       </section>
     );
@@ -204,7 +204,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
       ) : (
         <div className="grid gap-md md:grid-cols-2">
           {/* Pour volume by section chart */}
-          <div className="min-w-0 rounded-lg border border-hairline bg-bridge-surface p-md">
+          <div className="min-w-0 rounded-md border border-hairline bg-bridge-surface p-md">
             <div className="mb-sm flex items-center gap-xs">
               <TrendingUp className="h-4 w-4 text-grey" strokeWidth={1.5} />
               <h3 className="text-[13px] font-medium text-ink">
@@ -235,7 +235,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
           </div>
 
           {/* Top wines by pour count */}
-          <div className="min-w-0 rounded-lg border border-hairline bg-bridge-surface p-md">
+          <div className="min-w-0 rounded-md border border-hairline bg-bridge-surface p-md">
             <div className="mb-sm flex items-center gap-xs">
               <Wine className="h-4 w-4 text-grey" strokeWidth={1.5} />
               <h3 className="text-[13px] font-medium text-ink">
@@ -275,7 +275,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
           </div>
 
           {/* Top wines by revenue — full width on desktop */}
-          <div className="min-w-0 rounded-lg border border-hairline bg-bridge-surface p-md md:col-span-2">
+          <div className="min-w-0 rounded-md border border-hairline bg-bridge-surface p-md md:col-span-2">
             <div className="mb-sm flex items-center gap-xs">
               <DollarSign className="h-4 w-4 text-grey" strokeWidth={1.5} />
               <h3 className="text-[13px] font-medium text-ink">

@@ -102,7 +102,7 @@ export function AutoEightysixPanel({
   return (
     <section
       aria-labelledby="auto86-heading"
-      className="mb-lg rounded-lg card-surface p-md md:p-lg"
+      className="mb-lg rounded-card card-surface p-md md:p-lg"
     >
       <div className="flex flex-col gap-sm md:flex-row md:items-start md:justify-between md:gap-lg">
         <div className="min-w-0">

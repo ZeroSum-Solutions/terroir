@@ -489,7 +489,7 @@ export default async function DashboardPage({
           <p className="text-caption font-medium uppercase text-grey">
             {restaurantName}
           </p>
-          <h1 className="mt-xs font-serif text-heading font-normal text-ink">
+          <h1 className="mt-xs font-serif text-heading-sm font-normal text-ink md:text-heading lg:text-display">
             Insights
           </h1>
         </header>
@@ -525,13 +525,13 @@ export default async function DashboardPage({
           within the padded app shell rather than edge-to-edge. Copy is
           unchanged from the prior "Dashboard" heading — no new marketing
           copy is introduced here, only the atmospheric surface. */}
-      <div className="dawn-gradient relative mb-lg overflow-hidden rounded-card px-lg py-xl md:mb-xl md:px-2xl md:py-2xl">
+      <div className="dawn-gradient relative mb-xl overflow-hidden rounded-card px-lg py-xl md:mb-3xl md:px-2xl md:py-2xl">
         <div className="flex flex-wrap items-start justify-between gap-md">
           <div>
             <p className="text-caption font-medium uppercase text-grey">
               {restaurantName}
             </p>
-            <h1 className="mt-xs font-serif text-heading font-normal text-ink">
+            <h1 className="mt-xs font-serif text-heading-sm font-normal text-ink md:text-heading lg:text-display">
               Insights
             </h1>
           </div>
@@ -597,7 +597,7 @@ export default async function DashboardPage({
 
       {/* Drink-window watch */}
       {(drinkWindowAlerts.length > 0 || canEnrich) && (
-        <section className="mb-lg md:mb-xl" aria-labelledby="dw-watch-heading">
+        <section className="mb-xl md:mb-3xl" aria-labelledby="dw-watch-heading">
           <div className="mb-md flex flex-wrap items-baseline justify-between gap-sm">
             <h2
               id="dw-watch-heading"
@@ -651,7 +651,7 @@ export default async function DashboardPage({
 
       {/* BND-147 — Past drink window */}
       {pastDrinkWindowWines.length > 0 && (
-        <section className="mb-lg md:mb-xl" aria-labelledby="past-dw-heading">
+        <section className="mb-xl md:mb-3xl" aria-labelledby="past-dw-heading">
           <div className="mb-md flex flex-wrap items-baseline justify-between gap-sm">
             <h2
               id="past-dw-heading"
@@ -746,7 +746,7 @@ export default async function DashboardPage({
 
       {/* Pricing review */}
       {pricingAlerts.length > 0 && (
-        <section className="mb-lg md:mb-xl" aria-labelledby="pricing-review-heading">
+        <section className="mb-xl md:mb-3xl" aria-labelledby="pricing-review-heading">
           <div className="mb-md flex flex-wrap items-baseline justify-between gap-sm">
             <h2
               id="pricing-review-heading"
@@ -764,7 +764,7 @@ export default async function DashboardPage({
 
       {/* Snoozed alerts */}
       {snoozedRows.length > 0 && (
-        <section className="mb-lg md:mb-xl" aria-labelledby="snoozed-heading">
+        <section className="mb-xl md:mb-3xl" aria-labelledby="snoozed-heading">
           <h2 id="snoozed-heading" className="sr-only">
             Snoozed alerts
           </h2>
@@ -773,7 +773,7 @@ export default async function DashboardPage({
       )}
 
       {/* Pour analytics (#144, #145, #146) */}
-      <div className="mb-lg md:mb-xl">
+      <div className="mb-xl md:mb-3xl">
         <PourAnalyticsSection />
       </div>
 

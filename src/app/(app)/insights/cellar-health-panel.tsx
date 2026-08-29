@@ -52,7 +52,7 @@ export function CellarHealthPanel({
         {summary.map((item) => {
           const href = `/cellar?health=${item.segment}`;
           return (
-            <div key={item.segment} className={`rounded-lg border border-hairline p-sm ${SEGMENT_BG[item.segment]}`}>
+            <div key={item.segment} className={`rounded-md border border-hairline p-sm ${SEGMENT_BG[item.segment]}`}>
               <h3 className="text-[12px] font-medium text-ink">{LABELS[item.segment]}</h3>
               <div className="mt-xs grid grid-cols-2 gap-xs">
                 <div data-metric={`cellar-health-${item.segment}-value`}>

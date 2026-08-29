@@ -327,6 +327,8 @@ export type Database = {
           producer_norm: string
           region: string | null
           updated_at: string
+          xwines_match_score: number | null
+          xwines_wine_id: number | null
         }
         Insert: {
           colour?: string | null
@@ -343,6 +345,8 @@ export type Database = {
           producer_norm?: string
           region?: string | null
           updated_at?: string
+          xwines_match_score?: number | null
+          xwines_wine_id?: number | null
         }
         Update: {
           colour?: string | null
@@ -359,6 +363,8 @@ export type Database = {
           producer_norm?: string
           region?: string | null
           updated_at?: string
+          xwines_match_score?: number | null
+          xwines_wine_id?: number | null
         }
         Relationships: [
           {
@@ -367,6 +373,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "restaurants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "canonical_wines_xwines_wine_id_fkey"
+            columns: ["xwines_wine_id"]
+            isOneToOne: false
+            referencedRelation: "xwines_catalog"
+            referencedColumns: ["wine_id"]
           },
         ]
       }
@@ -1918,6 +1931,104 @@ export type Database = {
           },
         ]
       }
+      xwines_catalog: {
+        Row: {
+          abv: number | null
+          acidity: string | null
+          body: string | null
+          country: string | null
+          country_code: string | null
+          elaborate: string | null
+          grapes: string[]
+          harmonize: string[]
+          has_non_vintage: boolean
+          name: string
+          rating_avg: number | null
+          rating_count: number
+          region_id: number | null
+          region_name: string | null
+          type: string | null
+          vintages: number[]
+          website: string | null
+          wine_id: number
+          winery_id: number | null
+          winery_name: string | null
+        }
+        Insert: {
+          abv?: number | null
+          acidity?: string | null
+          body?: string | null
+          country?: string | null
+          country_code?: string | null
+          elaborate?: string | null
+          grapes?: string[]
+          harmonize?: string[]
+          has_non_vintage?: boolean
+          name: string
+          rating_avg?: number | null
+          rating_count?: number
+          region_id?: number | null
+          region_name?: string | null
+          type?: string | null
+          vintages?: number[]
+          website?: string | null
+          wine_id: number
+          winery_id?: number | null
+          winery_name?: string | null
+        }
+        Update: {
+          abv?: number | null
+          acidity?: string | null
+          body?: string | null
+          country?: string | null
+          country_code?: string | null
+          elaborate?: string | null
+          grapes?: string[]
+          harmonize?: string[]
+          has_non_vintage?: boolean
+          name?: string
+          rating_avg?: number | null
+          rating_count?: number
+          region_id?: number | null
+          region_name?: string | null
+          type?: string | null
+          vintages?: number[]
+          website?: string | null
+          wine_id?: number
+          winery_id?: number | null
+          winery_name?: string | null
+        }
+        Relationships: []
+      }
+      xwines_vintage_ratings: {
+        Row: {
+          rating_avg: number
+          rating_count: number
+          vintage: number
+          wine_id: number
+        }
+        Insert: {
+          rating_avg: number
+          rating_count: number
+          vintage: number
+          wine_id: number
+        }
+        Update: {
+          rating_avg?: number
+          rating_count?: number
+          vintage?: number
+          wine_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "xwines_vintage_ratings_wine_id_fkey"
+            columns: ["wine_id"]
+            isOneToOne: false
+            referencedRelation: "xwines_catalog"
+            referencedColumns: ["wine_id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -2134,6 +2245,20 @@ export type Database = {
           region: string
           score: number
           varietal: string
+        }[]
+      }
+      match_xwines: {
+        Args: { p_name: string; p_producer: string; p_threshold?: number }
+        Returns: {
+          country: string
+          name: string
+          name_score: number
+          producer_score: number
+          region_name: string
+          score: number
+          type: string
+          wine_id: number
+          winery_name: string
         }[]
       }
       member_restaurant_ids: { Args: never; Returns: string[] }

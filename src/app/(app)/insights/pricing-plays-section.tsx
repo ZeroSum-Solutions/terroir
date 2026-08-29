@@ -48,7 +48,7 @@ export function PricingPlaysSection({
       {recommendations.length === 0 ? (
         /* Two quiet lines, not a full-height dashed box — an empty module
            must never outweigh populated ones (Kimi audit 2026-08-26). */
-        <p className="rounded-card border border-hairline bg-bridge-surface px-md py-sm text-[13px] text-grey">
+        <p className="rounded-card card-surface px-md py-sm text-[13px] text-grey">
           No pricing plays yet — they appear once cellar health and pour data
           are current.
         </p>

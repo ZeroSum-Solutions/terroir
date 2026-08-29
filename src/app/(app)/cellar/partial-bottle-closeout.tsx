@@ -32,7 +32,7 @@ export function PartialBottleCloseout({
   const form = useCloseout(bottle, onComplete);
 
   return (
-    <section aria-label="Partial bottle close-out" className="mt-md rounded-lg card-surface p-md">
+    <section aria-label="Partial bottle close-out" className="mt-md rounded-card card-surface p-md">
       <BottleSummary bottle={bottle} />
       <CloseoutFields reasons={reasons} form={form} />
     </section>

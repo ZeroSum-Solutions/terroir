@@ -255,7 +255,7 @@ export function EditMetadataModal({
         </Field>
 
         {/* BND-277 — drink-window override (#72) */}
-        <fieldset className="rounded-lg border border-hairline p-sm">
+        <fieldset className="rounded-md border border-hairline p-sm">
           <legend className="text-[12px] font-medium text-grey px-xs">
             Drink window (manual override)
           </legend>

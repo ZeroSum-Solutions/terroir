@@ -14,7 +14,7 @@ export function RouteDataLoading({
       role="status"
       aria-live="polite"
       aria-busy="true"
-      className="rounded-card border border-hairline bg-bridge-surface p-lg text-grey"
+      className="rounded-card card-surface p-lg text-grey"
     >
       <p className="text-[14px]">{label}</p>
       {children}
@@ -34,7 +34,7 @@ export function RouteDataError({
   return (
     <section
       role="alert"
-      className="rounded-card border border-hairline bg-blush-wash p-lg text-ink"
+      className="rounded-card shadow-card border border-hairline bg-blush-wash p-lg text-ink"
     >
       <h2 className="text-[16px] font-medium">{title}</h2>
       <p className="mt-xs text-[14px] text-grey">{description}</p>
@@ -63,7 +63,7 @@ export function RouteDataEmpty({
   return (
     <section
       aria-label={title}
-      className="rounded-card border border-hairline bg-bridge-surface p-xl text-center text-ink"
+      className="rounded-card card-surface p-xl text-center text-ink"
     >
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blush-wash text-accent">
         {icon}

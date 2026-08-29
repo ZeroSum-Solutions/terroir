@@ -318,7 +318,7 @@ export default async function PriceComparisonPage({
 
   return (
     <section>
-      <header className="mb-lg md:mb-xl">
+      <header className="mb-xl md:mb-3xl">
         <div className="flex items-start justify-between gap-md">
           <div>
             <h1 className="font-serif text-heading-sm text-ink">
@@ -336,7 +336,7 @@ export default async function PriceComparisonPage({
         <div
           role="status"
           aria-live="polite"
-          className="mb-lg rounded-card border border-hairline bg-bridge-surface px-md py-sm text-[13px] text-ink-muted"
+          className="mb-lg rounded-card card-surface px-md py-sm text-[13px] text-ink-muted"
         >
           Market benchmarks are temporarily unavailable. Distributor pricing
           remains available.
@@ -401,14 +401,14 @@ export default async function PriceComparisonPage({
 
       {/* Comparable wines — multi-distributor */}
       {comparable.length > 0 && (
-        <div className="mb-xl">
+        <div className="mb-xl md:mb-3xl">
           <div className="mb-md flex items-center justify-between">
             <h2 className="text-[15px] font-semibold text-ink">Price comparisons</h2>
             <SortControls current={{ field: sf, dir: so }} />
           </div>
 
           {/* Desktop table */}
-          <div className="hidden md:block overflow-hidden rounded-card border border-hairline">
+          <div className="hidden md:block overflow-hidden rounded-card card-surface">
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="bg-bridge-surface text-caption font-medium uppercase text-grey">

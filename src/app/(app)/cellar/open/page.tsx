@@ -56,7 +56,7 @@ export default async function OpenBottlesPage() {
           <ArrowLeft className="h-5 w-5" strokeWidth={2} />
         </Link>
         <div className="min-w-0 flex-1">
-          <h1 className="font-serif text-[28px] font-medium text-ink">Open Bottles</h1>
+          <h1 className="font-serif text-heading-sm md:text-heading font-medium text-ink">Open Bottles</h1>
           <p className="text-[12px] text-grey tabular">
             {openBottles.length} bottle{openBottles.length !== 1 ? "s" : ""} currently open
           </p>

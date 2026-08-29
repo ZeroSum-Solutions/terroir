@@ -206,7 +206,7 @@ export default function CellarConfigPage() {
           <ArrowLeft className="h-5 w-5" strokeWidth={2} aria-hidden />
         </button>
         <div className="min-w-0 flex-1 pt-1.5">
-          <h1 className="font-serif text-[22px] font-normal text-ink">Cellar Sections</h1>
+          <h1 className="font-serif text-heading-sm md:text-heading font-normal text-ink">Cellar Sections</h1>
           <p className="text-[13px] text-grey">
             Organize your cellar into named groups like Reds by Region or Cult
             Cabs.
@@ -252,7 +252,7 @@ export default function CellarConfigPage() {
           </SortableContext>
         </DndContext>
       ) : (
-        <p className="mb-lg rounded-card border border-hairline bg-bridge-surface px-md py-lg text-center text-[14px] text-grey">
+        <p className="mb-lg rounded-card card-surface px-md py-lg text-center text-[14px] text-grey">
           No sections yet. Add your first one below.
         </p>
       )}
@@ -376,7 +376,7 @@ function SortableSectionItem({
       style={style}
       className={cn(
         "flex items-center justify-between px-md py-sm",
-        isDragging && "touch-none bg-bridge-surface rounded-lg",
+        isDragging && "touch-none bg-bridge-surface rounded-md",
       )}
     >
       {editingId === section.id ? (

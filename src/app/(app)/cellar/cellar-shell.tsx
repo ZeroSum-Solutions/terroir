@@ -233,11 +233,11 @@ export function CellarShell({
   return (
     <section className="min-w-0 max-w-full overflow-x-hidden">
       {/* Dawn Hero */}
-      <div className="-mx-md -mt-lg dawn-gradient px-md pb-lg pt-lg max-[359px]:pb-xs max-[359px]:pt-xs md:-mx-lg md:-mt-xl md:px-lg md:pb-xl md:pt-xl">
+      <div className="-mx-md -mt-lg dawn-gradient px-md pb-lg pt-lg max-[359px]:pb-xs max-[359px]:pt-xs md:-mx-lg md:-mt-xl md:px-lg md:pb-2xl md:pt-xl">
         <p className="truncate text-caption font-medium uppercase text-grey">
           {restaurantName} · Cellar
         </p>
-        <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink max-[359px]:mt-2xs max-[359px]:text-[22px] md:text-heading">
+        <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink max-[359px]:mt-2xs max-[359px]:text-[22px] md:text-heading lg:max-w-[820px] lg:text-display">
           A cellar beyond the <em className="italic font-normal text-accent">ordinary</em>
         </h1>
 

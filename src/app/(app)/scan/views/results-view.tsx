@@ -62,7 +62,7 @@ function SummaryRow({ items, bottles, total, lowCount }: SummaryRowProps) {
       {stats.map((s) => (
         <div
           key={s.label}
-          className="rounded-lg card-surface p-md"
+          className="rounded-card card-surface p-md"
         >
           <div className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
             {s.label}
@@ -185,7 +185,7 @@ export function ResultsView({
           <button
             type="button"
             onClick={() => setRawTextOpen(!rawTextOpen)}
-            className="flex w-full items-center justify-between rounded-lg card-surface p-md text-[13px] font-medium text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex w-full items-center justify-between rounded-card card-surface p-md text-[13px] font-medium text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             <span className="flex items-center gap-sm">
               <FileText className="h-4 w-4 text-grey" strokeWidth={1.75} />
@@ -197,7 +197,7 @@ export function ResultsView({
             />
           </button>
           {rawTextOpen && (
-            <div className="mt-xs rounded-lg border border-hairline bg-bridge-surface p-md">
+            <div className="mt-xs rounded-md border border-hairline bg-bridge-surface p-md">
               <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-grey">
                 {rawText}
               </pre>
@@ -209,7 +209,7 @@ export function ResultsView({
       <div className={rawText ? "md:min-w-0 md:flex-1" : ""}>
       <header className="mb-lg flex flex-col gap-sm md:mb-xl md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
+          <h1 className="font-serif text-heading-sm text-ink md:text-heading">
             Invoice scan results
           </h1>
           <p className="mt-xs text-[14px] text-grey md:text-[15px]">
@@ -315,7 +315,7 @@ export function ResultsView({
       />
 
       {/* Desktop table (md+) */}
-      <div className="mt-lg hidden overflow-hidden rounded-card border border-hairline md:block">
+      <div className="mt-lg hidden overflow-hidden rounded-card card-surface md:block">
         <table className="w-full border-collapse text-[14px]">
           <thead>
             <tr className="bg-bridge-surface">

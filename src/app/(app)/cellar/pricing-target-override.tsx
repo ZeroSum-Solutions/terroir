@@ -173,7 +173,7 @@ export function PricingTargetOverride({
       </button>
 
       {open && (
-        <div className="mt-xs rounded-lg border border-hairline bg-bridge-surface p-sm">
+        <div className="mt-xs rounded-md border border-hairline bg-bridge-surface p-sm">
           <div className="grid grid-cols-2 gap-sm">
             <label className="flex flex-col gap-2xs">
               <span className="text-caption font-medium uppercase text-grey">

@@ -100,7 +100,7 @@ export function PricingTargetsPanel({
   return (
     <section
       aria-labelledby="pricing-targets-heading"
-      className="rounded-lg card-surface p-md md:p-lg"
+      className="rounded-card card-surface p-md md:p-lg"
     >
       <div className="mb-md">
         <h2

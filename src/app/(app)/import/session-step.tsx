@@ -1517,7 +1517,7 @@ export function SessionStep({
       )}
 
       {progress.totals.pending > 1 && progress.status !== "reverted" && (
-        <div className="mt-lg rounded-lg bg-bridge-surface px-md py-sm">
+        <div className="mt-lg rounded-md bg-bridge-surface px-md py-sm">
           <p className="text-[13px] text-ink">
             {progress.totals.pending.toLocaleString()} rows need a decision — most are simply
             wines outside the LWIN catalog.
@@ -1555,7 +1555,7 @@ export function SessionStep({
           </h3>
           <ul className="mt-xs space-y-sm">
             {allPendingRows.map(({ batchId, chunkIndex, row }) => (
-              <li key={row.id} className="rounded-lg card-surface p-sm">
+              <li key={row.id} className="rounded-card card-surface p-sm">
                 <p className="text-[14px] text-ink">
                   Chunk {chunkIndex ?? "—"}, row {row.row_number}: {row.raw.producer ? `${row.raw.producer} — ` : ""}{row.raw.name}
                 </p>

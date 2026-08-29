@@ -183,7 +183,7 @@ export default async function ScansPage({
         Back to scanner
       </Link>
       <div className="flex items-center justify-between gap-md">
-        <h1 className="font-serif text-[22px] text-ink md:text-[28px]">Scan history</h1>
+        <h1 className="font-serif text-heading-sm text-ink md:text-heading">Scan history</h1>
         <div className="flex items-center gap-sm">
           {rows.length > 0 && (
             <span className="rounded-pill bg-bridge-surface px-sm py-xs text-[11px] font-medium uppercase tracking-[0.1em] text-grey">
@@ -244,7 +244,7 @@ export default async function ScansPage({
       {headerBlock}
 
       {/* Desktop table */}
-      <div className="hidden overflow-hidden rounded-card border border-hairline md:block">
+      <div className="hidden overflow-hidden rounded-card card-surface md:block">
         <table className="w-full border-collapse text-[14px]">
           <thead>
             <tr className="bg-bridge-surface">
@@ -340,7 +340,7 @@ export default async function ScansPage({
           <Link
             key={s.id}
             href={`/scan/${s.id}`}
-            className="flex items-center gap-md rounded-lg card-surface p-md hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+            className="flex items-center gap-md rounded-card card-surface p-md hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
           >
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-bridge-surface">
               <FileText className="h-5 w-5 text-grey" strokeWidth={1.5} />

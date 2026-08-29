@@ -105,7 +105,7 @@ export function ScanDetailView({
           Back to scan history
         </Link>
         <div className="flex items-center justify-between gap-md">
-          <h1 className="font-serif text-[22px] text-ink md:text-[28px]">
+          <h1 className="font-serif text-heading-sm text-ink md:text-heading">
             Scan details
           </h1>
           {items.length > 0 && (
@@ -346,7 +346,7 @@ export function ScanDetailView({
               return (
               <div
                 key={it.id}
-                className={`rounded-lg border p-md ${
+                className={`rounded-card shadow-card border p-md ${
                   lowConf
                     ? "border-accent/30 bg-blush-wash/40"
                     : "border-hairline bg-surface"
@@ -458,7 +458,7 @@ export function ScanDetailView({
                 <Link
                   key={ii.id}
                   href={`/cellar?wine=${ii.wine_id}`}
-                  className="rounded-lg card-surface p-md hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+                  className="rounded-card card-surface p-md hover:bg-bridge-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
                 >
                   <div className="flex items-start gap-md">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pill bg-bridge-surface">

@@ -180,7 +180,7 @@ export function BrandKitPanel({
           {proposals.map((theme, index) => (
             <article
               key={index}
-              className="overflow-hidden rounded-card border border-hairline"
+              className="overflow-hidden rounded-card shadow-card border border-hairline"
               style={themeCssVariables(theme)}
             >
               <div className="bg-canvas p-md text-ink">
