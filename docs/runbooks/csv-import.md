@@ -914,26 +914,87 @@ itself.
 
 ## Residuals — known, accepted gaps
 
-**The cross-batch apply race is narrowed, not closed (round-10/round-11
-audit).** `POST /api/import/batches/[id]/apply` runs a read-only guard
-(`findSiblingWithAppliedRows`, `src/domains/import/batch-service.ts`)
-immediately before applying a chunk: if a sibling live batch for the same
-underlying file already has applied rows, this apply is refused. That guard
-and the apply it gates are separate awaits over separate transactions, and
-`apply_import_batch_chunk` (0108) only takes `for update` on its OWN
-batch's `import_batches` row — a sibling batch locks a different row, so
-nothing serializes two sibling applies against each other. Two clients can
-therefore both pass the guard (each sees "no sibling has applied rows yet"
-because neither has committed) and both persist inventory. The guard
-reliably catches the common SEQUENTIAL case — a resumed batch applying
-after a sibling already committed applied rows — but not two applies
-racing simultaneously. Separately, `apply_import_batch_chunk` is `GRANT
-EXECUTE`d directly to `authenticated` (0108), so the route's guard is not a
-security boundary either — any client holding a batch id can call the RPC
-without it. Fully closing this needs an atomic claim, a unique constraint,
-or a shared advisory lock taken *inside* the apply transaction — i.e. a
-migration. Migrations are locked for this change, so the residual is
-accepted rather than fixed here.
+**The cross-batch apply race is CLOSED by migration 0128 — but read the
+deployment note below before assuming production has it.** Migration
+`0128_apply_import_batch_chunk_sibling_lock.sql` moves enforcement inside
+`apply_import_batch_chunk` itself. Before applying any row it normalises the
+batch's `content_sha256` to the underlying file identity (bare 64-hex, or the
+trailing 64 hex of an `overrides-v<N>:…:…` digest — generalised over `[0-9]+`
+so a future namespace cannot silently escape), takes
+`pg_advisory_xact_lock(hashtextextended(restaurant_id || ':' || file_digest))`,
+and only then re-checks for a sibling batch with applied rows, raising `P0004`
+if one exists. Because the lock is transaction-scoped and the re-check happens
+under it, two concurrent sibling applies now serialise: the loser either waits
+and then sees the winner's committed rows, or finds them already present.
+Either way exactly one batch applies — for batches whose digest the barrier can
+normalise, which since `0129` is every batch that can be created. This also covers the case the route
+guard structurally could not: `apply_import_batch_chunk` is `GRANT EXECUTE`d
+directly to `authenticated`, so a client calling the RPC directly bypasses the
+route entirely — the barrier does not care, because it lives in the function.
+
+*Historic digests stay grandfathered — but that state can no longer be
+created.* A batch whose `content_sha256` is null (pre-0103) or unparseable takes
+no lock and gets no check: its underlying file identity cannot be recovered, and
+refusing those rows would break existing production imports rather than protect
+anything.
+
+That grandfathering was a bypass until migration `0129`. `create_import_batch`
+(0107) accepts an unvalidated `p_content_sha256 default null` and is granted to
+`authenticated`, which also holds direct insert/update on `import_batches` and
+`import_batch_rows` (0076) — so a caller could manufacture two batches for one
+file carrying two distinct malformed digests, or null out a valid one, and both
+would skip the lock and the check. `0129` closes that with two triggers:
+
+* `import_batches_guard_digest` (before insert or update). On INSERT it requires
+  a digest matching one of the two shapes the barrier can normalise, raising
+  `P0005`. On UPDATE it raises `P0005` only if the digest is *changing* —
+  rewriting one valid digest into a different valid one would re-point a batch
+  at another file's identity and defeat the lock just as effectively as a
+  malformed one.
+* `import_batch_rows_require_lockable_parent` (before insert). A grandfathered
+  parent stays unlockable forever, so attaching *new* rows to one and applying it
+  would walk past the barrier without ever inserting or updating a parent.
+  Raises `P0007`.
+
+**Why triggers and not a CHECK constraint.** A `not valid` CHECK looks like the
+obvious spelling and is wrong here. `not valid` skips only the initial
+validation scan; Postgres still enforces the constraint on every later INSERT
+**and UPDATE**, including updates to the legacy rows it is supposed to
+grandfather. Those rows are updated in normal operation — batch status
+recomputation, and `revert_import_batch`'s parent update — so the CHECK spelling
+would make every historic null-digest batch permanently unrevertable. That is
+not theoretical: it broke six existing live tests, and a fabricated legacy row
+proved both halves — under the trigger spelling a null-digest row still accepts
+a status update, while its digest stays frozen.
+
+Updates to existing `import_batch_rows` are deliberately *not* guarded: apply and
+revert both update them, and blocking that would strand historic batches in the
+same way.
+
+*Existing violations are not repaired by the migration.* It is a function-only
+change and never fails on data that already violates the invariant. If a
+restaurant already has two applied batches for one file, the next apply in that
+group is refused with `P0004` until an operator reverts all but one survivor.
+Find them by grouping non-reverted batches with applied rows on the normalised
+trailing digest.
+
+**Deployment order matters, and the route guard stays until it is satisfied.**
+Migrations reach production out-of-band — no CI step applies them — so a build
+can be live before 0128 is. The pre-flight guard (`findSiblingWithAppliedRows`,
+called from `POST /api/import/batches/[id]/apply`) is therefore deliberately
+RETAINED: on its own it is only a TOCTOU narrowing over separate transactions,
+but deleting it while production still runs 0108 would leave no protection at
+all. Once 0128 is confirmed applied in production, the guard and
+`findSiblingWithAppliedRows` can be deleted and the route left with only the
+`P0004` → 409 mapping. Verify before deleting:
+
+```sql
+select pg_get_functiondef('public.apply_import_batch_chunk(uuid, integer)'::regprocedure)
+  like '%pg_advisory_xact_lock%' as barrier_live;
+```
+
+Both layers return the identical 409 `sibling_already_applied` body (one shared
+constant in the route), so which one refused is invisible to the client.
 
 **Round-27 audit: the in-preview conflict-recovery panel is removed —
 `multiple_live_batches` and `duplicate_race_retry` are reported, not

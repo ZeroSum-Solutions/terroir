@@ -167,10 +167,14 @@ jobs:
         run: pnpm run snapshot:check
 
       - name: Types drift check
-        # Regenerate database.ts from the live schema and fail if it
-        # differs from the committed file. Skipped silently when the
-        # secret isn't configured — the check still runs for members
-        # but doesn't block fork PRs that can't access secrets.
+        # Regenerate database.ts from the live schema and fail if the
+        # SCHEMA differs from the committed file. The artifact's
+        # __InternalSupabase.PostgrestVersion reports the hosted project's
+        # PostgREST deployment, which the platform can change with no commit
+        # on our side, so it is normalized out of the comparison rather than
+        # reddening every branch at once (see scripts/check-types-drift.mjs).
+        # Skipped silently when the secret isn't configured — the check still
+        # runs for members but doesn't block fork PRs that can't access secrets.
         # Secrets are scoped to this step only (not job-level env) so
         # third-party actions in this job never see them. The skip gate
         # lives in the shell because the `secrets` context is not

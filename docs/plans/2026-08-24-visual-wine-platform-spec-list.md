@@ -14,9 +14,12 @@ only when its evals AND the global gates are green.
 
 ## 1. Migration manifest (normative — satisfies VWP-FR-005)
 
-Numbering = landing order. Current tip is `0111`. The CI uniqueness/order check ships with
-0112. No migration file in this range may be created except from this manifest; changes to
-the manifest are commits to THIS document first.
+Migration numbers define deterministic replay order, not commit landing chronology. Numbers
+`0112`–`0126` remain preallocated to the Visual Wine Platform sequence; approved,
+order-independent migrations may use the reserved band and land earlier. The CI
+uniqueness/manifest check governs every migration numbered `0112` or higher. No migration in
+that governed range may be created except from this manifest; changes to the manifest land in
+THIS document first.
 
 | # | File | Contents | Depends on | Spec |
 |---|---|---|---|---|
@@ -35,13 +38,19 @@ the manifest are commits to THIS document first.
 | 0124 | `ratings_stores.sql` | `user_wine_reviews`, `external_rating_events` (one grain per event), `rating_aggregates` (two grains, lineage, no fan-out) | 0112 | SPEC-15 |
 | 0125 | `ratings_read_model.sql` | Read model (edition-first, labeled canonical fallback, tenant-local rollups) | 0124 | SPEC-15 |
 | 0126 | `legacy_ratings_migration.sql` | 0025 `wines.rating`/`rating_source`/`review_excerpt` → `external_rating_events`; readers repointed in the same PR | 0124–0125 | SPEC-24 |
-| 0127+ | reserved | Durable import staging IF VWP-D-04 chooses it; `wine_edition_formats` when barcode authority needs it; splat asset metadata if the spike passes | per decision | — |
+| 0127 | `match_lwin_deterministic_tiebreak.sql` | `create or replace public.match_lwin(text, text, float)`: retain 0078 matching semantics and add `ORDER BY score DESC, lc.lwin_id ASC`; `match_lwin_batch` and `match_lwin_bulk` inherit the total ordering through their existing calls | 0078 | — |
+| 0128 | `apply_import_batch_chunk_sibling_lock.sql` | `create or replace public.apply_import_batch_chunk(uuid, integer)`: transaction-scoped advisory lock plus under-lock sibling-applied recheck; raise `P0004` on conflict | 0108 | — |
+| 0129 | `import_batches_digest_boundary.sql` | `not valid` CHECK requiring new `content_sha256` values to match a shape 0128 can normalise, plus a `before update` trigger freezing the column (`P0005`); closes the manufactured-malformed-digest bypass of 0128's barrier | 0128 | — |
+| 0130+ | reserved | Durable import staging IF VWP-D-04 chooses it; `wine_edition_formats` when barcode authority needs it; splat asset metadata if the spike passes | per decision | — |
 
-**Sequencing note (documented deviation from PRD phase lettering):** the manifest is DDL
-landing order — substrate DDL (0121–0123) lands before ratings DDL (0124–0126) to honor
-the synthesis's audited "containers/slots/placements = 0121+" assignment. PRD Phases C
-and D describe feature delivery and may overlap; ratings feature work starts as soon as
-0124–0125 land. Nothing in ratings blocks on the bins move (0123).
+**Sequencing note (documented deviation from PRD phase lettering):** rows 0112–0126
+preserve the VWP DDL replay sequence. The order-independent function replacements at
+0127–0129 are allocated from the reserved band and may land before that sequence; on a
+clean rebuild they replay after it. Within the VWP sequence, substrate DDL (0121–0123)
+precedes ratings DDL (0124–0126) to honor the synthesis's audited
+"containers/slots/placements = 0121+" assignment. PRD Phases C and D describe feature
+delivery and may overlap; ratings feature work starts as soon as 0124–0125 land. Nothing
+in ratings blocks on the bins move (0123).
 
 Every migration: paired down, snapshot update, generated types, RLS tests, drift check,
 plus the regression suite for whatever landed surface it touches (NFR-4 / risk R7).
@@ -75,7 +84,7 @@ doc (marked ★); the rest cite their source and go straight to tickets once gat
   Gated by: SPEC-01/02 landed; spikes 3–5 (WS/GWS coverage, X-Wines joins, DDGS soak).
   Acceptance: reference-image coverage + precision reported per VWP-FR-016.
 - **SPEC-07 Import scale-up (20k CSV)** — VWP-FR-008. Durable staging vs. `MAX_ROWS`
-  raise decided by VWP-D-04 (staging → takes an 0127+ number). Acceptance: full partner
+  raise decided by VWP-D-04 (staging → takes an 0130+ number). Acceptance: full partner
   CSV ingested with P3 chunked-apply semantics intact; import e2e green.
 
 ### Identification
@@ -120,7 +129,7 @@ doc (marked ★); the rest cite their source and go straight to tickets once gat
   texture export endpoints from P4 derivatives (scope resolver per VWP-FR-010), UV
   hints/aspect/shape-class in bottle-detail; written FOR Codex's parallel renderer work.
 - **SPEC-14 Splat overlay** — desktop-only, ships only on spike 2 pass (VWP-D-06);
-  Polycam→GaussianSplats3D; asset metadata migration only if approved (0127+).
+  Polycam→GaussianSplats3D; asset metadata migration only if approved (0130+).
 
 ### Ratings
 

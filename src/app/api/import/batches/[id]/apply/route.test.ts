@@ -164,6 +164,50 @@ describe("POST /api/import/batches/[id]/apply", () => {
       );
     });
 
+    it("maps the database barrier's P0004 to the same 409 the pre-flight guard returns", async () => {
+      // 0128's barrier is the authoritative check — it runs under an advisory
+      // lock inside the apply transaction, so it catches the concurrent and
+      // direct-RPC cases the pre-flight guard structurally cannot. Here the
+      // guard sees nothing and the RPC raises: the client must still get one
+      // consistent refusal, not a 500.
+      allow(makeSupabase({ id: BATCH_ID, content_sha256: "d".repeat(64) }));
+      mockFindSiblingWithAppliedRows.mockResolvedValue({ ok: true, conflictBatchId: null });
+      mockApplyImportBatchChunk.mockRejectedValue(
+        Object.assign(new Error("another import batch for this underlying file already has applied rows"), {
+          code: "P0004",
+        }),
+      );
+
+      const response = await POST(request(), { params: params() });
+      const body = await response.json();
+
+      expect(response.status).toBe(409);
+      expect(body.error.code).toBe("sibling_already_applied");
+    });
+
+    it("returns the identical message whichever layer refuses, so the two cannot drift", async () => {
+      allow(makeSupabase({ id: BATCH_ID, content_sha256: "e".repeat(64) }));
+      mockFindSiblingWithAppliedRows.mockResolvedValue({ ok: true, conflictBatchId: "sibling-batch-id" });
+      const guardBody = await (await POST(request(), { params: params() })).json();
+
+      allow(makeSupabase({ id: BATCH_ID, content_sha256: "e".repeat(64) }));
+      mockFindSiblingWithAppliedRows.mockResolvedValue({ ok: true, conflictBatchId: null });
+      mockApplyImportBatchChunk.mockRejectedValue(Object.assign(new Error("barrier"), { code: "P0004" }));
+      const barrierBody = await (await POST(request(), { params: params() })).json();
+
+      expect(barrierBody.error.message).toBe(guardBody.error.message);
+    });
+
+    it("rethrows a non-P0004 RPC failure instead of reporting a sibling conflict", async () => {
+      allow(makeSupabase({ id: BATCH_ID, content_sha256: "f".repeat(64) }));
+      mockFindSiblingWithAppliedRows.mockResolvedValue({ ok: true, conflictBatchId: null });
+      mockApplyImportBatchChunk.mockRejectedValue(Object.assign(new Error("boom"), { code: "P0002" }));
+
+      const response = await POST(request(), { params: params() });
+
+      expect(response.status).not.toBe(409);
+    });
+
     it("propagates a guard lookup failure as a 409 without ever calling applyImportBatchChunk", async () => {
       allow(makeSupabase({ id: BATCH_ID, content_sha256: "c".repeat(64) }));
       mockFindSiblingWithAppliedRows.mockResolvedValue({
