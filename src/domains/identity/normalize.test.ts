@@ -32,11 +32,16 @@ import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeProducerOrCuvee, normalizeVintage, isNvVintageText } from "./normalize";
+import { assertLiveDbTargetIsLocal } from "@/test/live-db-target";
 
 // Round-6 SQL-parity block below; see its own comment for why it exists.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const hasLiveDb = Boolean(supabaseUrl && serviceRoleKey);
+
+// Refuse to point the destructive, RLS-bypassing live suites at anything
+// but a throwaway local stack. See src/test/live-db-target.ts.
+if (hasLiveDb) assertLiveDbTargetIsLocal(supabaseUrl!);
 // Fail LOUD, never skip, when the live stack should be there (integration
 // critic finding): a silent describe.skipIf here once let a full run
 // report green with every MANDATORY live-DB suite unexecuted. CI always
