@@ -7,3 +7,27 @@ allowBuilds:
   unrs-resolver: true
 onlyBuiltDependencies:
   - puppeteer
+
+# Security overrides — pinned to the lowest version that clears every advisory
+# `pnpm audit` reports for that package, staying inside the existing major so no
+# consumer's peer range breaks. Every entry is TRANSITIVE: none is a direct
+# dependency, so none can be fixed by bumping our own deps instead.
+#
+# Re-check with `pnpm audit` after any dependency bump, and drop an entry once
+# its parent has moved past the advisory on its own.
+#
+# NOT listed, deliberately: extract-zip. Its advisory names >=2.0.2 as the fix
+# and 2.0.1 is the newest version ever published, so there is nothing to pin to.
+# It reaches us only through puppeteer's browser downloader.
+overrides:
+  "@babel/core": "^7.29.1"
+  "basic-ftp": "^5.3.1"
+  "brace-expansion@1": "^1.1.18"
+  "brace-expansion@5": "^5.0.9"
+  "fast-uri": "^3.1.5"
+  "ip-address": "^10.3.1"
+  "nanoid@3": "^3.3.18"
+  "postcss": "^8.5.23"
+  "sharp": "^0.35.0"
+  "vite": "^8.0.16"
+  "ws": "^8.21.0"
