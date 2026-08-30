@@ -88,10 +88,19 @@ only.
   New routes use zod; routes you touch get migrated.
 - **`src/adapters/*` has no tests** and is mocked at every call site. A change there
   is invisible to the suite. Add a test with your change.
-- **There are two identity systems.** `wines` (per-tenant) and the newer
-  `canonical_wines`/`wine_variants`/`wine_aliases` spine, whose RPC
-  `resolve_wine_variants_bulk` has zero production callers. Do not assume either is
-  canonical — check `docs/plans/` for the current decision.
+- **There are two identity systems.** `wines` (per-tenant) and the
+  `canonical_wines`/`wine_variants`/`wine_aliases` spine. As of migration `0135`
+  the spine is live on the manual/LWIN creation path:
+  `find_or_create_wines_batch` resolves identity in one bulk
+  `resolve_wine_variants_bulk` call, `wines.wine_variant_id` is written, and
+  `canonical_wine_id` follows from 0098's trigger. `backfill_wine_identity(uuid)`
+  is the idempotent repair function; the local seeder calls it because it writes
+  `wines` directly.
+  **The CSV import path (`apply_import_batch_chunk`) is still unresolved by
+  design** — the P2 plan (§9/§12) puts that call in P3's TypeScript caller, once
+  per batch of unique variants, before the per-row loop. The import dedup key is
+  also still the fallback four-tuple in `src/domains/import/dedup-key.ts`.
+  Both are open work; see `docs/plans/2026-08-29-modular-architecture-refactor.md`.
 - **A known RLS gap exists** on `stock_adjustments` and `bottle_closeouts` INSERT
   policies (`wine_id` ownership is unverified; FK cascades bypass RLS). Mitigated in
   application code with a documented TOCTOU race. See

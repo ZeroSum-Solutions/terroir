@@ -184,16 +184,60 @@ database-level safety net.
 access goes through `packages/db`, where the filter can be structurally required
 rather than remembered.
 
-### 3.3 [DECISION NEEDED] The identity spine is built and wired to nothing
+### 3.3 [DECIDED 2026-08-29 — finish it. Partly done] The identity spine
 
-`canonical_wines` / `wine_variants` / `wine_aliases` were added in migrations
-0097–0101. The RPC `resolve_wine_variants_bulk` has **zero production callers** —
-only tests. `wines.canonical_wine_id` was added nullable in 0098 and never made
-`NOT NULL`. Two identity systems coexist by design, backfill in progress, stalled.
+**Original finding.** `canonical_wines` / `wine_variants` / `wine_aliases` were added
+in migrations 0097–0101. The RPC `resolve_wine_variants_bulk` had **zero production
+callers** — only tests. Measured on a freshly seeded local stack: **250 wines, 0 with
+`wine_variant_id`, 0 with `canonical_wine_id`, and all three spine tables empty.** Not
+partly wired — it held no rows at all. `src/lib/wine-intelligence/xwines-profile.ts`
+prefers the `canonical_wine_id` link (0132) and silently degrades without it, so the
+X-Wines join that 0131–0134 exist to serve never ran in its intended mode.
 
-**You cannot draw a boundary around "identity" until this is decided.** Either finish
-the migration or explicitly park the spine. This is an owner decision, not an
-engineering one — see §7.
+**Owner decision: finish the migration.**
+
+**Landed — migration `0135_identity_resolution_on_write.sql`:**
+
+- `find_or_create_wines_batch` (the manual / create-from-LWIN path) now resolves
+  identity in **one bulk call after its loop**, honouring §9's "once per batch of
+  unique variants" contract. `canonical_wine_id` follows from 0098's trigger.
+- Resolution failure raises a `WARNING` and leaves `wine_variant_id` null rather than
+  failing the wine write. A lost write is unrecoverable; an unresolved row is
+  repairable, and the null is itself the queryable signal.
+- `backfill_wine_identity(uuid)` — idempotent, pages by id, `SECURITY INVOKER`,
+  granted to `service_role` only.
+- `resolve_wine_variants_bulk` gains a `service_role` grant. 0099 granted it to
+  `authenticated` only, so no service-role caller could execute it at all — found by
+  running the real reset-and-seed path, not by reading. Deliberately **not** fixed by
+  making the backfill `SECURITY DEFINER`: 0099's tenant boundary *is* invoker-mode
+  RLS, and definer rights would erase it.
+- `scripts/seed-local-supabase.mjs` calls the backfill. It upserts `wines` directly,
+  so without this every CI run and every local reset reproduced the original
+  null-identity state.
+- Coverage: `src/domains/identity/identity-on-write.test.ts`, a live-DB suite whose
+  central case is the point of the whole spine — two tenants holding the same wine get
+  **separate `wine_variant_id`s under one shared `canonical_wine_id`**.
+
+Verified from a clean `supabase db reset` + seed: **250/250 wines resolved**, 250
+canonical rows, 250 variants. Full suite 2779 passing with the live DB attached.
+
+**Still open — deliberately, with reasons:**
+
+1. **`apply_import_batch_chunk` does not resolve.** CSV import is the majority of wine
+   creation by volume. The P2 plan (§9, §12) places that call in P3's *TypeScript*
+   caller, once per batch of unique variants, before the per-row loop — hooking it
+   into the per-row loop would break the C10 performance contract on a path handling
+   4,000–8,000 rows per session.
+2. **The import dedup key is still the fallback four-tuple** in
+   `src/domains/import/dedup-key.ts`. Switching it to `wine_variant_id` changes *which
+   rows collapse into one wine* — a behavioural change needing its own evidence, not a
+   side effect of populating identity.
+3. **`canonical_wines.xwines_wine_id` is 0/250 populated.** The spine now feeds
+   `match_xwines`, but nothing persists the match. Separate gap, newly visible.
+
+**Sequencing conflict to note:** item 1 lands in `src/domains/import/batch-service.ts`
+— the 3,150-line file Phase 2 decomposes. These two must not run concurrently on the
+same file. See §7.4.
 
 ### 3.4 [HIGH for refactor safety] `src/adapters/*` has zero tests
 
@@ -425,12 +469,51 @@ packages cannot be drawn before the boundaries exist. Putting extraction last me
 
 ---
 
-## 7. Open decisions for the owner
+## 7. Decisions — all four resolved 2026-08-29
 
-1. **Identity spine (§3.3)** — finish the `canonical_wines` migration, or park it? Blocks the identity boundary.
-2. **`docs/screenshots/` (25MB)** — keep committed as verification evidence, accept the repo weight, and stop adding; or move to release artifacts and rewrite history? History rewrite on a public repo is a separate, deliberate decision.
-3. **Full e2e in CI (0.3)** — PR-blocking, or nightly with alerting? Runtime vs. feedback latency.
-4. **Phase 2 parallelism** — the ten monolith decompositions are independent and could run concurrently across engineers, at the cost of a noisy `max-lines` baseline file. Serialize the baseline updates, or accept merge conflicts on one JSON file?
+### 7.1 Identity spine — **FINISH IT.** Partly landed.
+
+Migration `0135` is in. See §3.3 for what shipped, what is still open, and why.
+
+### 7.2 `docs/screenshots/` (25MB) — **KEEP COMMITTED.**
+
+They stay in the tree as verification evidence. No history rewrite, which also means
+no force-push against a public repo and no broken clones for anyone who has already
+forked. The cost is accepted knowingly: ~two-thirds of a 37MB repo, paid once per
+clone.
+
+Consequence to hold, not a re-litigation of the decision: this makes the git object
+store monotonic. If the directory keeps growing at its current rate the clone cost
+grows with it and cannot later be undone without the history rewrite that was just
+declined. Worth a periodic size check; not worth acting on now.
+
+### 7.3 Full e2e — PR-blocking or nightly?
+
+Deferred to an explicit GPT-5.6 (Codex) consult, at the owner's request, framed on
+feedback latency at PR time versus post-merge detection latency, the required check's
+wall-clock budget, and flake tolerance on a branch protected with `enforce_admins`.
+**Result pending; retrieve with `/codex:status task-mtf4bfw8-rchb7w`.** Until it
+lands, the shipped configuration stands: `ci.yml` keeps the fast two-spec subset as
+the single required check, and `e2e-full.yml` runs all nineteen nightly and on pushes
+to `main`, opening a labelled issue on failure.
+
+### 7.4 Phase 2 parallelism — **RUN CONCURRENTLY WHERE PROVABLY SAFE.**
+
+Owner direction: parallelize whatever can be parallelized safely. Same Codex consult
+(§7.3) is producing the conflict matrix. What is already established here:
+
+- **`scripts/file-size-baseline.json` is the one guaranteed collision.** Every
+  decomposition must update it, it is a single JSON object keyed by path, and ten
+  concurrent branches all rewrite it. This is mechanical, not semantic — the merge
+  resolution is always "regenerate", never "pick a side" — so it wants a regeneration
+  step rather than manual conflict resolution.
+- **`src/domains/import/batch-service.ts` is contended by more than Phase 2.**
+  §3.3's remaining item 1 (wiring `resolve_wine_variants_bulk` into the import path)
+  lands in the same 3,150-line file Phase 2 decomposes. These two must be serialized
+  against each other regardless of what else runs in parallel.
+- **Generated artifacts are a second class of collision** — `schema.snapshot.sql`,
+  `src/types/database.ts`, the API-contract and product-conformance outputs. Any
+  branch that touches a migration invalidates them for every other branch in flight.
 
 ---
 

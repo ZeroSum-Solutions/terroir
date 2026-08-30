@@ -791,6 +791,24 @@ async function seed() {
   await upsertRows(supabase, "availability_events", rows.availabilityEvents);
   await upsertRows(supabase, "invitations", rows.invitations);
 
+  // The wines above are upserted straight into the table, not created
+  // through find_or_create_wines_batch, so nothing resolves their identity
+  // on the way in. Without this call a freshly seeded stack reproduces the
+  // exact state 0135 exists to fix — 250 wines, zero wine_variant_id, zero
+  // canonical_wine_id, and an empty canonical_wines — which is what every
+  // CI run and every local reset would then be testing against.
+  const { data: resolved, error: backfillError } = await supabase.rpc(
+    "backfill_wine_identity",
+    { p_restaurant_id: RESTAURANT_ID },
+  );
+  if (backfillError) {
+    throw new Error(
+      `wine identity backfill failed: ${backfillError.message}. The seed is ` +
+        "not complete without it — see supabase/migrations/0135.",
+    );
+  }
+  console.log(`Resolved wine identity for ${resolved ?? 0} wine(s).`);
+
   console.log("Seed complete.");
   console.log(`Set DEV_BYPASS_EMAIL=${USERS[0].email} for owner login.`);
 }
