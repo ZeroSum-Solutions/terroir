@@ -4,6 +4,7 @@ import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import { findDuplicateSuspects } from "@/lib/lineage/rollups";
 import { CellarShell } from "./cellar-shell";
 import { buildCellarBinData } from "./bin-data";
+import { normalizeSections, type CellarSection } from "./sections";
 import type { CellarWineRow } from "./types";
 import { theoreticalRemaining } from "@/lib/partial-bottles/math";
 import { isCellarHealthSegment } from "@/lib/cellar-health/classify";
@@ -430,11 +431,13 @@ export default async function CellarPage() {
     gridData[bin].totalBottles += item.quantity ?? 0;
   }
 
-  // BND-063/064 — extract cellar sections from config
-  const cellarSections: Array<{ id: string; name: string }> = (() => {
+  // BND-063/064 — extract cellar sections from config. The stored value is
+  // either {id, name} objects or plain name strings, so it goes through the
+  // same normalizer the config editor reads with (see ./sections).
+  const cellarSections: CellarSection[] = (() => {
     const labels = configRow?.labels as Record<string, unknown> | null;
     if (labels?.sections && Array.isArray(labels.sections)) {
-      return labels.sections as Array<{ id: string; name: string }>;
+      return normalizeSections(labels.sections);
     }
     return [];
   })();
