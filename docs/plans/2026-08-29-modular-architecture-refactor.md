@@ -327,10 +327,34 @@ other wine in the batch silently lost its identity. Fixed in `0135` itself rathe
 a `0137`, because a follow-up cannot make `0135` replayable and a restore drill replays
 `0001..N` in order.
 
-**The identity spine is inert in production, for a reason outside this plan.** 108 of
-1385 wines resolve. 1277 carry an empty `producer` with the producer name embedded in
-`name`. No migration fixes that; splitting producer out of `name` is separate work and
-should be scoped as such.
+**The identity spine was inert in production — and that turned out to be fixable.**
+108 of 1385 wines resolved, because 1277 carried an empty `producer` with the producer
+name embedded in `name`. The import's own source rows carry `"producer": ""`, so
+nothing was recoverable from the import itself.
+
+`0137` recovers it from `lwin_catalog` instead, by longest-word-prefix match of `name`
+against its 211,498 reference producers. Prefix, not trigram: trigram scored
+`Agrapart Experience` against `ABK6, L'Experience, Cognac` at 0.364 and would have
+written ABK6. A wrong producer is worse than a missing one, because it is silently
+believable.
+
+| | before | after |
+|---|---|---|
+| wines with a producer | 108 | 1064 |
+| resolved identity | 108 / 1385 | **1064 / 1385** |
+| canonical_wines | 106 | 663 |
+| wine_variants | 108 | 1063 |
+
+**321 wines are deliberately left unrepaired** — their producer is absent from LWIN or
+spelled differently (`Bérêche & Fils` vs the catalog's `Bereche et Fils`), and a
+stoplist blocks the generic catalog entries `Chateau`/`Maison`/`Clos`/`Tenuta` that
+would otherwise swallow `Château Sainte Anne`. Every write is recorded in
+`producer_backfill_audit`, so the repair is an exact reversal rather than a one-way
+edit to user-visible records.
+
+**What is still open:** the import path accepts a blank producer without warning. That
+is the actual defect — `0137` repairs its output, not its cause — and it is separate
+work.
 
 ### What this says about the plan's method
 

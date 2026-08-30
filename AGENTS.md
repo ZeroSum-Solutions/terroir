@@ -104,13 +104,19 @@ only.
   `canonical_wine_id` follows from 0098's trigger. `backfill_wine_identity(uuid)`
   is the idempotent repair function; the local seeder calls it because it writes
   `wines` directly.
-  **In production the spine is installed but nearly empty: 108 of 1385 wines
-  resolve (2026-08-29).** That is a data shape problem, not a code one — 1277 of
-  those wines carry an *empty* `producer`, with the producer name embedded in
-  `name` ("Benjamin Leroux Vosne-Romanée"). Nothing can resolve an identity
-  without a producer, so they are filtered out and keep a null
-  `wine_variant_id`. Splitting producer out of `name` is the unlock; until then
-  the spine only grows on newly created wines that supply one.
+  **In production the spine resolves 1064 of 1385 wines (2026-08-29, after
+  `0137`).** It was 108 before. A CSV import had created 1277 wines with an
+  *empty* `producer` and the producer name embedded in `name` ("Benjamin Leroux
+  Vosne-Romanée"); identity resolution is producer-first, so none of them could
+  resolve. `0137` recovered 956 producers by longest-word-prefix match against
+  `lwin_catalog`, and every write is reversible from
+  `public.producer_backfill_audit`. The remaining **321 keep an empty
+  producer** — their producer is not in LWIN or is spelled differently
+  ("Bérêche & Fils" vs the catalog's "Bereche et Fils") — and an unrepaired row
+  is the correct outcome there, because a wrong producer is worse than a
+  missing one.
+  **The import path still accepts a blank producer without warning**, which is
+  how this happened; nothing yet prevents a repeat.
   **The CSV import path (`apply_import_batch_chunk`) is still unresolved by
   design** — the P2 plan (§9/§12) puts that call in P3's TypeScript caller, once
   per batch of unique variants, before the per-row loop. The import dedup key is
