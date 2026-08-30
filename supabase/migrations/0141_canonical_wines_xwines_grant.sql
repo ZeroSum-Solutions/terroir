@@ -1,0 +1,46 @@
+-- 0141_canonical_wines_xwines_grant.sql
+--
+-- Let `authenticated` read the two columns 0132 added.
+--
+-- canonical_wines does not carry a table-wide SELECT grant. 0097 deliberately
+-- made it COLUMN-level, enumerating twelve columns so that
+-- created_by_restaurant_id and created_by_user_id — audit provenance about
+-- WHICH tenant first wrote a shared, platform-wide row — stay unreadable
+-- across tenants:
+--
+--   grant select (
+--     id, producer, cuvee, producer_norm, cuvee_norm, colour, region, country,
+--     lwin7, identity_status, created_at, updated_at
+--   ) on table public.canonical_wines to authenticated;
+--
+-- A column-level grant is a closed list, so every later column defaults to
+-- unreadable. 0132 then added xwines_wine_id and xwines_match_score, granted
+-- execute on match_xwines(), and stopped — the columns were never added to
+-- the list.
+--
+-- The effect is not a degraded feature, it is a dead code path.
+-- resolveXWinesProfile (src/lib/wine-intelligence/xwines-profile.ts:299)
+-- opens by reading the trusted link:
+--
+--   .from("canonical_wines").select("xwines_wine_id").eq("id", canonicalWineId)
+--
+-- For any authenticated caller that returns 42501 "permission denied for
+-- table canonical_wines", and the function's own error branch — correctly —
+-- returns { status: "unavailable" } rather than falling through to the
+-- trigram matcher, because falling through would answer worse a question the
+-- link had already answered. So the wine detail page has been showing no
+-- taste profile, no food pairings, no community rating and no vintage
+-- comparison for EVERY wine that has a canonical row, in every environment,
+-- since 0132 shipped. The service-role seeding paths never saw it: they
+-- bypass grants entirely.
+--
+-- 0097_identity_spine_grants.sql asserts this grant only through
+-- `producer_norm`, so it kept passing over the gap. The assertion is widened
+-- alongside this migration.
+--
+-- Read-only, and no wider than 0132 already intended: match_xwines has been
+-- executable by authenticated since 0132, and it returns wine_id for the
+-- whole corpus. Both created_by_* columns remain unreadable.
+
+grant select (xwines_wine_id, xwines_match_score)
+  on table public.canonical_wines to authenticated;
