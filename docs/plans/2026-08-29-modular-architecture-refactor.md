@@ -474,6 +474,74 @@ original ten).
 **Gate:** `max-lines` baseline strictly shrinks each PR; typography baseline strictly
 shrinks; full CI green; no behavior change (existing suites pass unmodified).
 
+#### Phase 2 — RESULT (2026-08-29). All eight landed.
+
+Run as eight concurrent agents in isolated worktrees, then admitted one at a time
+through a serialized merge train per §7.4.
+
+| # | Target | Before → after |
+|---|---|---|
+| 3 | `import/import-client.tsx` | 2,391 → **578** |
+| 3 | `import/session-step.tsx` | 1,651 → **398** — out of baseline |
+| 7 | `scan-bottle/page.tsx` | 814 → **348** — out of baseline |
+| 8 | `price-comparison/page.tsx` | 876 → **316** — out of baseline |
+| 5 | `team/team-actions.tsx` | 746 → **340** — out of baseline |
+| 5 | `lists/wine-list-landing.tsx` | 625 → **355** — out of baseline |
+| 1 | `cellar/wine-detail-drawer.tsx` | 1,221 → 638 |
+| 2 | `cellar/cellar-list.tsx` | 1,111 → 612 |
+| 6 | `insights/page.tsx` | 1,202 → 947 |
+| 4 | `lists/[id]/wine-list-editor.tsx` | 1,251 → 915 |
+| 7 | `scan/scanner.tsx` | 914 → 807 |
+
+Baselined files **62 → 57**; total over-budget lines **49,156 → 40,879**. Typography
+violations **1,248 → 1,190** (price-comparison's 66 → 8). Suite **2,779 → 3,003**
+passing, every pre-existing protected test unmodified.
+
+**Two of this plan's own findings did not survive contact with the code.** Both were
+written from directory-level inspection rather than measurement, and both are
+corrected in place above (§3.4) and here:
+
+- **§3.4's adapter claim** — see the corrected section. The uncovered surface was
+  ~98 lines, not four adapters' worth of parsing and error mapping.
+- **Item 7's "two independently-reimplemented `loadScan`/`saveScan` helpers"** — there
+  is only one. `scan-bottle/page.tsx` never touches `localStorage` at all; its
+  batch-scanning session list lives in React state and is cleared on unmount. The
+  agent searched, found no duplicate, and correctly declined to invent a second
+  implementation in order to "unify" it. The single real one was extracted to
+  `src/lib/scanner/scan-storage.ts` with a full suite.
+
+**What the merge train caught that no single branch could.** Both are the argument for
+serializing the landing, recorded because the next wave will face the same thing:
+
+1. **A stale ratchet baseline in the 0136 branch.** Teaching the cascade-containment
+   test about 0136 grew a baselined file 429 → 445 without re-recording it, and
+   `check:file-size` is a CI gate. The first admission refused, locally, instead of
+   the branch going red on GitHub a second time.
+2. **A real React violation invisible to every branch individually.** Extracting the
+   hero-image actions moved a `useRef` behind the hook's return object, so the JSX
+   read `heroImage.fileInputRef` — a ref accessed through a member expression during
+   render, which `react-hooks/refs` rejects. Every branch passed `tsc` and its own
+   scoped tests; only `pnpm lint` on the combined tree saw it.
+
+The second one also exposed a gap in how the wave was briefed: the agents were told to
+run `tsc` and scoped tests, and only some were told to run `pnpm lint`. **Any future
+wave must require the full lint pass per branch**, not just per integration — catching
+it at the train is late enough to be annoying and early enough to be cheap, but
+catching it per branch is free.
+
+**Deferred to Phase 3 by the wave, deliberately:**
+
+- `batch-service.ts` remains 3,149 lines, untouched by design.
+- `RowOverrides` is now defined twice inside `src/domains/import/` — the server shape
+  in `preview-service.ts`, the client shape in `review-types.ts`. Pre-existing
+  ambiguity (`session-step.conflict.test.tsx` already imports the server one and uses
+  it as the client type); the move put them in one directory and made it visible.
+  Renaming an exported symbol was out of scope for a mechanical phase.
+- `MiniStat` and `SummaryStat` are byte-identical. The duplication existed to avoid a
+  runtime import cycle that no longer exists; deduping is a design change, not a move.
+- A dead branch in `formatRoughDuration`'s singular-minute case, pinned with a test
+  that documents its unreachability rather than silently deleted.
+
 ### Phase 3 — Boundary consolidation (behavior-preserving, needs tests first)
 
 Now the risky work, on a net that Phase 0 widened.
