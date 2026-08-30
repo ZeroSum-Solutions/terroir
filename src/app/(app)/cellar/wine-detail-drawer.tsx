@@ -4,7 +4,7 @@ import { useRef, useState, useTransition, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { X, PackageOpen, PowerOff, Edit3, ChevronDown, Sparkles, Loader2, Undo2, Upload, Trash2 } from "lucide-react";
+import { X, PowerOff, Edit3, Loader2, Upload, Trash2 } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
@@ -12,31 +12,23 @@ import { cn } from "@/lib/utils";
 import { NoteModal } from "./note-modal";
 import { EditMetadataModal } from "./edit-metadata-modal";
 import { PourPickerModal } from "./pour-picker-modal";
-import { PricingTargetOverride } from "./pricing-target-override";
-import { DrinkWindowTimeline } from "@/components/drink-window-timeline";
-import { PriceBand } from "@/components/price-band";
-import {
-  formatStatusLabel,
-  getDrinkWindowStatus,
-  getYearsUntilWindowClose,
-  getYearsUntilWindowOpen,
-} from "@/lib/drink-window/status";
-import { StatusChip, type WaxTone } from "@/components/status-chip";
-import {
-  formatPricingStatusLabel,
-  getBottleStatus,
-  getGlassStatus,
-  getMarkupRatio,
-  getPourCostPct,
-  isRetailStale,
-  resolveMarkupTarget,
-  resolvePourCostTarget,
-} from "@/lib/pricing/status";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 import type { PreservationMethod } from "@/lib/partial-bottles/math";
 import { PartialBottleCloseout } from "./partial-bottle-closeout";
 import { StockAdjustmentForm } from "./stock-adjustment-form";
+import { Stat } from "./stat";
+import { PricingSection } from "./pricing-section";
+import { DecantTimeSection } from "./decant-time-section";
+import { ServingTempSection } from "./serving-temp-section";
+import { DrinkWindowSection } from "./drink-window-section";
+import { MergeDuplicatesPanel } from "./merge-duplicates-panel";
+import { DeleteWinePanel } from "./delete-wine-panel";
+import { EnrichControl } from "./enrich-control";
+import { PourActionBar } from "./pour-action-bar";
+import { useHeroImageActions } from "./use-hero-image-actions";
+import { useEightysixToggle } from "./use-eightysix-toggle";
+import { useAsyncAction } from "./use-async-action";
 
 export function WineDetailDrawer({
   row,
@@ -58,15 +50,18 @@ export function WineDetailDrawer({
   const headingId = "wine-detail-heading";
   const [, startTransition] = useTransition();
   const toast = useToast();
+  // Shared by the new sibling files below (merge / delete / enrich / hero
+  // image / 86-toggle) so they don't each need their own useRouter +
+  // useTransition wiring for a single router.refresh() call.
+  const refresh = useCallback(
+    () => startTransition(() => router.refresh()),
+    [startTransition, router],
+  );
 
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [enriching, setEnriching] = useState(false);
-  const [enrichMsg, setEnrichMsg] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [dismissed, setDismissed] = useState(false);
   const closeDrawer = useCallback(() => {
     setDismissed(true);
@@ -76,91 +71,91 @@ export function WineDetailDrawer({
   // BND-119: track last pour for undo.
   const [lastPour, setLastPour] = useState<{ ml: number } | null>(null);
 
-  const [pendingDirection, setPendingDirection] = useState<
-    "eightysixed" | "restored" | null
-  >(null);
+  // OPP-1 (EV-1.2) — merge-duplicate confirmation state (mergeConfirm) now
+  // lives inside merge-duplicates-panel.tsx; `busy`/`errorMsg` above stay
+  // here because merge/pour/undo/delete/86 share one busy flag and one
+  // error banner on purpose — an in-flight mutation on one control
+  // disables the others so two conflicting mutations on the same wine
+  // can't race.
 
-  // BND-058: delete wine confirmation state
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  // BND-058: delete-confirmation state now lives in delete-wine-panel.tsx.
 
-  // OPP-1 (EV-1.2) — merge-duplicate confirmation state: the wine_id of the
-  // duplicate awaiting confirmation, or null.
-  const [mergeConfirm, setMergeConfirm] = useState<string | null>(null);
-  const doMerge = useCallback(
-    async (sourceId: string) => {
-      if (!row) return;
-      setErrorMsg(null);
-      setBusy(true);
-      try {
-        const res = await fetch("/api/wines/merge", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          // The open drawer's wine is kept; the duplicate collapses into it.
-          body: JSON.stringify({ source_id: sourceId, target_id: row.wine_id }),
-        });
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as {
-            error?: { message?: string };
-          } | null;
-          throw new Error(payload?.error?.message ?? `Merge failed (${res.status})`);
-        }
-        toast.success("Duplicate merged — stock and history combined.");
-        setMergeConfirm(null);
-        startTransition(() => router.refresh());
-        onClose();
-      } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : "Merge failed.");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [row, router, startTransition, toast, onClose],
-  );
+  // Destructured rather than kept as a `heroImage.*` object: reading the
+  // ref off a member expression during render trips react-hooks/refs, which
+  // the React Compiler enforces. The original code held this ref as a plain
+  // `useRef` binding in this component, and destructuring restores exactly
+  // that shape at the JSX call site.
+  const {
+    uploading: heroImageUploading,
+    fileInputRef: heroImageInputRef,
+    handleImageUpload: handleHeroImageUpload,
+    handleImageDelete: handleHeroImageDelete,
+  } = useHeroImageActions({
+    wineId: row?.wine_id ?? null,
+    setErrorMsg,
+    toast,
+    refresh,
+  });
+
+  const eightysix = useEightysixToggle({
+    wineId: row?.wine_id ?? null,
+    busy,
+    setBusy,
+    setErrorMsg,
+    toast,
+    refresh,
+  });
 
   useFocusTrap({
     containerRef: dialogRef,
     onEscape: closeDrawer,
     enabled: row !== null && !dismissed,
-    paused: pickerOpen || pendingDirection !== null || editOpen,
+    paused: pickerOpen || eightysix.pendingDirection !== null || editOpen,
   });
 
-  // BND-121: manually open a bottle without recording a pour
-  const [openBottleBusy, setOpenBottleBusy] = useState(false);
+  // BND-121: manually open a bottle without recording a pour. Its busy
+  // flag has never been shared with any other drawer action, so — unlike
+  // merge/pour/undo/delete/86 above — this is a genuine fit for
+  // useAsyncAction.
   const [preservationMethod, setPreservationMethod] =
     useState<PreservationMethod>(row?.preservation_method ?? "none");
+  const openBottleAction = useAsyncAction();
 
   const doOpenBottle = useCallback(
-    async () => {
-      if (!row) return;
+    () => {
+      if (!row) return Promise.resolve();
       setErrorMsg(null);
-      setOpenBottleBusy(true);
-      try {
-        const res = await fetch("/api/open-bottles", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            wine_id: row.wine_id,
-            preservation_method: preservationMethod,
-          }),
-        });
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as
-            | { error?: { message?: string } }
-            | null;
-          throw new Error(
-            payload?.error?.message ?? `Failed to open bottle (${res.status}).`,
-          );
-        }
-        toast.success("Bottle opened");
-        startTransition(() => router.refresh());
-      } catch (err) {
-        toast.error("Open bottle failed");
-        setErrorMsg(err instanceof Error ? err.message : "Failed to open bottle.");
-      } finally {
-        setOpenBottleBusy(false);
-      }
+      return openBottleAction.run(
+        async () => {
+          const res = await fetch("/api/open-bottles", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              wine_id: row.wine_id,
+              preservation_method: preservationMethod,
+            }),
+          });
+          if (!res.ok) {
+            const payload = (await res.json().catch(() => null)) as
+              | { error?: { message?: string } }
+              | null;
+            throw new Error(
+              payload?.error?.message ?? `Failed to open bottle (${res.status}).`,
+            );
+          }
+          toast.success("Bottle opened");
+          refresh();
+        },
+        {
+          fallbackMessage: "Failed to open bottle.",
+          onError: (message) => {
+            toast.error("Open bottle failed");
+            setErrorMsg(message);
+          },
+        },
+      );
     },
-    [row, router, toast, preservationMethod],
+    [row, preservationMethod, toast, refresh, openBottleAction],
   );
 
   const doPour = useCallback(
@@ -236,150 +231,6 @@ export function WineDetailDrawer({
     },
     [row, lastPour, router, toast],
   );
-
-  const doEnrich = useCallback(
-    async () => {
-      if (!row) return;
-      setEnriching(true);
-      setEnrichMsg(null);
-      setErrorMsg(null);
-      try {
-        const res = await fetch(`/api/wines/${row.wine_id}/enrich`, {
-          method: "POST",
-        });
-        const payload = (await res.json().catch(() => null)) as
-          | { source?: string | null; message?: string; error?: string }
-          | null;
-        if (!res.ok) {
-          throw new Error(payload?.error ?? `Enrichment failed (${res.status}).`);
-        }
-        if (payload?.source == null) {
-          setEnrichMsg(payload?.message ?? "Could not enrich this wine.");
-        } else {
-          const sourceLabel = payload.source === "claude_inference"
-            ? "Claude AI"
-            : payload.source === "lwin_fallback"
-              ? "LWIN catalog"
-              : "rule engine";
-          setEnrichMsg(`Enriched via ${sourceLabel}.`);
-          startTransition(() => router.refresh());
-        }
-      } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : "Enrichment failed.");
-      } finally {
-        setEnriching(false);
-      }
-    },
-    [row, router],
-  );
-
-  const handleImageUpload = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file || !row) return;
-      setUploading(true);
-      setErrorMsg(null);
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        const res = await fetch(`/api/wines/${row.wine_id}/image`, {
-          method: "POST",
-          body: formData,
-        });
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-          throw new Error(payload?.error?.message ?? `Upload failed (${res.status}).`);
-        }
-        toast.success("Image uploaded");
-        startTransition(() => router.refresh());
-      } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : "Upload failed.");
-      } finally {
-        setUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }
-    },
-    [row, router, toast],
-  );
-
-  const handleImageDelete = useCallback(
-    async () => {
-      if (!row) return;
-      setUploading(true);
-      setErrorMsg(null);
-      try {
-        const res = await fetch(`/api/wines/${row.wine_id}/image`, { method: "DELETE" });
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-          throw new Error(payload?.error?.message ?? `Delete failed (${res.status}).`);
-        }
-        toast.success("Image removed");
-        startTransition(() => router.refresh());
-      } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : "Delete failed.");
-      } finally {
-        setUploading(false);
-      }
-    },
-    [row, router, toast],
-  );
-
-  // BND-058: delete the wine after confirming no references exist.
-  const doDelete = useCallback(
-    async () => {
-      if (!row) return;
-      setDeleteConfirm(false);
-      setErrorMsg(null);
-      setBusy(true);
-      try {
-        const res = await fetch(`/api/cellar/${row.wine_id}`, { method: "DELETE" });
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => null)) as
-            | { error?: { code?: string; message?: string } }
-            | null;
-          throw new Error(
-            payload?.error?.message ?? `Delete failed (${res.status}).`,
-          );
-        }
-        toast.success("Wine deleted");
-        onClose();
-        startTransition(() => router.refresh());
-      } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : "Delete failed.");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [row, router, onClose, toast],
-  );
-
-  const onConfirm86 = async (note: string | undefined) => {
-    if (!row || !pendingDirection) return;
-    const direction = pendingDirection;
-    setErrorMsg(null);
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/wines/${row.wine_id}/availability`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ direction, note }),
-      });
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
-        throw new Error(payload?.error ?? `Request failed (${res.status}).`);
-      }
-      toast.success(direction === "eightysixed" ? "Marked as 86'd" : "Restored");
-      setPendingDirection(null);
-      startTransition(() => router.refresh());
-    } catch (err) {
-      toast.error("Toggle failed");
-      setErrorMsg(err instanceof Error ? err.message : "Toggle failed.");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   if (!row) return null;
 
@@ -489,8 +340,8 @@ export function WineDetailDrawer({
                   {canManage && (
                     <button
                       type="button"
-                      onClick={handleImageDelete}
-                      disabled={uploading}
+                      onClick={handleHeroImageDelete}
+                      disabled={heroImageUploading}
                       className="absolute top-2 right-2 flex h-11 w-11 items-center justify-center rounded-pill bg-black/50 text-white hover:bg-black/70 disabled:opacity-40"
                       aria-label="Remove image"
                     >
@@ -553,7 +404,7 @@ export function WineDetailDrawer({
               )}
             </section>
 
-            {errorMsg && pendingDirection === null && (
+            {errorMsg && eightysix.pendingDirection === null && (
               <div
                 role="alert"
                 className="mt-md rounded-md border border-risk-ink/30 bg-risk-wash px-md py-sm text-[13px] text-risk-ink"
@@ -608,7 +459,7 @@ export function WineDetailDrawer({
                   type="button"
                   disabled={busy}
                   onClick={() =>
-                    setPendingDirection(row.is_eightysixed ? "restored" : "eightysixed")
+                    eightysix.setPendingDirection(row.is_eightysixed ? "restored" : "eightysixed")
                   }
                   className={cn(
                     "flex h-[48px] items-center justify-center gap-xs rounded-pill border text-[14px] font-medium transition-colors disabled:opacity-60",
@@ -623,31 +474,7 @@ export function WineDetailDrawer({
               )}
 
               {canManage && (
-                <div className="flex flex-col gap-xs">
-                  <button
-                    type="button"
-                    disabled={enriching}
-                    onClick={doEnrich}
-                    className={cn(
-                      "flex h-11 items-center justify-center gap-xs rounded-pill border text-[13px] font-medium transition-colors disabled:opacity-60",
-                      enrichMsg
-                        ? "border-mark/40 bg-mark/10 text-mark"
-                        : "border-edge bg-surface text-ink hover:bg-wash",
-                    )}
-                  >
-                    {enriching ? (
-                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
-                    ) : enrichMsg ? (
-                      <Sparkles className="h-4 w-4" strokeWidth={2} aria-hidden />
-                    ) : (
-                      <Sparkles className="h-4 w-4" strokeWidth={2} aria-hidden />
-                    )}
-                    {enriching ? "Enriching..." : enrichMsg ? "Enriched!" : "Re-enrich"}
-                  </button>
-                  {enrichMsg && (
-                    <p className="text-[11px] text-grey">{enrichMsg}</p>
-                  )}
-                </div>
+                <EnrichControl wineId={row.wine_id} setErrorMsg={setErrorMsg} refresh={refresh} />
               )}
 
               {canManage && (
@@ -663,96 +490,29 @@ export function WineDetailDrawer({
 
               {/* OPP-1 (EV-1.2): merge duplicate — manager+ */}
               {canManage && row.duplicate_wine_ids.length > 0 && (duplicateRows ?? []).length > 0 && (
-                <div
-                  data-merge-duplicates
-                  className="flex flex-col gap-xs rounded-lg border border-risk-ink/30 bg-risk-wash/40 p-sm"
-                >
-                  <p className="text-[13px] font-medium text-ink">
-                    Possible duplicate record{(duplicateRows ?? []).length === 1 ? "" : "s"}
-                  </p>
-                  <p className="text-[12px] text-grey">
-                    Same wine, same vintage, same format. Merging combines stock
-                    and keeps the full history. Different vintages are never
-                    merged — they stay linked as siblings.
-                  </p>
-                  {(duplicateRows ?? []).map((dup) =>
-                    mergeConfirm === dup.wine_id ? (
-                      <div key={dup.wine_id} className="flex gap-xs">
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setMergeConfirm(null)}
-                          className="h-11 flex-1 rounded-pill border border-rule bg-surface text-[13px] font-medium text-ink hover:bg-wash disabled:opacity-60"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => doMerge(dup.wine_id)}
-                          className="h-11 flex-1 rounded-pill bg-primary text-[13px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-60"
-                        >
-                          {busy ? "Merging..." : "Confirm merge"}
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        key={dup.wine_id}
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setMergeConfirm(dup.wine_id)}
-                        className="flex h-11 items-center justify-center rounded-pill border border-edge bg-surface px-sm text-[13px] font-medium text-ink hover:bg-wash disabled:opacity-60"
-                      >
-                        Merge &ldquo;{dup.producer} {dup.name}
-                        {dup.vintage ? ` ${dup.vintage}` : ""}&rdquo; into this record
-                      </button>
-                    ),
-                  )}
-                </div>
+                <MergeDuplicatesPanel
+                  wineId={row.wine_id}
+                  duplicateRows={duplicateRows ?? []}
+                  busy={busy}
+                  setBusy={setBusy}
+                  setErrorMsg={setErrorMsg}
+                  toast={toast}
+                  refresh={refresh}
+                  onMerged={onClose}
+                />
               )}
 
               {/* BND-058: Delete wine — owner only */}
               {isOwner && (
-                <>
-                  {deleteConfirm ? (
-                    <div className="flex flex-col gap-xs rounded-lg border border-risk-ink/30 bg-risk-wash p-sm">
-                      <p className="text-[13px] font-medium text-risk-ink">
-                        Permanently delete this wine?
-                      </p>
-                      <p className="text-[12px] text-risk-ink/80">
-                        This action cannot be undone. Consider using &ldquo;86 this wine&rdquo; instead.
-                      </p>
-                      <div className="flex gap-xs mt-xs">
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setDeleteConfirm(false)}
-                          className="h-11 flex-1 rounded-pill border border-rule bg-surface text-[13px] font-medium text-ink hover:bg-wash disabled:opacity-60"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={doDelete}
-                          className="h-11 flex-1 rounded-pill bg-primary text-[13px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-60"
-                        >
-                          {busy ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => setDeleteConfirm(true)}
-                      className="flex h-11 items-center justify-center gap-xs rounded-pill border border-risk-ink/30 bg-surface text-[13px] font-medium text-risk-ink hover:bg-risk-wash transition-colors disabled:opacity-60"
-                    >
-                      <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
-                      Delete wine
-                    </button>
-                  )}
-                </>
+                <DeleteWinePanel
+                  wineId={row.wine_id}
+                  busy={busy}
+                  setBusy={setBusy}
+                  setErrorMsg={setErrorMsg}
+                  toast={toast}
+                  refresh={refresh}
+                  onDeleted={onClose}
+                />
               )}
 
             </section>
@@ -791,10 +551,10 @@ export function WineDetailDrawer({
             {canManage && !row.hero_image_url && (
               <section aria-label="Upload image" className="mt-md">
                 <input
-                  ref={fileInputRef}
+                  ref={heroImageInputRef}
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  onChange={handleImageUpload}
+                  onChange={handleHeroImageUpload}
                   className="hidden"
                   id="hero-image-upload"
                 />
@@ -802,12 +562,12 @@ export function WineDetailDrawer({
                   htmlFor="hero-image-upload"
                   className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-xs rounded-lg border border-rule bg-surface text-[12px] font-medium uppercase tracking-[0.1em] text-grey hover:bg-wash hover:text-ink transition-colors"
                 >
-                  {uploading ? (
+                  {heroImageUploading ? (
                     <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
                   ) : (
                     <Upload className="h-4 w-4" strokeWidth={2} aria-hidden />
                   )}
-                  {uploading ? "Uploading..." : "Add hero image"}
+                  {heroImageUploading ? "Uploading..." : "Add hero image"}
                 </label>
               </section>
             )}
@@ -818,70 +578,19 @@ export function WineDetailDrawer({
               (Kimi audit 2026-08-26). Reference sections scroll; actions
               don't. */}
           {(canPour || row.sealed_count > 0) && (
-            <div
-              className="shrink-0 border-t border-rule bg-surface px-md pt-sm md:px-lg"
-              style={{ paddingBottom: "calc(var(--safe-bottom) + var(--spacing-sm))" }}
-            >
-              {/* BND-119: Undo last pour */}
-              {lastPour && canPour && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={doUndo}
-                  className="mb-xs flex h-11 w-full items-center justify-center gap-xs rounded-pill border border-edge bg-surface text-[13px] font-medium text-ink transition-colors hover:bg-wash disabled:opacity-60"
-                >
-                  <Undo2 className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  Undo last pour ({(lastPour.ml / ML_PER_OZ).toFixed(1)} oz)
-                </button>
-              )}
-              <div className="flex gap-xs">
-                {/* BND-121: Manually open a bottle without recording a pour */}
-                {row.sealed_count > 0 && (
-                  <button
-                    type="button"
-                    disabled={openBottleBusy}
-                    onClick={doOpenBottle}
-                    className={cn(
-                      "flex h-[52px] flex-1 items-center justify-center gap-xs rounded-pill text-[14px] font-medium transition-colors disabled:opacity-60",
-                      canPour
-                        ? "border border-edge bg-surface text-ink hover:bg-wash"
-                        : "bg-primary text-seal-ink hover:bg-primary-hover",
-                    )}
-                  >
-                    <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
-                    {openBottleBusy ? "Opening..." : "Open bottle"}
-                  </button>
-                )}
-                {canPour && (
-                  <>
-                    <button
-                      type="button"
-                      disabled={busy || outOfStock}
-                      onClick={() => row.glass_pour_ml && doPour(row.glass_pour_ml)}
-                      className={cn(
-                        "h-[52px] flex-1 rounded-pill bg-primary text-[15px] font-medium text-seal-ink transition-colors",
-                        "hover:bg-primary-hover disabled:opacity-60",
-                      )}
-                    >
-                      {outOfStock
-                        ? "Out of stock"
-                        : `Pour ${(row.glass_pour_ml! / ML_PER_OZ).toFixed(1)} oz`}
-                    </button>
-                    {row.pour_size_mode === "picker" && pickerItem && (
-                      <button
-                        type="button"
-                        onClick={() => setPickerOpen(true)}
-                        disabled={busy || outOfStock}
-                        aria-label="Pick a custom pour size"
-                        className="flex h-[52px] w-[52px] items-center justify-center rounded-pill border border-rule bg-surface text-grey hover:bg-wash disabled:opacity-60"
-                      >
-                        <ChevronDown className="h-5 w-5" strokeWidth={2} aria-hidden />
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
+            <PourActionBar
+              row={row}
+              canPour={canPour}
+              outOfStock={outOfStock}
+              pickerItem={pickerItem}
+              busy={busy}
+              openBottleBusy={openBottleAction.busy}
+              lastPour={lastPour}
+              doOpenBottle={doOpenBottle}
+              doPour={doPour}
+              doUndo={doUndo}
+              onOpenPicker={() => setPickerOpen(true)}
+            />
           )}
         </div>
       )}
@@ -899,15 +608,15 @@ export function WineDetailDrawer({
       )}
 
       {/* 86/restore note modal */}
-      {pendingDirection && row && (
+      {eightysix.pendingDirection && row && (
         <NoteModal
           open={true}
           wineName={row.name}
-          direction={pendingDirection}
+          direction={eightysix.pendingDirection}
           busy={busy}
           error={errorMsg}
-          onConfirm={(note: string | undefined) => onConfirm86(note)}
-          onCancel={() => setPendingDirection(null)}
+          onConfirm={(note: string | undefined) => eightysix.onConfirm86(note)}
+          onCancel={() => eightysix.setPendingDirection(null)}
         />
       )}
 
@@ -935,286 +644,4 @@ export function WineDetailDrawer({
 
 export function drawerStateKey(row: CellarWineRow | null) {
   return row ? `${row.wine_id}:${row.opened_at ?? "sealed"}` : "none";
-}
-
-/** Tiny stat chip used inside the drawer stock grid. */
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "ok" | "warn";
-}) {
-  return (
-    <div className="flex flex-col items-center gap-2xs">
-      <span className="text-caption font-medium uppercase text-grey">
-        {label}
-      </span>
-      <span
-        className={cn(
-          "text-[14px] font-semibold leading-none",
-          // Wax & Counter: urgency speaks burgundy/gold via `accent`;
-          // "Available" is the quiet default, not a celebration.
-          tone === "warn" && "text-risk-ink",
-          tone === "ok" && "text-ink",
-          !tone && "text-ink",
-        )}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-/**
- * BND-040 — PricingSection. Renders the pricing panel for wines that
- * have retail price data. Shows glass/bottle prices and their margins
- * relative to the restaurant's pricing targets.
- */
-function PricingSection({
-  row,
-  canManage,
-}: {
-  row: CellarWineRow;
-  canManage: boolean;
-}) {
-  const targetMarkup = resolveMarkupTarget(
-    row.pricing_target_markup_ratio,
-    row.restaurant_default_target_markup_ratio,
-  );
-  const targetPourCost = resolvePourCostTarget(
-    row.pricing_target_pour_cost_pct,
-    row.restaurant_default_target_pour_cost_pct,
-  );
-  const markupRatio = getMarkupRatio(row.current_bottle_price, row.retail_median);
-  const pourCostPct = getPourCostPct(
-    row.current_unit_cost,
-    row.size_ml,
-    row.glass_pour_ml,
-    row.current_glass_price,
-  );
-  const glassStatus = getGlassStatus(pourCostPct, targetPourCost);
-  const bottleStatus = getBottleStatus(markupRatio, targetMarkup);
-
-  // No list prices → no card. A full-weight card holding only a staleness
-  // disclaimer spent prime hierarchy on dead content (Kimi audit).
-  const hasAnyPrice =
-    (row.current_glass_price != null && row.glass_pour_ml != null) ||
-    row.current_bottle_price != null;
-  if (!hasAnyPrice) {
-    return (
-      <p aria-label="Pricing" className="mt-md text-[12px] text-grey">
-        Retail reference on file · no list prices set
-        {isRetailStale(row.retail_refreshed_at ?? undefined) &&
-          " · retail data over 30 days old"}
-      </p>
-    );
-  }
-
-  return (
-    <section
-      aria-label="Pricing"
-      className="mt-md rounded-lg card-surface p-md"
-    >
-      <h3 className="text-caption font-medium uppercase text-grey mb-sm">Pricing</h3>
-
-      <div className="space-y-sm">
-        {/* Glass pour row */}
-        {row.current_glass_price != null && row.glass_pour_ml && (
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[14px] font-medium text-ink">
-                ${row.current_glass_price.toFixed(2)}{" "}
-                <span className="font-normal text-grey">
-                  / {(row.glass_pour_ml / ML_PER_OZ).toFixed(1)} oz glass
-                </span>
-              </p>
-              {glassStatus !== "on_target" && glassStatus !== "unknown" && (
-                <p className="text-[12px] text-grey">
-                  {formatPricingStatusLabel(glassStatus)}
-                </p>
-              )}
-            </div>
-            <PriceBand
-              bottleList={row.current_bottle_price}
-              retailReference={row.retail_median}
-              targetMarkup={targetMarkup}
-              size="mini"
-            />
-          </div>
-        )}
-
-        {/* Bottle row */}
-        {row.current_bottle_price != null && (
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[14px] font-medium text-ink">
-                ${row.current_bottle_price.toFixed(2)}{" "}
-                <span className="font-normal text-grey">/ bottle</span>
-              </p>
-              {bottleStatus !== "on_target" && bottleStatus !== "unknown" && (
-                <p className="text-[12px] text-grey">
-                  {formatPricingStatusLabel(bottleStatus)}
-                </p>
-              )}
-            </div>
-            <PriceBand
-              bottleList={row.current_bottle_price}
-              retailReference={row.retail_median}
-              targetMarkup={targetMarkup}
-              size="mini"
-            />
-          </div>
-        )}
-
-        {isRetailStale(row.retail_refreshed_at ?? undefined) && (
-          <p className="text-[11px] text-grey">
-            Retail data is over 30 days old. May not reflect current pricing.
-          </p>
-        )}
-      </div>
-
-      {canManage && row.current_bottle_price != null && (
-        <div className="mt-md">
-          <PricingTargetOverride
-            wineId={row.wine_id}
-            perWinePourCostPct={row.pricing_target_pour_cost_pct}
-            perWineMarkupRatio={row.pricing_target_markup_ratio}
-            housePourCostPct={
-              row.restaurant_default_target_pour_cost_pct ?? targetPourCost
-            }
-            houseMarkupRatio={
-              row.restaurant_default_target_markup_ratio ?? targetMarkup
-            }
-          />
-        </div>
-      )}
-    </section>
-  );
-}
-
-
-/**
- * BND-070 — DecantTimeSection. Shows recommended decant time
- * when enrichment has set it and it's > 0 minutes.
- */
-function DecantTimeSection({ row }: { row: CellarWineRow }) {
-  const hours = row.decant_minutes! >= 60
-    ? Math.floor(row.decant_minutes! / 60)
-    : 0;
-  const mins = row.decant_minutes! % 60;
-
-  let display: string;
-  if (hours > 0 && mins > 0) {
-    display = hours + "h " + mins + "m";
-  } else if (hours > 0) {
-    display = hours + " hour" + (hours === 1 ? "" : "s");
-  } else {
-    display = mins + " min";
-  }
-
-  return (
-    <section
-      aria-label="Decant time"
-      className="mt-md rounded-lg card-surface p-md"
-    >
-      <h3 className="text-caption font-medium uppercase text-grey mb-xs">Decant time</h3>
-      <p className="text-[14px] text-ink-soft">
-        {display}
-      </p>
-    </section>
-  );
-}
-
-/**
- * BND-069 — ServingTempSection. Shows recommended serving temperature
- * when enrichment has set it.
- */
-function ServingTempSection({ row }: { row: CellarWineRow }) {
-  return (
-    <section
-      aria-label="Serving temperature"
-      className="mt-md rounded-lg card-surface p-md"
-    >
-      <h3 className="text-caption font-medium uppercase text-grey mb-xs">Serving temperature</h3>
-      <p className="text-[14px] text-ink-soft">
-        {row.serving_temp_min}–{row.serving_temp_max}°F
-      </p>
-      {row.serving_temp_label && (
-        <p className="mt-2xs text-[12px] text-grey">{row.serving_temp_label}</p>
-      )}
-    </section>
-  );
-}
-
-/**
- * BND-039 + BND-071 — DrinkWindowSection. Renders the timeline + status
- * pill + critic citation + start/peak/end year labels for wines that have
- * been enriched with drink-window data.
- */
-function DrinkWindowSection({ row }: { row: CellarWineRow }) {
-  const status = getDrinkWindowStatus(row.drink_window_start, row.drink_window_end);
-  const yearsLeft = getYearsUntilWindowClose(row.drink_window_end);
-  const yearsUntilOpen = getYearsUntilWindowOpen(row.drink_window_start);
-
-  // BND-071 — status on the Wax & Counter urgency scale (DESIGN.md
-  // 2026-08-26): quiet hold, gold optimal, burgundy steps for the rest.
-  const pillTone: WaxTone = (() => {
-    switch (status) {
-      case "optimal":
-        return "optimal";
-      case "drink_now":
-        return "attention";
-      case "past_peak":
-        return "urgent";
-      case "hold":
-      default:
-        return "muted";
-    }
-  })();
-
-  return (
-    <section
-      aria-label="Drink window"
-      className="mt-md rounded-lg card-surface p-md"
-    >
-      <h3 className="text-caption font-medium uppercase text-grey mb-sm">Drink window</h3>
-
-      {/* One axis only: the timeline renders start / peak / end itself, with
-          the peak label at its true position — a second flex-spaced row here
-          put "Peak 2017" over a conflicting midpoint tick (Kimi audit). */}
-      <DrinkWindowTimeline
-        start={row.drink_window_start as number}
-        end={row.drink_window_end as number}
-        peak={row.peak_year as number | undefined}
-      />
-
-      <div className="mt-sm flex items-center justify-between text-[12px]">
-        {/* BND-071 — status pill, Wax & Counter mapping. */}
-        <StatusChip tone={pillTone}>
-          {formatStatusLabel(status, yearsLeft, yearsUntilOpen)}
-        </StatusChip>
-        {yearsLeft !== null && (
-          <span className="text-grey">
-            {yearsLeft >= 0
-              ? `${yearsLeft} year${yearsLeft === 1 ? "" : "s"} left`
-              : `${Math.abs(yearsLeft)} year${Math.abs(yearsLeft) === 1 ? "" : "s"} past`}
-          </span>
-        )}
-      </div>
-
-      {row.review_excerpt && (
-        <blockquote className="mt-sm border-l-2 border-risk-wash pl-sm text-[12px] text-grey italic leading-relaxed">
-          {row.review_excerpt}
-          {row.rating && row.rating_source && (
-            <cite className="mt-2xs block not-italic font-medium text-grey">
-              {row.rating} pts — {row.rating_source}
-            </cite>
-          )}
-        </blockquote>
-      )}
-    </section>
-  );
 }

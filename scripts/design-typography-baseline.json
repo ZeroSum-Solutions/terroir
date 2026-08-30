@@ -56,14 +56,19 @@
     "text-[18px]": 2
   },
   "src/app/(app)/cellar/cellar-list.tsx": {
-    "class:font-mono": 5,
-    "text-[10.5px]": 4,
     "text-[10px]": 6,
-    "text-[11px]": 4,
-    "text-[12px]": 12,
-    "text-[13px]": 9,
+    "text-[12px]": 9,
+    "text-[13px]": 7,
+    "text-[17px]": 1
+  },
+  "src/app/(app)/cellar/cellar-row.tsx": {
+    "class:font-mono": 5,
+    "text-[10.5px]": 1,
+    "text-[11px]": 1,
+    "text-[12px]": 3,
+    "text-[13px]": 1,
     "text-[14px]": 2,
-    "text-[17px]": 4
+    "text-[17px]": 2
   },
   "src/app/(app)/cellar/cellar-shell.tsx": {
     "class:font-mono": 1,
@@ -80,12 +85,35 @@
     "text-[14px]": 8,
     "text-[18px]": 1
   },
+  "src/app/(app)/cellar/decant-time-section.tsx": {
+    "text-[14px]": 1
+  },
+  "src/app/(app)/cellar/delete-wine-panel.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 4
+  },
+  "src/app/(app)/cellar/drink-window-section.tsx": {
+    "text-[12px]": 2
+  },
   "src/app/(app)/cellar/edit-metadata-modal.tsx": {
     "text-[11px]": 1,
     "text-[12px]": 2,
     "text-[13px]": 5,
     "text-[14px]": 9,
     "text-[17px]": 1
+  },
+  "src/app/(app)/cellar/enrich-control.tsx": {
+    "text-[11px]": 1,
+    "text-[13px]": 1
+  },
+  "src/app/(app)/cellar/lineage-block-list.tsx": {
+    "text-[10.5px]": 1,
+    "text-[11px]": 1,
+    "text-[17px]": 1
+  },
+  "src/app/(app)/cellar/merge-duplicates-panel.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 4
   },
   "src/app/(app)/cellar/note-modal.tsx": {
     "text-[13px]": 1,
@@ -106,11 +134,21 @@
     "text-[12px]": 5,
     "text-[13px]": 3
   },
+  "src/app/(app)/cellar/pour-action-bar.tsx": {
+    "text-[13px]": 1,
+    "text-[14px]": 1,
+    "text-[15px]": 1
+  },
   "src/app/(app)/cellar/pour-picker-modal.tsx": {
     "text-[12px]": 1,
     "text-[13px]": 2,
     "text-[14px]": 4,
     "text-[18px]": 1
+  },
+  "src/app/(app)/cellar/pricing-section.tsx": {
+    "text-[11px]": 1,
+    "text-[12px]": 3,
+    "text-[14px]": 2
   },
   "src/app/(app)/cellar/pricing-target-override.tsx": {
     "class:font-mono": 2,
@@ -158,10 +196,26 @@
     "text-[12px]": 1,
     "text-[13px]": 1
   },
+  "src/app/(app)/cellar/section-group.tsx": {
+    "text-[10.5px]": 1,
+    "text-[11px]": 1,
+    "text-[13px]": 1
+  },
+  "src/app/(app)/cellar/serving-temp-section.tsx": {
+    "text-[12px]": 1,
+    "text-[14px]": 1
+  },
+  "src/app/(app)/cellar/stat.tsx": {
+    "text-[14px]": 1
+  },
   "src/app/(app)/cellar/stock-adjustment-form.tsx": {
     "class:font-mono": 1,
     "text-[12px]": 6,
     "text-[13px]": 6
+  },
+  "src/app/(app)/cellar/taxonomy-group.tsx": {
+    "text-[10.5px]": 1,
+    "text-[11px]": 1
   },
   "src/app/(app)/cellar/voice-cellar-control.tsx": {
     "text-[11.5px]": 1,
@@ -171,26 +225,61 @@
   },
   "src/app/(app)/cellar/wine-detail-drawer.tsx": {
     "class:font-mono": 4,
-    "text-[11px]": 4,
-    "text-[12px]": 13,
-    "text-[13px]": 15,
-    "text-[14px]": 7,
-    "text-[15px]": 1,
+    "text-[11px]": 2,
+    "text-[12px]": 5,
+    "text-[13px]": 5,
+    "text-[14px]": 1,
     "text-[19px]": 1
   },
   "src/app/(app)/fab.tsx": {
     "text-[12px]": 1,
     "text-[13px]": 1
   },
+  "src/app/(app)/import/batch-step.tsx": {
+    "text-[13px]": 5,
+    "text-[14px]": 7,
+    "text-[20px]": 2
+  },
+  "src/app/(app)/import/chunk-upload-progress.tsx": {
+    "text-[13px]": 1
+  },
   "src/app/(app)/import/import-client.tsx": {
-    "text-[13px]": 25,
-    "text-[14px]": 12,
-    "text-[20px]": 5
+    "text-[13px]": 1,
+    "text-[14px]": 1,
+    "text-[20px]": 1
+  },
+  "src/app/(app)/import/preview-error-rows.tsx": {
+    "text-[13px]": 3
+  },
+  "src/app/(app)/import/preview-lwin-rows.tsx": {
+    "text-[13px]": 5
+  },
+  "src/app/(app)/import/preview-step.tsx": {
+    "text-[13px]": 5,
+    "text-[14px]": 2,
+    "text-[20px]": 1
+  },
+  "src/app/(app)/import/recent-imports.tsx": {
+    "text-[13px]": 1
+  },
+  "src/app/(app)/import/session-chunk-list.tsx": {
+    "text-[13px]": 1
+  },
+  "src/app/(app)/import/session-pending-rows.tsx": {
+    "text-[13px]": 5,
+    "text-[14px]": 2
   },
   "src/app/(app)/import/session-step.tsx": {
-    "text-[13px]": 9,
-    "text-[14px]": 10,
+    "text-[13px]": 2,
+    "text-[14px]": 8,
     "text-[20px]": 2
+  },
+  "src/app/(app)/import/summary-stat.tsx": {
+    "text-[20px]": 1
+  },
+  "src/app/(app)/import/upload-step.tsx": {
+    "text-[13px]": 5,
+    "text-[14px]": 2
   },
   "src/app/(app)/insights/briefing-alert-card.tsx": {
     "text-[11px]": 2,
@@ -224,15 +313,14 @@
     "text-[26px]": 1
   },
   "src/app/(app)/insights/page.tsx": {
-    "class:font-mono": 3,
-    "text-[11px]": 2,
+    "class:font-mono": 2,
+    "text-[11px]": 1,
     "text-[12px]": 15,
     "text-[13px]": 15,
     "text-[14px]": 3,
     "text-[15px]": 6,
     "text-[17px]": 1,
-    "text-[28px]": 2,
-    "text-[9px]": 1
+    "text-[28px]": 2
   },
   "src/app/(app)/insights/pour-analytics-section.tsx": {
     "text-[11px]": 2,
@@ -302,12 +390,20 @@
     "text-[17px]": 1,
     "text-[20px]": 2
   },
+  "src/app/(app)/lists/[id]/components/list-actions.tsx": {
+    "text-[13px]": 2
+  },
   "src/app/(app)/lists/[id]/components/publish-modal.tsx": {
     "class:font-mono": 1,
     "text-[12px]": 7,
     "text-[13px]": 8,
     "text-[14px]": 6,
     "text-[22px]": 2
+  },
+  "src/app/(app)/lists/[id]/components/sortable-section-button.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 1,
+    "text-[14px]": 1
   },
   "src/app/(app)/lists/[id]/components/template-picker.tsx": {
     "text-[13px]": 1
@@ -346,21 +442,24 @@
   },
   "src/app/(app)/lists/[id]/wine-list-editor.tsx": {
     "text-[10.5px]": 2,
-    "text-[12px]": 1,
-    "text-[13px]": 20,
-    "text-[14px]": 6,
+    "text-[13px]": 17,
+    "text-[14px]": 5,
     "text-[18px]": 1,
     "text-[22px]": 2,
     "text-[26px]": 1
   },
+  "src/app/(app)/lists/create-list-modal.tsx": {
+    "text-[13px]": 2,
+    "text-[14px]": 4,
+    "text-[22px]": 1
+  },
   "src/app/(app)/lists/wine-list-landing.tsx": {
     "text-[12px]": 5,
-    "text-[13px]": 8,
-    "text-[14px]": 7,
+    "text-[13px]": 6,
+    "text-[14px]": 3,
     "text-[15px]": 2,
     "text-[18px]": 1,
-    "text-[20px]": 1,
-    "text-[22px]": 1
+    "text-[20px]": 1
   },
   "src/app/(app)/nav-links.tsx": {
     "text-[11px]": 1,
@@ -371,19 +470,20 @@
     "text-[14px]": 2,
     "text-[22px]": 1
   },
+  "src/app/(app)/price-comparison/comparable-price-cards.tsx": {
+    "text-[10.5px]": 2
+  },
+  "src/app/(app)/price-comparison/comparable-price-table.tsx": {
+    "text-[10.5px]": 3
+  },
   "src/app/(app)/price-comparison/export-csv-button.tsx": {
     "text-[13px]": 1
   },
-  "src/app/(app)/price-comparison/page.tsx": {
-    "class:font-mono": 24,
-    "text-[10.5px]": 8,
-    "text-[11px]": 5,
-    "text-[12px]": 2,
-    "text-[13px]": 10,
-    "text-[14px]": 4,
-    "text-[15px]": 4,
-    "text-[17px]": 5,
-    "text-[20px]": 4
+  "src/app/(app)/price-comparison/single-source-price-cards.tsx": {
+    "text-[10.5px]": 1
+  },
+  "src/app/(app)/price-comparison/single-source-price-table.tsx": {
+    "text-[10.5px]": 2
   },
   "src/app/(app)/price-comparison/sort-controls.tsx": {
     "text-[10px]": 1,
@@ -408,18 +508,66 @@
     "text-[18px]": 1
   },
   "src/app/(app)/scan-bottle/page.tsx": {
-    "class:font-mono": 2,
-    "text-[10.5px]": 1,
-    "text-[11px]": 2,
-    "text-[12px]": 6,
-    "text-[13px]": 10,
-    "text-[14px]": 22,
+    "text-[12px]": 1,
+    "text-[13px]": 1,
+    "text-[14px]": 1,
     "text-[15px]": 1,
-    "text-[17px]": 3,
-    "text-[18px]": 2,
-    "text-[20px]": 2,
-    "text-[22px]": 5,
+    "text-[22px]": 1,
     "text-[28px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/confirmed-view.tsx": {
+    "text-[12px]": 1,
+    "text-[14px]": 2,
+    "text-[17px]": 1,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/correcting-view.tsx": {
+    "text-[11px]": 1,
+    "text-[13px]": 2,
+    "text-[14px]": 3,
+    "text-[17px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/error-view.tsx": {
+    "class:font-mono": 1,
+    "text-[12px]": 1,
+    "text-[13px]": 1,
+    "text-[14px]": 2,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/location-view.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 2,
+    "text-[14px]": 4
+  },
+  "src/app/(app)/scan-bottle/views/manual-view.tsx": {
+    "class:font-mono": 1,
+    "text-[12px]": 1,
+    "text-[14px]": 3
+  },
+  "src/app/(app)/scan-bottle/views/matched-view.tsx": {
+    "text-[10.5px]": 1,
+    "text-[13px]": 1,
+    "text-[14px]": 2,
+    "text-[18px]": 1,
+    "text-[20px]": 2,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/no-camera-view.tsx": {
+    "text-[13px]": 1,
+    "text-[14px]": 1,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/scanning-view.tsx": {
+    "text-[13px]": 1,
+    "text-[14px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/summary-view.tsx": {
+    "text-[11px]": 1,
+    "text-[12px]": 1,
+    "text-[13px]": 1,
+    "text-[14px]": 3,
+    "text-[17px]": 1,
+    "text-[18px]": 1
   },
   "src/app/(app)/scan/[id]/components/re-extract-button.tsx": {
     "text-[12px]": 1,
@@ -517,6 +665,13 @@
     "text-[11px]": 1,
     "text-[12px]": 1
   },
+  "src/app/(app)/team/invite-modal.tsx": {
+    "class:font-mono": 1,
+    "text-[12px]": 3,
+    "text-[13px]": 2,
+    "text-[14px]": 6,
+    "text-[18px]": 1
+  },
   "src/app/(app)/team/member-analytics-section.tsx": {
     "text-[10.5px]": 1,
     "text-[11px]": 1,
@@ -525,13 +680,11 @@
     "text-[15px]": 1
   },
   "src/app/(app)/team/team-actions.tsx": {
-    "class:font-mono": 4,
+    "class:font-mono": 3,
     "text-[11px]": 3,
-    "text-[12px]": 5,
-    "text-[13px]": 12,
-    "text-[14px]": 6,
-    "text-[15px]": 2,
-    "text-[18px]": 1
+    "text-[12px]": 2,
+    "text-[13px]": 10,
+    "text-[15px]": 2
   },
   "src/app/(app)/theme-toggle.tsx": {
     "text-[11px]": 1,
@@ -594,6 +747,11 @@
   "src/components/action-dialog.tsx": {
     "text-[14px]": 3,
     "text-[24px]": 1
+  },
+  "src/components/charts/throughput-bar-chart.tsx": {
+    "class:font-mono": 1,
+    "text-[11px]": 1,
+    "text-[9px]": 1
   },
   "src/components/drink-window-timeline.tsx": {
     "class:font-mono": 2,

@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Archive,
   ArchiveRestore,
@@ -15,12 +14,13 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { ActionDialog } from "@/components/action-dialog";
 import { RouteDataEmpty } from "@/components/route-data-state";
 import { StatusChip } from "@/components/status-chip";
 import { TimeAgo } from "@/components/time-ago";
 import type { WineListWithCount } from "@/lib/wine-list/types";
+import { CreateListModal } from "./create-list-modal";
+import { useWineListActions } from "./use-wine-list-actions";
 
 export function WineListLanding({
   lists,
@@ -32,181 +32,15 @@ export function WineListLanding({
   showArchived?: boolean;
 }) {
   const router = useRouter();
-  const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [showModal, setShowModal] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  // Per-card "copied" indicator for the published-list footer — tracks
-  // the list id whose public link was most recently copied so we can
-  // flash a confirmation on that card only. Mirrors the team-page
-  // per-row invitation copy pattern.
-  const [copiedListId, setCopiedListId] = useState<string | null>(null);
-  // Tracks the list id currently being deleted so we can disable its
-  // Delete button while the request is in flight. Surface API errors in
-  // an inline alert above the grid so the user sees what failed.
-  const [deletingListId, setDeletingListId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<WineListWithCount | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  // Tracks which list is being archived/unarchived
-  const [archivingListId, setArchivingListId] = useState<string | null>(null);
-  // Tracks which list is being cloned
-  const [cloningListId, setCloningListId] = useState<string | null>(null);
-
-  const copyListLink = useCallback(async (list: WineListWithCount) => {
-    if (!list.slug) return;
-    const url = `${window.location.origin}/list/${list.slug}`;
-    await navigator.clipboard.writeText(url);
-    setCopiedListId(list.id);
-    setTimeout(
-      () =>
-        setCopiedListId((current) => (current === list.id ? null : current)),
-      2000,
-    );
-  }, []);
-
-  const toggleArchive = useCallback(
-    async (list: WineListWithCount) => {
-      const willArchive = !list.archived;
-      const action = willArchive ? "archive" : "unarchive";
-      const confirmMessage = willArchive
-        ? `Archive "${list.name}"? It will be hidden from the default view but can be restored later.`
-        : `Restore "${list.name}"? It will appear in the default view again.`;
-      if (!window.confirm(confirmMessage)) return;
-
-      setArchivingListId(list.id);
-      try {
-        const res = await fetch(`/api/wine-lists/${list.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ archived: willArchive }),
-        });
-        if (!res.ok) {
-          const body = (await res.json()) as { error?: unknown };
-          throw new Error(
-            typeof body.error === "string"
-              ? body.error
-              : `Couldn't ${action} wine list.`,
-          );
-        }
-        router.refresh();
-      } catch (err) {
-        setDeleteError(
-          err instanceof Error && err.message
-            ? err.message
-            : `Couldn't ${action} wine list. Please try again.`,
-        );
-      } finally {
-        setArchivingListId(null);
-      }
-    },
-    [router],
-  );
-
-  const deleteList = useCallback(async () => {
-      if (!deleteTarget) return;
-      const list = deleteTarget;
-      setDeleteError(null);
-      setDeletingListId(list.id);
-      try {
-        const res = await fetch(`/api/wine-lists/${list.id}`, {
-          method: "DELETE",
-        });
-        if (!res.ok) {
-          let serverMessage: string | undefined;
-          try {
-            const body = (await res.json()) as { error?: unknown };
-            if (typeof body.error === "string") serverMessage = body.error;
-          } catch {
-            // non-JSON body — fall through to generic message
-          }
-          throw new Error(serverMessage ?? "Couldn't delete wine list.");
-        }
-        setDeleteTarget(null);
-        router.refresh();
-      } catch (err) {
-        setDeleteError(
-          err instanceof Error && err.message
-            ? err.message
-            : "Couldn't delete wine list. Please try again.",
-        );
-      } finally {
-        setDeletingListId(null);
-      }
-  }, [deleteTarget, router]);
-
-  const requestDeleteList = useCallback((list: WineListWithCount) => {
-    // BND-159: only archived lists can be deleted. The API enforces this,
-    // but the UI should never offer DELETE on a non-archived list.
-    if (!list.archived) return;
-    setDeleteError(null);
-    setDeleteTarget(list);
-  }, []);
-
-  const cloneList = useCallback(
-    async (list: WineListWithCount) => {
-      const confirmMessage = `Clone "${list.name}"? A new unpublished copy will be created with all sections and items preserved.`;
-      if (!window.confirm(confirmMessage)) return;
-
-      setCloningListId(list.id);
-      try {
-        const res = await fetch(`/api/wine-lists/${list.id}/clone`, {
-          method: "POST",
-        });
-        if (!res.ok) {
-          const body = (await res.json()) as { error?: unknown };
-          throw new Error(
-            typeof body.error === "string"
-              ? body.error
-              : "Clone failed. Please try again.",
-          );
-        }
-        const { id } = (await res.json()) as { id: string };
-        router.refresh();
-        // Navigate to the clone
-        router.push(`/lists/${id}`);
-      } catch (err) {
-        setDeleteError(
-          err instanceof Error && err.message
-            ? err.message
-            : "Clone failed. Please try again.",
-        );
-      } finally {
-        setCloningListId(null);
-      }
-    },
-    [router],
-  );
-
-  const createList = useCallback(async () => {
-    const name = newName.trim() || "Untitled Wine List";
-    setCreating(true);
-    setCreateError(null);
-    try {
-      const body: { name: string; description?: string } = { name };
-      if (newDescription.trim()) {
-        body.description = newDescription.trim();
-      }
-      const res = await fetch("/api/wine-lists", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error("Failed to create wine list");
-      const { id } = (await res.json()) as { id: string };
-      router.push(`/lists/${id}`);
-    } catch {
-      setCreateError("Couldn't create wine list. Please try again.");
-      setCreating(false);
-    }
-  }, [newName, newDescription, router]);
+  const actions = useWineListActions();
+  const { deleteTarget } = actions;
 
   const renderCard = (list: WineListWithCount) => {
-    const justCopied = copiedListId === list.id;
+    const justCopied = actions.copiedListId === list.id;
     const showCopyAction = list.is_published && list.slug;
-    const isDeleting = deletingListId === list.id;
-    const isArchiving = archivingListId === list.id;
-    const isCloning = cloningListId === list.id;
+    const isDeleting = actions.isDeleting(list.id);
+    const isArchiving = actions.isArchiving(list.id);
+    const isCloning = actions.isCloning(list.id);
     return (
       <div
         key={list.id}
@@ -273,7 +107,7 @@ export function WineListLanding({
               <>
                 <button
                   type="button"
-                  onClick={() => copyListLink(list)}
+                  onClick={() => actions.copyListLink(list)}
                   aria-label={`Copy public link for ${list.name}`}
                   className="inline-flex min-h-11 items-center gap-xs whitespace-nowrap rounded-pill border border-rule bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring"
                 >
@@ -311,7 +145,7 @@ export function WineListLanding({
             {/* Clone button — available for all lists */}
             <button
               type="button"
-              onClick={() => cloneList(list)}
+              onClick={() => actions.cloneList(list)}
               disabled={isCloning}
               aria-label={`Clone ${list.name}`}
               className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-rule bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring disabled:opacity-60"
@@ -323,7 +157,7 @@ export function WineListLanding({
           <div className="flex items-center gap-xs">
             <button
               type="button"
-              onClick={() => toggleArchive(list)}
+              onClick={() => actions.toggleArchive(list)}
               disabled={isArchiving}
               aria-label={
                 list.archived
@@ -342,7 +176,7 @@ export function WineListLanding({
             {list.archived && (
               <button
                 type="button"
-                onClick={() => requestDeleteList(list)}
+                onClick={() => actions.requestDeleteList(list)}
                 disabled={isDeleting}
                 aria-label={`Permanently delete ${list.name}`}
                 className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-rule bg-canvas text-grey hover:bg-risk-wash hover:text-risk-ink focus-ring disabled:opacity-60"
@@ -381,7 +215,7 @@ export function WineListLanding({
           )}
           <button
             type="button"
-            onClick={() => setShowModal(true)}
+            onClick={actions.openCreateModal}
             className="flex h-11 items-center gap-sm self-start rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring md:self-auto"
           >
             <Plus className="h-4 w-4" strokeWidth={2} />
@@ -390,15 +224,15 @@ export function WineListLanding({
         </div>
       </header>
 
-      {deleteError && deleteTarget === null && (
+      {actions.error && deleteTarget === null && (
         <div
           role="alert"
           className="mb-md flex items-start justify-between gap-sm rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
         >
-          <span>{deleteError}</span>
+          <span>{actions.error}</span>
           <button
             type="button"
-            onClick={() => setDeleteError(null)}
+            onClick={actions.dismissError}
             aria-label="Dismiss error"
             className="-mr-2xs flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-pill text-risk-ink/70 hover:bg-risk-wash hover:text-risk-ink focus-ring"
           >
@@ -415,7 +249,7 @@ export function WineListLanding({
           action={
             <button
               type="button"
-              onClick={() => setShowModal(true)}
+              onClick={actions.openCreateModal}
               className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               <Plus className="h-4 w-4" strokeWidth={2} />
@@ -431,7 +265,7 @@ export function WineListLanding({
               {lists.map(renderCard)}
               <button
                 type="button"
-                onClick={() => setShowModal(true)}
+                onClick={actions.openCreateModal}
                 className="flex flex-col items-center justify-center gap-sm rounded-card border border-dashed border-rule-strong p-xl text-center text-grey transition-colors hover:border-accent hover:text-accent"
               >
                 <Plus className="h-5 w-5" strokeWidth={2} />
@@ -479,25 +313,16 @@ export function WineListLanding({
       )}
 
       {/* Create modal */}
-      {showModal && (
+      {actions.showModal && (
         <CreateListModal
-          newName={newName}
-          setNewName={(v) => {
-            setNewName(v);
-            if (createError) setCreateError(null);
-          }}
-          newDescription={newDescription}
-          setNewDescription={(v) => {
-            setNewDescription(v);
-            if (createError) setCreateError(null);
-          }}
-          creating={creating}
-          error={createError}
-          onClose={() => {
-            setShowModal(false);
-            setCreateError(null);
-          }}
-          onCreate={createList}
+          newName={actions.newName}
+          setNewName={actions.changeNewName}
+          newDescription={actions.newDescription}
+          setNewDescription={actions.changeNewDescription}
+          creating={actions.creating}
+          error={actions.createError}
+          onClose={actions.closeCreateModal}
+          onCreate={actions.createList}
         />
       )}
 
@@ -512,113 +337,19 @@ export function WineListLanding({
               : ""
         }
         confirmLabel="Permanently delete list"
-        busy={deletingListId === deleteTarget?.id}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={deleteList}
+        busy={actions.isDeleteBusy}
+        onClose={actions.dismissDeleteTarget}
+        onConfirm={actions.deleteList}
       >
-        {deleteError && (
+        {actions.error && (
           <p
             role="alert"
             className="rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
           >
-            {deleteError}
+            {actions.error}
           </p>
         )}
       </ActionDialog>
     </section>
-  );
-}
-
-function CreateListModal({
-  newName,
-  setNewName,
-  newDescription,
-  setNewDescription,
-  creating,
-  error,
-  onClose,
-  onCreate,
-}: {
-  newName: string;
-  setNewName: (v: string) => void;
-  newDescription: string;
-  setNewDescription: (v: string) => void;
-  creating: boolean;
-  error: string | null;
-  onClose: () => void;
-  onCreate: () => void;
-}) {
-  const trapRef = useRef<HTMLDivElement>(null);
-  useFocusTrap({ containerRef: trapRef, onEscape: onClose });
-
-  return (
-    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; this dialog already has full keyboard access via useFocusTrap (Escape + a visible Close button).
-    <div
-      className="fixed inset-0 z-[var(--z-dialog)] flex items-center justify-center bg-scrim px-md"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="new-wine-list-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        ref={trapRef}
-        className="w-full max-w-[400px] rounded-card card-surface p-lg"
-      >
-        <h2
-          id="new-wine-list-title"
-          className="font-serif text-[22px] text-ink"
-        >
-          New wine list
-        </h2>
-        <p className="mt-xs text-[13px] text-grey">
-          Default sections will be created. You can rename or add more later.
-        </p>
-        <input
-          autoFocus
-          type="text"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") onCreate();
-          }}
-          placeholder="Spring 2026 Wine List…"
-          className="mt-lg h-11 w-full rounded-pill border border-edge bg-canvas px-md text-[14px] text-ink placeholder:text-grey focus-visible:border-accent focus-ring"
-        />
-        <textarea
-          value={newDescription}
-          onChange={(e) => setNewDescription(e.target.value)}
-          placeholder="Description (optional)"
-          rows={3}
-          className="mt-sm w-full rounded-md border border-rule bg-canvas px-sm py-xs text-[14px] text-ink placeholder:text-grey focus-visible:border-accent focus-ring resize-none"
-        />
-        {error && (
-          <p
-            role="alert"
-            className="mt-sm rounded-md border border-risk-ink/30 bg-risk-wash px-sm py-xs text-[13px] text-risk-ink"
-          >
-            {error}
-          </p>
-        )}
-        <div className="mt-lg flex justify-end gap-sm">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-[38px] rounded-pill border border-rule px-md text-[14px] font-medium text-ink hover:bg-wash focus-ring"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onCreate}
-            disabled={creating}
-            className="h-[38px] rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-60"
-          >
-            {creating ? "Creating..." : "Create"}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }

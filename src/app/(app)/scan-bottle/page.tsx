@@ -1,45 +1,18 @@
 "use client";
 
-import {
-  AlertTriangle,
-  Camera,
-  Check,
-  Keyboard,
-  List,
-  MapPin,
-  ScanLine,
-  Search,
-  X,
-} from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { List } from "lucide-react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { readApiError } from "@/lib/api/client-error";
-
-type MatchedWine = {
-  id: string;
-  producer: string;
-  name: string;
-  vintage: number | null;
-  varietal: string | null;
-  region: string | null;
-  country: string | null;
-};
-
-type SessionScan = {
-  wine: MatchedWine;
-  section: string;
-  binLocation: string;
-};
-
-type Phase =
-  | "scanning"
-  | "manual"
-  | "matched"
-  | "correcting"
-  | "location"
-  | "confirmed"
-  | "error"
-  | "no-camera"
-  | "summary";
+import { bottleScanReducer, initialBottleScanState, type MatchedWine } from "./scan-bottle-state";
+import { ScanningView } from "./views/scanning-view";
+import { NoCameraView } from "./views/no-camera-view";
+import { ManualView } from "./views/manual-view";
+import { MatchedView } from "./views/matched-view";
+import { CorrectingView } from "./views/correcting-view";
+import { LocationView } from "./views/location-view";
+import { ConfirmedView } from "./views/confirmed-view";
+import { ErrorView } from "./views/error-view";
+import { SummaryView } from "./views/summary-view";
 
 type BarcodeDetectorConstructor = new (options?: {
   formats?: string[];
@@ -157,20 +130,8 @@ async function searchWines(query: string): Promise<MatchedWine[]> {
 
 export default function ScanBottlePage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [phase, setPhase] = useState<Phase>("scanning");
-  const [error, setError] = useState<string | null>(null);
-  const [wine, setWine] = useState<MatchedWine | null>(null);
-  const [payload, setPayload] = useState<string | null>(null);
-  const [manualCode, setManualCode] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<MatchedWine[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [section, setSection] = useState("");
-  const [binLocation, setBinLocation] = useState("");
-  const [confirming, setConfirming] = useState(false);
-
-  // BND-112: batch scanning session state
-  const [session, setSession] = useState<SessionScan[]>([]);
+  const [state, dispatch] = useReducer(bottleScanReducer, initialBottleScanState);
+  const { phase, error, wine, payload, manualCode, searchQuery, searchResults, searching, section, binLocation, confirming, session } = state;
 
   useEffect(() => {
     if (typeof navigator === "undefined") return;
@@ -180,22 +141,22 @@ export default function ScanBottlePage() {
         stream.getTracks().forEach((t) => t.stop());
       })
       .catch(() => {
-        setPhase((p) => (p === "scanning" ? "no-camera" : p));
+        dispatch({ type: "camera-unavailable" });
       });
   }, []);
 
   const handleDecode = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    setPayload(trimmed);
+    dispatch({ type: "decode-started", payload: trimmed });
     try {
       const matched = await lookupWine(trimmed);
-      setWine(matched);
-      setPhase("matched");
-      setError(null);
+      dispatch({ type: "lookup-succeeded", wine: matched });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Lookup failed.");
-      setPhase("error");
+      dispatch({
+        type: "lookup-failed",
+        message: err instanceof Error ? err.message : "Lookup failed.",
+      });
     }
   }, []);
 
@@ -211,39 +172,28 @@ export default function ScanBottlePage() {
   );
 
   const handleCorrectSearch = useCallback(async (q: string) => {
-    setSearchQuery(q);
+    dispatch({ type: "correct-search-query-changed", query: q });
     if (q.length < 2) {
-      setSearchResults([]);
       return;
     }
-    setSearching(true);
+    dispatch({ type: "correct-search-started" });
     const results = await searchWines(q);
-    setSearchResults(results);
-    setSearching(false);
+    dispatch({ type: "correct-search-completed", results });
   }, []);
 
   const handleCorrectSelect = useCallback((w: MatchedWine) => {
-    setWine(w);
-    setPhase("matched");
-    setError(null);
+    dispatch({ type: "correct-wine-selected", wine: w });
   }, []);
 
   const handleScanAgain = useCallback(() => {
-    setPhase("scanning");
-    setError(null);
-    setWine(null);
-    setPayload(null);
-    setManualCode("");
-    setSection("");
-    setBinLocation("");
-    setConfirming(false);
+    dispatch({ type: "scan-again" });
   }, []);
 
   const handleConfirmLocation = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault();
       if (!wine || !section.trim() || !binLocation.trim()) return;
-      setConfirming(true);
+      dispatch({ type: "location-confirm-started" });
       try {
         const res = await fetch("/api/scan-bottle/confirm", {
           method: "POST",
@@ -263,35 +213,26 @@ export default function ScanBottlePage() {
           );
         }
         // BND-112: add confirmed bottle to session
-        setSession((prev) => [
-          ...prev,
-          { wine, section: section.trim(), binLocation: binLocation.trim() },
-        ]);
-        setPhase("confirmed");
+        dispatch({
+          type: "location-confirmed",
+          scan: { wine, section: section.trim(), binLocation: binLocation.trim() },
+        });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to record bottle location.");
-        setPhase("error");
-      } finally {
-        setConfirming(false);
+        dispatch({
+          type: "location-confirm-failed",
+          message: err instanceof Error ? err.message : "Failed to record bottle location.",
+        });
       }
     },
     [wine, section, binLocation],
   );
 
   const handleEndSession = useCallback(() => {
-    setPhase("summary");
+    dispatch({ type: "session-ended" });
   }, []);
 
   const handleNewSession = useCallback(() => {
-    setSession([]);
-    setPhase("scanning");
-    setError(null);
-    setWine(null);
-    setPayload(null);
-    setManualCode("");
-    setSection("");
-    setBinLocation("");
-    setConfirming(false);
+    dispatch({ type: "new-session-started" });
   }, []);
 
   const showSessionBadge = session.length > 0;
@@ -328,485 +269,79 @@ export default function ScanBottlePage() {
 
       {/* BND-112: Summary view showing all scanned bottles */}
       {phase === "summary" && (
-        <div className="space-y-md">
-          <div className="rounded-card card-surface p-md md:p-lg">
-            <h2 className="font-serif text-[18px] text-ink">Session summary</h2>
-            <p className="mt-xs text-[13px] text-grey">
-              {session.length} bottle{session.length !== 1 ? "s" : ""} scanned
-              in this session.
-            </p>
-          </div>
-
-          {session.length > 0 ? (
-            <ul className="divide-y divide-rule rounded-card card-surface">
-              {session.map((scan, i) => (
-                <li key={i} className="px-md py-md">
-                  <div className="flex items-start justify-between gap-sm">
-                    <div className="min-w-0">
-                      <p className="font-serif text-[17px] font-medium text-ink truncate">
-                        {scan.wine.producer}
-                      </p>
-                      <p className="text-[14px] text-grey truncate">
-                        {scan.wine.name}
-                        {scan.wine.vintage ? " (" + scan.wine.vintage + ")" : ""}
-                      </p>
-                    </div>
-                    <span className="shrink-0 rounded-pill bg-wash px-sm py-2xs text-[11px] font-medium text-grey tabular">
-                      #{i + 1}
-                    </span>
-                  </div>
-                  <p className="mt-xs inline-flex items-center gap-xs text-[12px] text-grey">
-                    <MapPin className="h-3 w-3" strokeWidth={2} />
-                    {scan.section}{" "}
-                    <span aria-hidden>&middot;</span>{" "}
-                    {scan.binLocation}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="flex flex-col items-center gap-md rounded-card card-surface px-lg py-2xl text-center">
-              <p className="text-[14px] text-grey">
-                No bottles were scanned in this session.
-              </p>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={handleNewSession}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
-          >
-            <Camera className="h-4 w-4" strokeWidth={2} />
-            Start new session
-          </button>
-        </div>
+        <SummaryView session={session} onNewSession={handleNewSession} />
       )}
 
       {phase === "scanning" && (
-        <div className="space-y-md">
-          <div className="relative overflow-hidden rounded-card border-2 border-rule bg-black">
-            <div className="relative pb-[75%]">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="h-48 w-48 rounded-lg border-2 border-accent/60 md:h-56 md:w-56" />
-              </div>
-            </div>
-            <div className="absolute bottom-md left-1/2 -translate-x-1/2">
-              {/* Over live camera video — a fixed dark media scrim, not a
-                  themed surface (dark-mode ink is champagne). */}
-              <span className="inline-flex items-center gap-sm rounded-pill bg-black/70 px-md py-sm text-[13px] font-medium text-white backdrop-blur-sm">
-                <ScanLine className="h-4 w-4 animate-pulse" strokeWidth={2} />
-                Point camera at QR code
-              </span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setPhase("manual");
-              setError(null);
-            }}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-wash focus-ring"
-          >
-            <Keyboard className="h-4 w-4" strokeWidth={2} />
-            Enter code manually
-          </button>
-        </div>
+        <ScanningView
+          videoRef={videoRef}
+          onEnterCode={() => dispatch({ type: "manual-entry-opened" })}
+        />
       )}
 
       {phase === "no-camera" && (
-        <div className="space-y-md">
-          <div className="flex flex-col items-center gap-md rounded-card card-surface px-lg py-2xl text-center">
-            <div className="rounded-full bg-wash p-lg">
-              <Camera className="h-8 w-8 text-grey" strokeWidth={1.5} />
-            </div>
-            <div>
-              <h2 className="font-serif text-[22px] text-ink">
-                Camera not available
-              </h2>
-              <p className="mt-xs text-[13px] text-grey">
-                Enter the bottle&rsquo;s wine code manually.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setPhase("manual")}
-              className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
-            >
-              <Keyboard className="h-4 w-4" strokeWidth={2} />
-              Enter code
-            </button>
-          </div>
-        </div>
+        <NoCameraView onEnterCode={() => dispatch({ type: "no-camera-manual-entry" })} />
       )}
 
       {phase === "manual" && (
-        <div className="space-y-md">
-          <form onSubmit={handleManualSubmit} className="space-y-md">
-            <div className="rounded-card card-surface p-md md:p-lg">
-              <label
-                htmlFor="manual-code"
-                className="mb-xs block text-caption font-medium uppercase tracking-[0.18em] text-grey"
-              >
-                Wine ID or QR code
-              </label>
-              <input
-                id="manual-code"
-                type="text"
-                inputMode="text"
-                autoComplete="off"
-                autoFocus
-                value={manualCode}
-                onChange={(e) => setManualCode(e.target.value)}
-                placeholder="Enter the code from the bottle label"
-                className="w-full rounded-pill border border-rule bg-surface px-md py-sm font-mono text-[14px] text-ink placeholder:text-grey focus:border-accent focus-ring"
-              />
-              <p className="mt-xs text-[12px] text-grey">
-                The code is printed below the QR code on the bottle label.
-              </p>
-            </div>
-            <button
-              type="submit"
-              disabled={!manualCode.trim()}
-              className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-50"
-            >
-              <Search className="h-4 w-4" strokeWidth={2} />
-              Look up wine
-            </button>
-          </form>
-          <button
-            type="button"
-            onClick={() => {
-              setPhase("scanning");
-              setError(null);
-            }}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-wash focus-ring"
-          >
-            <Camera className="h-4 w-4" strokeWidth={2} />
-            Use camera instead
-          </button>
-        </div>
+        <ManualView
+          manualCode={manualCode}
+          onManualCodeChange={(value) => dispatch({ type: "manual-code-changed", value })}
+          onSubmit={handleManualSubmit}
+          onUseCamera={() => dispatch({ type: "camera-entry-opened" })}
+        />
       )}
 
       {phase === "matched" && wine && (
-        <div className="space-y-md">
-          <div className="rounded-card card-surface p-md md:p-lg">
-            <div className="mb-md flex items-start justify-between">
-              <span className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
-                Matched wine
-              </span>
-              <span className="rounded-pill bg-ready-wash px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide text-ready-ink">
-                Match found
-              </span>
-            </div>
-            <h2 className="font-serif text-[20px] text-ink md:text-[22px]">
-              {wine.producer}
-            </h2>
-            <p className="mt-xs font-serif text-[18px] text-ink md:text-[20px]">
-              {wine.name}
-            </p>
-            <dl className="mt-md grid grid-cols-2 gap-x-md gap-y-sm text-[13px]">
-              {wine.vintage && (
-                <>
-                  <dt className="text-grey">Vintage</dt>
-                  <dd className="tabular text-ink">{wine.vintage}</dd>
-                </>
-              )}
-              {wine.varietal && (
-                <>
-                  <dt className="text-grey">Varietal</dt>
-                  <dd className="text-ink">{wine.varietal}</dd>
-                </>
-              )}
-              {wine.region && (
-                <>
-                  <dt className="text-grey">Region</dt>
-                  <dd className="text-ink">{wine.region}</dd>
-                </>
-              )}
-              {wine.country && (
-                <>
-                  <dt className="text-grey">Country</dt>
-                  <dd className="text-ink">{wine.country}</dd>
-                </>
-              )}
-            </dl>
-          </div>
-          <div className="grid grid-cols-2 gap-sm">
-            <button
-              type="button"
-              onClick={() => {
-                setPhase("correcting");
-                setSearchQuery("");
-                setSearchResults([]);
-              }}
-              className="flex h-[44px] items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-wash focus-ring"
-            >
-              <X className="h-4 w-4" strokeWidth={2} />
-              Correct
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPhase("location");
-                setSection("");
-                setBinLocation("");
-              }}
-              className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
-            >
-              <Check className="h-4 w-4" strokeWidth={2} />
-              Confirm
-            </button>
-          </div>
-        </div>
+        <MatchedView
+          wine={wine}
+          onCorrect={() => dispatch({ type: "correction-started" })}
+          onConfirm={() => dispatch({ type: "location-entry-started" })}
+        />
       )}
 
       {phase === "correcting" && (
-        <div className="space-y-md">
-          <div className="rounded-card card-surface p-md md:p-lg">
-            <label
-              htmlFor="correct-search"
-              className="mb-xs block text-caption font-medium uppercase tracking-[0.18em] text-grey"
-            >
-              Search for the correct wine
-            </label>
-            <input
-              id="correct-search"
-              type="search"
-              inputMode="search"
-              autoComplete="off"
-              autoFocus
-              value={searchQuery}
-              onChange={(e) => handleCorrectSearch(e.target.value)}
-              placeholder="Search by producer, name, or vintage..."
-              className="w-full rounded-pill border border-rule bg-surface px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-accent focus-ring"
-            />
-          </div>
-
-          {searching && (
-            <p className="px-md text-[13px] text-grey">Searching...</p>
-          )}
-
-          {!searching && searchResults.length > 0 && (
-            <ul className="divide-y divide-rule rounded-card card-surface">
-              {searchResults.map((w) => (
-                <li key={w.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleCorrectSelect(w)}
-                    className="flex w-full items-start gap-md px-md py-md text-left hover:bg-wash focus-ring"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-serif text-[17px] font-medium text-ink">
-                        {w.producer}
-                      </p>
-                      <p className="truncate text-[14px] text-grey">
-                        {w.name}
-                        {w.vintage ? ", " + w.vintage : ""}
-                      </p>
-                    </div>
-                    <span className="mt-0.5 shrink-0 text-[11px] text-grey">
-                      {w.varietal}
-                      {w.varietal && w.region ? " . " : ""}
-                      {w.region}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {!searching &&
-            searchQuery.length >= 2 &&
-            searchResults.length === 0 && (
-              <p className="px-md text-[13px] text-grey">
-                No wines found for &ldquo;
-                {searchQuery}
-                &rdquo;.
-              </p>
-            )}
-
-          <button
-            type="button"
-            onClick={() => setPhase("matched")}
-            className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-wash focus-ring"
-          >
-            <X className="h-4 w-4" strokeWidth={2} />
-            Cancel
-          </button>
-        </div>
+        <CorrectingView
+          searchQuery={searchQuery}
+          onSearchChange={handleCorrectSearch}
+          searching={searching}
+          searchResults={searchResults}
+          onSelect={handleCorrectSelect}
+          onCancel={() => dispatch({ type: "correction-cancelled" })}
+        />
       )}
 
       {phase === "location" && wine && (
-        <div className="space-y-md">
-          <div className="rounded-card card-surface p-md md:p-lg">
-            <div className="mb-md flex items-start justify-between">
-              <span className="text-caption font-medium uppercase tracking-[0.18em] text-grey">
-                Bottle location
-              </span>
-              <span className="rounded-pill bg-surface-sunken px-sm py-2xs text-[12px] font-medium text-ink-soft">
-                {wine.producer} {wine.name}
-                {wine.vintage ? " " + wine.vintage : ""}
-              </span>
-            </div>
-            <form onSubmit={handleConfirmLocation} className="space-y-md">
-              <div>
-                <label
-                  htmlFor="bottle-section"
-                  className="mb-xs block text-[13px] font-medium text-ink"
-                >
-                  Section
-                </label>
-                <input
-                  id="bottle-section"
-                  type="text"
-                  autoComplete="off"
-                  autoFocus
-                  value={section}
-                  onChange={(e) => setSection(e.target.value)}
-                  placeholder='e.g. "Red Room", "Main Cellar"'
-                  className="w-full rounded-pill border border-rule bg-surface px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-accent focus-ring"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="bottle-bin"
-                  className="mb-xs block text-[13px] font-medium text-ink"
-                >
-                  Bin location
-                </label>
-                <input
-                  id="bottle-bin"
-                  type="text"
-                  autoComplete="off"
-                  value={binLocation}
-                  onChange={(e) => setBinLocation(e.target.value)}
-                  placeholder='e.g. "A-12", "Shelf 3, Row 5"'
-                  className="w-full rounded-pill border border-rule bg-surface px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-accent focus-ring"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-sm">
-                <button
-                  type="button"
-                  onClick={() => setPhase("matched")}
-                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-wash focus-ring"
-                >
-                  <X className="h-4 w-4" strokeWidth={2} />
-                  Back
-                </button>
-                <button
-                  type="submit"
-                  disabled={!section.trim() || !binLocation.trim() || confirming}
-                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-50"
-                >
-                  <Check className="h-4 w-4" strokeWidth={2} />
-                  {confirming ? "Saving..." : "Save location"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <LocationView
+          wine={wine}
+          section={section}
+          binLocation={binLocation}
+          onSectionChange={(value) => dispatch({ type: "section-changed", value })}
+          onBinLocationChange={(value) => dispatch({ type: "bin-location-changed", value })}
+          onSubmit={handleConfirmLocation}
+          onBack={() => dispatch({ type: "correction-cancelled" })}
+          confirming={confirming}
+        />
       )}
 
       {phase === "confirmed" && wine && (
-        <div className="space-y-md">
-          <div className="flex flex-col items-center gap-lg rounded-card shadow-card border border-rule bg-ready-wash/40 px-lg py-2xl text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-ready-ink">
-              <Check className="h-7 w-7 text-ready-wash" strokeWidth={2.5} />
-            </div>
-            <div>
-              <h2 className="font-serif text-[22px] text-ink">
-                Bottle confirmed
-              </h2>
-              <p className="mt-xs font-serif text-[17px] font-medium text-ink">
-                {wine.producer} {wine.name}
-                {wine.vintage ? " (" + wine.vintage + ")" : ""}
-              </p>
-              {(section || binLocation) && (
-                <p className="mt-sm inline-flex items-center gap-xs text-[12px] text-grey">
-                  <MapPin className="h-3 w-3" strokeWidth={2} />
-                  {section && <span>{section}</span>}
-                  {section && binLocation && <span>&middot;</span>}
-                  {binLocation && <span>{binLocation}</span>}
-                </p>
-              )}
-            </div>
-            <div className="flex w-full flex-col gap-sm">
-              <button
-                type="button"
-                onClick={handleScanAgain}
-                className="flex h-[44px] items-center justify-center gap-sm rounded-pill bg-primary px-xl text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
-              >
-                <Camera className="h-4 w-4" strokeWidth={2} />
-                Scan another bottle
-              </button>
-              {session.length >= 1 && (
-                <button
-                  type="button"
-                  onClick={handleEndSession}
-                  className="flex h-[44px] items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-wash focus-ring"
-                >
-                  <List className="h-4 w-4" strokeWidth={2} />
-                  End session (<span className="tabular">{session.length}</span> scanned)
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <ConfirmedView
+          wine={wine}
+          section={section}
+          binLocation={binLocation}
+          sessionCount={session.length}
+          onScanAgain={handleScanAgain}
+          onEndSession={handleEndSession}
+        />
       )}
 
       {phase === "error" && (
-        <div className="space-y-md">
-          <div className="flex flex-col items-center gap-md rounded-card card-surface px-lg py-2xl text-center">
-            <div className="rounded-full bg-primary p-lg">
-              <AlertTriangle
-                className="h-8 w-8 text-white"
-                strokeWidth={1.5}
-              />
-            </div>
-            <div>
-              <h2 className="font-serif text-[22px] text-ink">
-                Lookup failed
-              </h2>
-              <p className="mt-xs text-[13px] text-grey">{error}</p>
-              {payload && (
-                <p className="mt-sm font-mono text-[12px] text-grey">
-                  Code: {payload}
-                </p>
-              )}
-            </div>
-            <div className="flex w-full flex-col gap-sm">
-              <button
-                type="button"
-                onClick={handleScanAgain}
-                className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
-              >
-                <Camera className="h-4 w-4" strokeWidth={2} />
-                Try again
-              </button>
-              {!payload && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPhase("manual");
-                    setError(null);
-                  }}
-                  className="flex h-[44px] w-full items-center justify-center gap-sm rounded-pill border border-edge bg-surface text-[14px] font-medium text-ink hover:bg-wash focus-ring"
-                >
-                  <Keyboard className="h-4 w-4" strokeWidth={2} />
-                  Enter code manually
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <ErrorView
+          error={error}
+          payload={payload}
+          onTryAgain={handleScanAgain}
+          onManualEntry={() => dispatch({ type: "manual-entry-opened" })}
+        />
       )}
     </div>
   );

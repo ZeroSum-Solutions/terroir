@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ChevronDown, RotateCcw, Clock, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { metricHref } from "./metric-href";
+import type { SnoozedRow } from "@/domains/cellar/snoozed-alerts";
 
 /**
  * BND-040 follow-up — SnoozedAlertsCard
@@ -20,14 +21,7 @@ import { metricHref } from "./metric-href";
  * closes the gap.
  */
 
-export type SnoozedRow = {
-  wine_id: string;
-  name: string;
-  producer: string;
-  vintage: number | null;
-  drinkWindowSnoozedUntil: string | null;
-  pricingDismissedUntil: string | null;
-};
+export type { SnoozedRow };
 
 export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
   const router = useRouter();

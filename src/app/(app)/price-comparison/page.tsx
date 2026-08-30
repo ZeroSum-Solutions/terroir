@@ -1,80 +1,26 @@
 import type { Metadata } from "next";
 import { getAuthContext } from "@/lib/auth-context";
-import { ArrowDown, ArrowUp, DollarSign, ScanLine, TrendingDown, TrendingUp } from "lucide-react";
+import { DollarSign, ScanLine } from "lucide-react";
 import Link from "next/link";
-import { OverpaidFlagButton } from "@/components/overpaid-flag-button";
 import { RouteDataEmpty } from "@/components/route-data-state";
 import { SortControls } from "./sort-controls";
 import {
   ExportCsvButton,
   type PriceComparisonCsvRow,
 } from "./export-csv-button";
+import { ComparablePriceCards } from "./comparable-price-cards";
+import { ComparablePriceTable } from "./comparable-price-table";
+import { PriceSummaryCard } from "./price-summary-card";
+import { SingleSourcePriceCards } from "./single-source-price-cards";
+import { SingleSourcePriceTable } from "./single-source-price-table";
+import {
+  latestPriceByDistributor,
+  pickMostRecent,
+  type PriceEntry,
+  type WineComparison,
+} from "./price-comparison-helpers";
 
 export const metadata: Metadata = { title: "Price comparison" };
-
-const VARIANCE_HIGHLIGHT_THRESHOLD =
-  parseFloat(process.env.PRICE_VARIANCE_HIGHLIGHT_THRESHOLD ?? "0.10") || 0.10;
-
-function formatPrice(n: number) {
-  return "$" + n.toFixed(2);
-}
-
-function formatPct(n: number) {
-  return (n * 100).toFixed(0) + "%";
-}
-
-function formatInvoiceDate(iso: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  const now = new Date();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "numeric" }),
-  });
-}
-
-type PriceEntry = {
-  distributor: string;
-  unitCost: number;
-  quantity: number;
-  invoiceDate: string | null;
-};
-
-function pickMostRecent(prices: PriceEntry[]): PriceEntry | undefined {
-  if (prices.length === 0) return undefined;
-  let best: PriceEntry | undefined;
-  for (const p of prices) {
-    if (!p.invoiceDate) continue;
-    if (!best || (best.invoiceDate && p.invoiceDate > best.invoiceDate)) {
-      best = p;
-    }
-  }
-  return best ?? prices[prices.length - 1];
-}
-
-type WineComparison = {
-  wine: {
-    id: string;
-    name: string;
-    producer: string;
-    vintage: number | null;
-    varietal: string | null;
-  };
-  prices: PriceEntry[];
-  cheapest: number;
-  mostExpensive: number;
-  spread: number;
-  distributorCount: number;
-  potentialSavings: number;
-  // BND-138
-  lastPaid: number;
-  marketPrice: number | null;
-  variancePct: number | null;
-  flagged: boolean;
-};
 
 type SearchParams = Promise<{
   sort?: string | string[];
@@ -254,20 +200,7 @@ export default async function PriceComparisonPage({
   // Build CSV rows
   const csvRows: PriceComparisonCsvRow[] = [];
   for (const comp of [...comparable, ...singleSource]) {
-    const byDist = new Map<string, PriceEntry>();
-    for (const p of comp.prices) {
-      const existing = byDist.get(p.distributor);
-      if (
-        !existing ||
-        (p.invoiceDate &&
-          (!existing.invoiceDate || p.invoiceDate > existing.invoiceDate))
-      ) {
-        byDist.set(p.distributor, p);
-      }
-    }
-    const distPrices = [...byDist.values()].sort(
-      (a, b) => a.unitCost - b.unitCost,
-    );
+    const distPrices: PriceEntry[] = latestPriceByDistributor(comp.prices);
     for (const price of distPrices) {
       csvRows.push({
         producer: comp.wine.producer,
@@ -294,7 +227,7 @@ export default async function PriceComparisonPage({
           <h1 className="font-serif text-heading-sm text-ink">
             Distributor Pricing
           </h1>
-          <p className="mt-xs text-[15px] text-grey">
+          <p className="mt-xs text-body text-grey">
             Compare prices across suppliers
           </p>
         </header>
@@ -305,7 +238,7 @@ export default async function PriceComparisonPage({
           action={
             <Link
               href="/scan"
-              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
+              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-control font-medium text-seal-ink hover:bg-primary-hover focus-ring"
             >
               <ScanLine className="h-4 w-4" strokeWidth={2} />
               Go to scanner
@@ -324,7 +257,7 @@ export default async function PriceComparisonPage({
             <h1 className="font-serif text-heading-sm text-ink">
               Distributor Pricing
             </h1>
-            <p className="mt-xs text-[15px] text-grey">
+            <p className="mt-xs text-body text-grey">
               Compare prices across suppliers
             </p>
           </div>
@@ -336,535 +269,43 @@ export default async function PriceComparisonPage({
         <div
           role="status"
           aria-live="polite"
-          className="mb-lg rounded-card card-surface px-md py-sm text-[13px] text-grey"
+          className="mb-lg rounded-card card-surface px-md py-sm text-body-sm text-grey"
         >
           Market benchmarks are temporarily unavailable. Distributor pricing
           remains available.
         </div>
       )}
 
-      {/* Summary card */}
-      {comparable.length > 0 && (
-        <div className="mb-lg rounded-card card-surface p-lg">
-          <div className="flex flex-wrap items-baseline gap-lg">
-            <div>
-              <div className="text-caption font-medium uppercase text-grey">
-                Wines with multiple suppliers
-              </div>
-              <div className="mt-xs font-mono tabular text-[20px] font-medium text-ink">
-                {comparable.length}
-              </div>
-            </div>
-            {totalSavings > 0 && (
-              <div>
-                <div className="text-caption font-medium uppercase text-grey">
-                  Potential savings
-                </div>
-                <div className="mt-xs font-mono tabular text-[20px] font-medium text-ready-ink">
-                  {formatPrice(totalSavings)}
-                </div>
-              </div>
-            )}
-            {comparable.filter((c) => c.variancePct != null && c.variancePct > 0).length > 0 && (
-              <div>
-                <div className="text-caption font-medium uppercase text-grey">
-                  Overpaid vs market
-                </div>
-                <div className="mt-xs font-mono tabular text-[20px] font-medium text-risk-ink">
-                  {comparable.filter((c) => c.variancePct != null && c.variancePct > 0).length}
-                </div>
-              </div>
-            )}
-            {comparable[0] && comparable[0].potentialSavings > 0 && (
-              <Link
-                href={`/cellar?wine=${comparable[0].wine.id}`}
-                aria-label={`View top savings opportunity: ${comparable[0].wine.producer} ${comparable[0].wine.name} in cellar`}
-                className="group min-w-0 max-w-full rounded-md focus-ring"
-              >
-                <div className="text-caption font-medium uppercase text-grey">
-                  Top opportunity
-                </div>
-                <div className="mt-xs font-mono tabular text-[20px] font-medium text-ready-ink group-hover:text-accent">
-                  Save {formatPrice(comparable[0].potentialSavings)}
-                </div>
-                <div className="mt-2xs truncate text-[12px] text-grey group-hover:text-accent">
-                  {comparable[0].wine.producer} · {comparable[0].wine.name}
-                  {comparable[0].wine.vintage
-                    ? ` ${comparable[0].wine.vintage}`
-                    : ""}
-                </div>
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+      <PriceSummaryCard comparable={comparable} totalSavings={totalSavings} />
 
       {/* Comparable wines — multi-distributor */}
       {comparable.length > 0 && (
         <div className="mb-xl md:mb-3xl">
           <div className="mb-md flex items-center justify-between">
-            <h2 className="text-[15px] font-semibold text-ink">Price comparisons</h2>
+            <h2 className="text-body font-semibold text-ink">Price comparisons</h2>
             <SortControls current={{ field: sf, dir: so }} />
           </div>
 
-          {/* Desktop table */}
-          <div className="hidden md:block overflow-hidden rounded-card card-surface">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="bg-wash text-caption font-medium uppercase text-grey">
-                  <th scope="col" className="px-md py-sm text-left font-medium">Wine</th>
-                  <th scope="col" className="px-md py-sm text-left font-medium">Distributor</th>
-                  <th scope="col" className="px-md py-sm text-right font-medium">Unit cost</th>
-                  <th scope="col" className="px-md py-sm text-right font-medium">Qty</th>
-                  <th scope="col" className="px-md py-sm text-right font-medium">Spread</th>
-                  <th scope="col" className="px-md py-sm text-right font-medium">Savings</th>
-                  <th scope="col" className="px-md py-sm text-right font-medium">Last paid</th>
-                  <th scope="col" className="px-md py-sm text-right font-medium">Market</th>
-                  <th scope="col" className="px-md py-sm text-right font-medium">Variance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleComparable.map((comp) => {
-                  const byDist = new Map<string, PriceEntry>();
-                  for (const p of comp.prices) {
-                    const existing = byDist.get(p.distributor);
-                    if (
-                      !existing ||
-                      (p.invoiceDate &&
-                        (!existing.invoiceDate ||
-                          p.invoiceDate > existing.invoiceDate))
-                    ) {
-                      byDist.set(p.distributor, p);
-                    }
-                  }
-                  const distPrices = [...byDist.values()].sort(
-                    (a, b) => a.unitCost - b.unitCost,
-                  );
-
-                  return distPrices.map((price, i) => (
-                    <tr
-                      key={`${comp.wine.id}-${price.distributor}-${i}`}
-                      className={`border-t border-dashed border-rule ${
-                        price.unitCost === comp.cheapest
-                          ? "bg-ready-wash/40"
-                          : comp.variancePct != null && comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD
-                            ? "bg-risk-wash/25"
-                            : comp.variancePct != null && comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD
-                              ? "bg-ready-wash/15"
-                              : ""
-                      }`}
-                    >
-                      {i === 0 ? (
-                        <td className="px-md py-sm align-top" rowSpan={distPrices.length}>
-                          <div className="flex items-start gap-xs">
-                            <Link
-                              href={`/cellar?wine=${comp.wine.id}`}
-                              aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                              className="group block min-w-0 flex-1 rounded-md focus-ring"
-                            >
-                              <div className="font-serif text-[17px] font-medium text-ink group-hover:text-accent">
-                                {comp.wine.producer}
-                              </div>
-                              <div className="text-grey group-hover:text-accent">
-                                {comp.wine.name}
-                                {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
-                              </div>
-                            </Link>
-                            <OverpaidFlagButton wineId={comp.wine.id} flagged={comp.flagged} />
-                          </div>
-                        </td>
-                      ) : null}
-                      <td className="px-md py-sm text-ink">
-                        <div>{price.distributor}</div>
-                        {formatInvoiceDate(price.invoiceDate) && (
-                          <div className="mt-2xs font-mono text-[11px] text-grey">
-                            {formatInvoiceDate(price.invoiceDate)}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-md py-sm text-right font-mono tabular text-ink">
-                        {formatPrice(price.unitCost)}
-                        {price.unitCost === comp.cheapest && distPrices.length > 1 && (
-                          <span className="ml-xs inline-flex items-center text-ready-ink">
-                            <ArrowDown className="h-3 w-3" strokeWidth={2.5} />
-                          </span>
-                        )}
-                        {price.unitCost === comp.mostExpensive && distPrices.length > 1 && (
-                          <span className="ml-xs inline-flex items-center text-risk-ink">
-                            <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-md py-sm text-right font-mono tabular text-grey">
-                        {price.quantity}
-                      </td>
-                      {i === 0 ? (
-                        <td className="px-md py-sm text-right align-top" rowSpan={distPrices.length}>
-                          {comp.spread >= 0.1 ? (
-                            <span className="inline-flex items-center gap-xs rounded-pill bg-risk-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-risk-ink">
-                              {Math.round(comp.spread * 100)}% spread
-                            </span>
-                          ) : (
-                            <span className="font-mono tabular text-[12px] text-grey">
-                              {Math.round(comp.spread * 100)}%
-                            </span>
-                          )}
-                        </td>
-                      ) : null}
-                      {i === 0 ? (
-                        <td className="px-md py-sm text-right align-top font-mono tabular text-ready-ink" rowSpan={distPrices.length}>
-                          {comp.potentialSavings > 0
-                            ? formatPrice(comp.potentialSavings)
-                            : <span className="text-grey">—</span>}
-                        </td>
-                      ) : null}
-                      {/* BND-138: Last Paid */}
-                      {i === 0 ? (
-                        <td className="px-md py-sm text-right align-top font-mono tabular text-ink" rowSpan={distPrices.length}>
-                          {comp.lastPaid > 0
-                            ? formatPrice(comp.lastPaid)
-                            : <span className="text-grey">—</span>}
-                        </td>
-                      ) : null}
-                      {/* BND-138: Market Price */}
-                      {i === 0 ? (
-                        <td className="px-md py-sm text-right align-top font-mono tabular text-ink" rowSpan={distPrices.length}>
-                          {comp.marketPrice != null
-                            ? formatPrice(comp.marketPrice)
-                            : <span className="text-grey">—</span>}
-                        </td>
-                      ) : null}
-                      {/* BND-138: Variance */}
-                      {i === 0 ? (
-                        <td className="px-md py-sm text-right align-top font-mono" rowSpan={distPrices.length}>
-                          {comp.variancePct != null ? (
-                            comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD ? (
-                              <span className="inline-flex items-center gap-xs rounded-pill bg-risk-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-risk-ink">
-                                <TrendingUp className="h-3 w-3" strokeWidth={2.5} />
-                                +{formatPct(comp.variancePct)}
-                              </span>
-                            ) : comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD ? (
-                              <span className="inline-flex items-center gap-xs rounded-pill bg-ready-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-ready-ink">
-                                <TrendingDown className="h-3 w-3" strokeWidth={2.5} />
-                                {formatPct(comp.variancePct)}
-                              </span>
-                            ) : (
-                              <span className="tabular text-grey">{formatPct(comp.variancePct)}</span>
-                            )
-                          ) : (
-                            <span className="text-grey">—</span>
-                          )}
-                        </td>
-                      ) : null}
-                    </tr>
-                  ));
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile cards */}
-          <div className="flex flex-col gap-md md:hidden">
-            {visibleComparable.map((comp) => {
-              const byDist = new Map<string, PriceEntry>();
-              for (const p of comp.prices) {
-                const existing = byDist.get(p.distributor);
-                if (
-                  !existing ||
-                  (p.invoiceDate &&
-                    (!existing.invoiceDate ||
-                      p.invoiceDate > existing.invoiceDate))
-                ) {
-                  byDist.set(p.distributor, p);
-                }
-              }
-              const distPrices = [...byDist.values()].sort(
-                (a, b) => a.unitCost - b.unitCost,
-              );
-
-              return (
-                <div
-                  key={comp.wine.id}
-                  className={`rounded-card p-md ${
-                    comp.variancePct != null && comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD
-                      ? "border border-risk-ink/30 bg-risk-wash/20"
-                      : comp.variancePct != null && comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD
-                        ? "border border-ready/30 bg-ready-wash/10"
-                        : "card-surface"
-                  }`}
-                >
-                  <div className="mb-sm flex items-start justify-between">
-                    <div className="flex items-start gap-xs min-w-0 flex-1">
-                      <Link
-                        href={`/cellar?wine=${comp.wine.id}`}
-                        aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                        className="group min-w-0 flex-1 rounded-md focus-ring"
-                      >
-                        <div className="font-serif text-[17px] font-medium text-ink group-hover:text-accent">
-                          {comp.wine.name}
-                          {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
-                        </div>
-                        <div className="text-[13px] text-grey group-hover:text-accent">
-                          {comp.wine.producer}
-                        </div>
-                      </Link>
-                      <OverpaidFlagButton wineId={comp.wine.id} flagged={comp.flagged} />
-                    </div>
-                    <div className="flex flex-col items-end gap-xs">
-                      {comp.spread >= 0.1 && (
-                        <span className="inline-flex items-center gap-xs rounded-pill bg-risk-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-risk-ink">
-                          {Math.round(comp.spread * 100)}%
-                        </span>
-                      )}
-                      {comp.potentialSavings > 0 && (
-                        <span className="font-mono tabular text-[11px] font-medium text-ready-ink">
-                          Save {formatPrice(comp.potentialSavings)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* BND-138: Market comparison row */}
-                  <div className="mb-sm flex items-center justify-between rounded-md bg-wash px-sm py-sm">
-                    <span className="text-caption font-medium uppercase text-grey">
-                      Last paid
-                    </span>
-                    <span className="font-mono text-[14px] font-medium text-ink tabular-nums">
-                      {comp.lastPaid > 0 ? formatPrice(comp.lastPaid) : "—"}
-                    </span>
-                    {comp.marketPrice != null && (
-                      <>
-                        <span className="mx-xs text-grey">vs</span>
-                        <span className="font-mono text-[14px] font-medium text-grey tabular-nums">
-                          {formatPrice(comp.marketPrice)}
-                        </span>
-                        {comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD && (
-                          <span
-                            className={`ml-sm rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide ${
-                              comp.variancePct > 0
-                                ? "bg-risk-wash text-risk-ink"
-                                : "bg-ready-wash text-ready-ink"
-                            }`}
-                          >
-                            {comp.variancePct > 0 ? "+" : ""}
-                            {formatPct(comp.variancePct)}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-xs">
-                    {distPrices.map((price) => (
-                      <div
-                        key={price.distributor}
-                        className={`flex items-center justify-between rounded-pill px-sm py-xs ${
-                          price.unitCost === comp.cheapest
-                            ? "bg-ready-wash/40"
-                            : ""
-                        }`}
-                      >
-                        <span className="min-w-0 text-[13px] text-ink">
-                          <span className="block truncate">{price.distributor}</span>
-                          {formatInvoiceDate(price.invoiceDate) && (
-                            <span className="mt-2xs block font-mono text-[11px] text-grey">
-                              {formatInvoiceDate(price.invoiceDate)}
-                            </span>
-                          )}
-                        </span>
-                        <span className="font-mono tabular text-[13px] font-medium text-ink">
-                          {formatPrice(price.unitCost)}
-                          {price.unitCost === comp.cheapest && distPrices.length > 1 && (
-                            <ArrowDown className="ml-xs inline h-3 w-3 text-ready-ink" strokeWidth={2.5} />
-                          )}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <ComparablePriceTable wines={visibleComparable} />
+          <ComparablePriceCards wines={visibleComparable} />
         </div>
       )}
 
       {/* Single-source wines */}
       {singleSource.length > 0 && (
         <div>
-          <h2 className="mb-md text-[15px] font-medium text-grey">
+          <h2 className="mb-md text-body font-medium text-grey">
             Single source ({singleSource.length})
           </h2>
 
-          {/* Desktop table */}
-          <div className="hidden overflow-hidden rounded-card card-surface md:block">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="bg-wash text-caption font-medium uppercase text-grey">
-                  <th scope="col" className="px-md py-sm text-left font-medium">Wine</th>
-                  <th scope="col" className="px-md py-sm text-left font-medium">Distributor</th>
-                  <th scope="col" className="px-md py-sm text-right font-medium">Unit cost</th>
-                  <th scope="col" className="px-md py-sm text-right font-medium">Market</th>
-                  <th scope="col" className="px-md py-sm text-right font-medium">Variance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleSingleSource.map((comp) => {
-                  const latest = pickMostRecent(comp.prices);
-                  const latestDate = formatInvoiceDate(latest?.invoiceDate ?? null);
-                  return (
-                    <tr
-                      key={comp.wine.id}
-                      className={`border-t border-dashed border-rule ${
-                        comp.variancePct != null && comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD
-                          ? "bg-risk-wash/25"
-                          : comp.variancePct != null && comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD
-                            ? "bg-ready-wash/15"
-                            : ""
-                      }`}
-                    >
-                      <td className="px-md py-sm">
-                        <div className="flex items-start gap-xs">
-                          <Link
-                            href={`/cellar?wine=${comp.wine.id}`}
-                            aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                            className="group inline-block min-w-0 rounded-md focus-ring"
-                          >
-                            <span className="font-serif text-[17px] font-medium text-ink group-hover:text-accent">
-                              {comp.wine.producer}
-                            </span>
-                            <span className="font-serif text-[17px] text-grey group-hover:text-accent">
-                              {" "}
-                              {comp.wine.name}
-                              {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
-                            </span>
-                          </Link>
-                          <OverpaidFlagButton wineId={comp.wine.id} flagged={comp.flagged} />
-                        </div>
-                      </td>
-                      <td className="px-md py-sm text-grey">
-                        <div>{latest?.distributor ?? "—"}</div>
-                        {latestDate && (
-                          <div className="mt-2xs font-mono text-[11px] text-grey">
-                            {latestDate}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-md py-sm text-right font-mono tabular text-ink">
-                        {latest ? formatPrice(latest.unitCost) : "—"}
-                      </td>
-                      {/* BND-138: Market Price */}
-                      <td className="px-md py-sm text-right font-mono tabular text-ink">
-                        {comp.marketPrice != null
-                          ? formatPrice(comp.marketPrice)
-                          : <span className="text-grey">—</span>}
-                      </td>
-                      {/* BND-138: Variance */}
-                      <td className="px-md py-sm text-right font-mono">
-                        {comp.variancePct != null ? (
-                          comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD ? (
-                            <span className="inline-flex items-center gap-xs rounded-pill bg-risk-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-risk-ink">
-                              +{formatPct(comp.variancePct)}
-                            </span>
-                          ) : comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD ? (
-                            <span className="inline-flex items-center gap-xs rounded-pill bg-ready-wash px-sm py-xs text-[10.5px] font-medium uppercase tracking-wide text-ready-ink">
-                              {formatPct(comp.variancePct)}
-                            </span>
-                          ) : (
-                            <span className="tabular text-grey">{formatPct(comp.variancePct)}</span>
-                          )
-                        ) : (
-                          <span className="text-grey">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile cards */}
-          <div className="flex flex-col gap-sm md:hidden">
-            {visibleSingleSource.map((comp) => {
-              const latest = pickMostRecent(comp.prices);
-              const latestDate = formatInvoiceDate(latest?.invoiceDate ?? null);
-              return (
-                <div
-                  key={comp.wine.id}
-                  className={`rounded-card p-md ${
-                    comp.variancePct != null && comp.variancePct > VARIANCE_HIGHLIGHT_THRESHOLD
-                      ? "border border-risk-ink/30 bg-risk-wash/20"
-                      : comp.variancePct != null && comp.variancePct < -VARIANCE_HIGHLIGHT_THRESHOLD
-                        ? "border border-ready/30 bg-ready-wash/10"
-                        : "card-surface"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-sm">
-                    <div className="flex items-start gap-xs min-w-0 flex-1">
-                      <Link
-                        href={`/cellar?wine=${comp.wine.id}`}
-                        aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
-                        className="group min-w-0 flex-1 rounded-md focus-ring"
-                      >
-                        <div className="font-serif text-[17px] font-medium text-ink group-hover:text-accent">
-                          {comp.wine.name}
-                          {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
-                        </div>
-                        <div className="text-[13px] text-grey group-hover:text-accent">
-                          {comp.wine.producer}
-                        </div>
-                      </Link>
-                      <OverpaidFlagButton wineId={comp.wine.id} flagged={comp.flagged} />
-                    </div>
-                    <span className="shrink-0 font-mono tabular text-[14px] font-medium text-ink">
-                      {latest ? formatPrice(latest.unitCost) : "—"}
-                    </span>
-                  </div>
-                  {/* BND-138: Market comparison for single-source mobile */}
-                  {comp.marketPrice != null && (
-                    <div className="mt-sm flex items-center justify-between border-t border-dashed border-rule pt-sm">
-                      <span className="text-caption font-medium uppercase text-grey">
-                        Market
-                      </span>
-                      <div className="flex items-center gap-sm">
-                        <span className="font-mono text-[13px] text-grey tabular-nums">
-                          {formatPrice(comp.marketPrice)}
-                        </span>
-                        {comp.variancePct != null && Math.abs(comp.variancePct) > VARIANCE_HIGHLIGHT_THRESHOLD && (
-                          <span
-                            className={`rounded-pill px-sm py-2xs text-[10.5px] font-medium uppercase tracking-wide ${
-                              comp.variancePct > 0
-                                ? "bg-risk-wash text-risk-ink"
-                                : "bg-ready-wash text-ready-ink"
-                            }`}
-                          >
-                            {comp.variancePct > 0 ? "+" : ""}
-                            {formatPct(comp.variancePct)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  <div className="mt-sm flex items-baseline justify-between border-t border-dashed border-rule pt-sm text-[13px] text-grey">
-                    <span className="min-w-0 truncate">
-                      {latest?.distributor ?? "—"}
-                    </span>
-                    {latestDate && (
-                      <span className="ml-sm shrink-0 font-mono text-[11px] text-grey">
-                        {latestDate}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <SingleSourcePriceTable wines={visibleSingleSource} />
+          <SingleSourcePriceCards wines={visibleSingleSource} />
         </div>
       )}
       {hasMoreComparisons && (
         <Link
           href={`/price-comparison?${showMoreParams.toString()}`}
-          className="mt-lg inline-flex min-h-11 w-full items-center justify-center rounded-pill border border-rule bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring"
+          className="mt-lg inline-flex min-h-11 w-full items-center justify-center rounded-pill border border-rule bg-surface px-md text-body-sm font-medium text-ink hover:bg-wash focus-ring"
         >
           Show {Math.min(25, comparisons.length - visibleComparisonCount)} more ·{" "}
           {visibleComparisonCount} of {comparisons.length}

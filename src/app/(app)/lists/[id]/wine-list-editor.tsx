@@ -3,39 +3,12 @@
 import { useCallback, useMemo, useState, useTransition, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  ChevronDown,
-  Copy,
-  Download,
-  Eye,
-  FileSpreadsheet,
-  FileText,
-  GripVertical,
-  Loader2,
-  Pencil,
-  Plus,
-  Printer,
-  Share2,
-  Trash2,
-  X,
-} from "lucide-react";
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
+import { ArrowLeft, ChevronDown, Plus, X } from "lucide-react";
+import { DndContext, closestCenter } from "@dnd-kit/core";
 import {
   SortableContext,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { cn } from "@/lib/utils";
 import { ActionDialog } from "@/components/action-dialog";
 import type { WineList } from "@/lib/wine-list/types";
 import { type Template } from "@/lib/wine-list/types";
@@ -47,6 +20,10 @@ import {
   BrandKitPanel,
   type BrandKitView,
 } from "./components/brand-kit-panel";
+import { ListActions } from "./components/list-actions";
+import { SortableSectionButton } from "./components/sortable-section-button";
+import { useSectionReorder } from "./use-section-reorder";
+import { useWineItemReorder } from "./use-wine-item-reorder";
 
 export type WineListEditorWine = {
   id: string;
@@ -85,239 +62,6 @@ export type WineListEditorSection = {
   wine_list_id: string;
   wine_list_items: WineListEditorItem[];
 };
-
-function ListActions({
-  listId,
-  isPublished,
-  slug,
-  generatingPdf,
-  touchSized = false,
-  onDownloadPdf,
-  onCopyUrl,
-  onPublish,
-  className,
-}: {
-  listId: string;
-  isPublished: boolean;
-  slug: string | null;
-  generatingPdf: boolean;
-  touchSized?: boolean;
-  onDownloadPdf: () => void;
-  onCopyUrl: () => void;
-  onPublish: () => void;
-  className?: string;
-}) {
-  const secondaryClassName = cn(
-    "items-center gap-xs rounded-pill border border-rule bg-canvas px-sm text-[13px] font-medium text-ink hover:bg-wash focus-ring",
-    "inline-flex min-h-11 md:px-md",
-  );
-  const publishClassName = cn(
-    "items-center gap-xs rounded-pill bg-primary px-sm text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring",
-    "inline-flex min-h-11 md:px-md",
-  );
-
-  return (
-    <div aria-label="List actions" className={className}>
-      <button
-        type="button"
-        onClick={onDownloadPdf}
-        disabled={generatingPdf}
-        className={cn(secondaryClassName, "disabled:opacity-60")}
-      >
-        {generatingPdf ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
-        ) : (
-          <Download className="h-3.5 w-3.5" strokeWidth={2} />
-        )}
-        <span>
-          {generatingPdf
-            ? touchSized
-              ? "Generating PDF"
-              : "Generating..."
-            : "Download PDF"}
-        </span>
-      </button>
-      <a
-        href="/api/export/toast-csv"
-        download="toast-import.csv"
-        className={secondaryClassName}
-      >
-        <FileSpreadsheet className="h-3.5 w-3.5" strokeWidth={2} />
-        <span>Toast Export</span>
-      </a>
-      <a
-        href={`/api/wine-lists/${listId}/csv`}
-        download
-        className={secondaryClassName}
-      >
-        <FileText className="h-3.5 w-3.5" strokeWidth={2} />
-        <span>CSV</span>
-      </a>
-      <a
-        href={`/lists/${listId}/preview`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={secondaryClassName}
-      >
-        <Eye className="h-3.5 w-3.5" strokeWidth={2} />
-        <span>Preview</span>
-      </a>
-      <a
-        href={`/lists/${listId}/print`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={secondaryClassName}
-      >
-        <Printer className="h-3.5 w-3.5" strokeWidth={2} />
-        <span>Print</span>
-      </a>
-      {isPublished && slug && (
-        <button type="button" onClick={onCopyUrl} className={secondaryClassName}>
-          <Copy className="h-3.5 w-3.5" strokeWidth={2} />
-          <span>Copy URL</span>
-        </button>
-      )}
-      <button type="button" onClick={onPublish} className={publishClassName}>
-        <Share2 className="h-3.5 w-3.5" strokeWidth={2} />
-        <span>Publish</span>
-      </button>
-    </div>
-  );
-}
-
-// BND-161: inline-rename input overlay.
-// BND-162: sortable section sidebar button.
-function SortableSectionButton({
-  section,
-  isActive,
-  onSelect,
-  onDelete,
-  editingId,
-  editName,
-  onEditStart,
-  onEditChange,
-  onEditCommit,
-  onEditCancel,
-  editRef,
-}: {
-  section: WineListEditorSection;
-  isActive: boolean;
-  onSelect: () => void;
-  onDelete: (section: WineListEditorSection) => void;
-  editingId: string | null;
-  editName: string;
-  onEditStart: (id: string, name: string) => void;
-  onEditChange: (name: string) => void;
-  onEditCommit: () => void;
-  onEditCancel: () => void;
-  editRef: React.RefObject<HTMLInputElement | null>;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: section.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
-
-  const isEditing = editingId === section.id;
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        "group flex items-center rounded-pill transition-colors",
-        isActive && !isDragging
-          ? "bg-wash"
-          : "hover:bg-wash",
-      )}
-    >
-      {/* Drag handle */}
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="flex min-h-11 min-w-11 flex-shrink-0 cursor-grab touch-none items-center justify-center px-1 py-xs text-grey hover:text-ink active:cursor-grabbing"
-        aria-label={`Drag to reorder ${section.name}`}
-      >
-        <GripVertical className="h-3.5 w-3.5" strokeWidth={2} />
-      </button>
-
-      {/* Section name or inline edit input */}
-      {isEditing ? (
-        <div className="flex min-h-11 min-w-0 flex-1 items-center gap-xs px-sm py-xs">
-          <input
-            ref={editRef}
-            type="text"
-            value={editName}
-            onChange={(e) => onEditChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onEditCommit();
-              if (e.key === "Escape") onEditCancel();
-            }}
-            onBlur={onEditCommit}
-            className="min-h-11 min-w-0 flex-1 rounded-pill border border-accent bg-surface px-sm py-0.5 text-[13px] font-medium text-ink outline-none focus-ring"
-          />
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={onSelect}
-          className={cn(
-            "flex min-h-11 min-w-0 flex-1 items-center justify-between px-sm py-xs text-left focus-ring",
-            isActive ? "text-ink font-medium" : "text-grey",
-          )}
-        >
-          <span className="truncate text-[14px]">{section.name}</span>
-          <span
-            className={cn(
-              "tabular text-[12px] ml-xs",
-              isActive ? "text-ink" : "text-grey",
-            )}
-          >
-            {section.wine_list_items.length}
-          </span>
-        </button>
-      )}
-
-      {/* Action buttons — visible on hover */}
-      {!isEditing && (
-        <div className="flex items-center gap-0.5 pr-sm">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEditStart(section.id, section.name);
-            }}
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-pill text-grey hover:bg-surface-sunken hover:text-ink"
-            aria-label={`Rename ${section.name}`}
-          >
-            <Pencil className="h-3 w-3" strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(section);
-            }}
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-pill text-grey hover:bg-risk-wash hover:text-risk-ink"
-            aria-label={`Delete ${section.name}`}
-          >
-            <Trash2 className="h-3 w-3" strokeWidth={2} />
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function WineListEditor({
   list,
@@ -521,99 +265,19 @@ export function WineListEditor({
     }
   }, [list.id, router]);
 
-  // BND-162: sensors for section drag-and-drop
-  const sectionSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+  // BND-162: section sidebar drag-and-drop wiring.
+  const { sectionSensors, handleSectionDragEnd } = useSectionReorder(
+    sections,
+    setSections,
+    setErrorToast,
   );
 
-  // BND-162: handle section reorder drag end
-  const handleSectionDragEnd = useCallback(
-    async (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-
-      const oldIndex = sections.findIndex((s) => s.id === active.id);
-      const newIndex = sections.findIndex((s) => s.id === over.id);
-      if (oldIndex === -1 || newIndex === -1) return;
-
-      // Save previous order for rollback
-      const previous = sections.map((s) => ({ ...s }));
-
-      const reordered = [...sections];
-      const [moved] = reordered.splice(oldIndex, 1);
-      reordered.splice(newIndex, 0, moved);
-
-      // Optimistic update
-      setSections(reordered.map((s, i) => ({ ...s, position: i })));
-
-      // Persist
-      const res = await fetch("/api/wine-list-sections/reorder", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderedIds: reordered.map((s) => s.id) }),
-      });
-
-      // Rollback on failure
-      if (!res.ok) {
-        setSections(previous.map((s, i) => ({ ...s, position: i })));
-        setErrorToast("Failed to reorder sections. Please try again.");
-        setTimeout(() => setErrorToast(null), 4000);
-      }
-    },
-    [sections],
-  );
-
-  // Wine-item drag sensors (within a section)
-  const wineSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
-  );
-
-  const handleDragEnd = useCallback(
-    async (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id || !currentSection) return;
-
-      const items = [...currentSection.wine_list_items];
-      const oldIndex = items.findIndex((i) => i.id === active.id);
-      const newIndex = items.findIndex((i) => i.id === over.id);
-      if (oldIndex === -1 || newIndex === -1) return;
-
-      // Save previous items order for rollback
-      const previousItems = currentSection.wine_list_items.map((i) => ({ ...i }));
-
-      const [moved] = items.splice(oldIndex, 1);
-      items.splice(newIndex, 0, moved);
-
-      setSections((prev) =>
-        prev.map((s) =>
-          s.id === activeSection
-            ? { ...s, wine_list_items: items.map((it, idx) => ({ ...it, position: idx })) }
-            : s,
-        ),
-      );
-
-      const res = await fetch("/api/wine-list-items/reorder", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderedIds: items.map((i) => i.id) }),
-      });
-
-      // Rollback on failure
-      if (!res.ok) {
-        setSections((prev) =>
-          prev.map((s) =>
-            s.id === activeSection
-              ? { ...s, wine_list_items: previousItems.map((it, idx) => ({ ...it, position: idx })) }
-              : s,
-          ),
-        );
-        setErrorToast("Failed to reorder wines. Please try again.");
-        setTimeout(() => setErrorToast(null), 4000);
-      }
-    },
-    [currentSection, activeSection],
+  // Wine-item drag-and-drop wiring (within a section).
+  const { wineSensors, handleDragEnd } = useWineItemReorder(
+    currentSection,
+    activeSection,
+    setSections,
+    setErrorToast,
   );
 
   const deleteItem = useCallback(
