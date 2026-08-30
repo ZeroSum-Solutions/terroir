@@ -14,11 +14,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.17"
-  }
   public: {
     Tables: {
       availability_events: {
@@ -2047,6 +2042,10 @@ export type Database = {
           row_id: string
           row_number: number
         }[]
+      }
+      backfill_wine_identity: {
+        Args: { p_restaurant_id?: string }
+        Returns: number
       }
       claim_invoice_extract_job: {
         Args: { p_worker_id: string }

@@ -39,8 +39,13 @@
 name: CI
 
 on:
+  # Deliberately unfiltered by base branch. `pull_request: branches: [main]`
+  # filters on the BASE, so a stacked PR (one feature branch based on another)
+  # silently got NO CI at all — not a skip, not a failure, an empty check list.
+  # That is the worst possible failure mode for a merge gate, and it bit
+  # PR #153. During the modular refactor many branches are in flight at once,
+  # so every PR is gated regardless of what it targets.
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 

@@ -184,16 +184,60 @@ database-level safety net.
 access goes through `packages/db`, where the filter can be structurally required
 rather than remembered.
 
-### 3.3 [DECISION NEEDED] The identity spine is built and wired to nothing
+### 3.3 [DECIDED 2026-08-29 — finish it. Partly done] The identity spine
 
-`canonical_wines` / `wine_variants` / `wine_aliases` were added in migrations
-0097–0101. The RPC `resolve_wine_variants_bulk` has **zero production callers** —
-only tests. `wines.canonical_wine_id` was added nullable in 0098 and never made
-`NOT NULL`. Two identity systems coexist by design, backfill in progress, stalled.
+**Original finding.** `canonical_wines` / `wine_variants` / `wine_aliases` were added
+in migrations 0097–0101. The RPC `resolve_wine_variants_bulk` had **zero production
+callers** — only tests. Measured on a freshly seeded local stack: **250 wines, 0 with
+`wine_variant_id`, 0 with `canonical_wine_id`, and all three spine tables empty.** Not
+partly wired — it held no rows at all. `src/lib/wine-intelligence/xwines-profile.ts`
+prefers the `canonical_wine_id` link (0132) and silently degrades without it, so the
+X-Wines join that 0131–0134 exist to serve never ran in its intended mode.
 
-**You cannot draw a boundary around "identity" until this is decided.** Either finish
-the migration or explicitly park the spine. This is an owner decision, not an
-engineering one — see §7.
+**Owner decision: finish the migration.**
+
+**Landed — migration `0135_identity_resolution_on_write.sql`:**
+
+- `find_or_create_wines_batch` (the manual / create-from-LWIN path) now resolves
+  identity in **one bulk call after its loop**, honouring §9's "once per batch of
+  unique variants" contract. `canonical_wine_id` follows from 0098's trigger.
+- Resolution failure raises a `WARNING` and leaves `wine_variant_id` null rather than
+  failing the wine write. A lost write is unrecoverable; an unresolved row is
+  repairable, and the null is itself the queryable signal.
+- `backfill_wine_identity(uuid)` — idempotent, pages by id, `SECURITY INVOKER`,
+  granted to `service_role` only.
+- `resolve_wine_variants_bulk` gains a `service_role` grant. 0099 granted it to
+  `authenticated` only, so no service-role caller could execute it at all — found by
+  running the real reset-and-seed path, not by reading. Deliberately **not** fixed by
+  making the backfill `SECURITY DEFINER`: 0099's tenant boundary *is* invoker-mode
+  RLS, and definer rights would erase it.
+- `scripts/seed-local-supabase.mjs` calls the backfill. It upserts `wines` directly,
+  so without this every CI run and every local reset reproduced the original
+  null-identity state.
+- Coverage: `src/domains/identity/identity-on-write.test.ts`, a live-DB suite whose
+  central case is the point of the whole spine — two tenants holding the same wine get
+  **separate `wine_variant_id`s under one shared `canonical_wine_id`**.
+
+Verified from a clean `supabase db reset` + seed: **250/250 wines resolved**, 250
+canonical rows, 250 variants. Full suite 2779 passing with the live DB attached.
+
+**Still open — deliberately, with reasons:**
+
+1. **`apply_import_batch_chunk` does not resolve.** CSV import is the majority of wine
+   creation by volume. The P2 plan (§9, §12) places that call in P3's *TypeScript*
+   caller, once per batch of unique variants, before the per-row loop — hooking it
+   into the per-row loop would break the C10 performance contract on a path handling
+   4,000–8,000 rows per session.
+2. **The import dedup key is still the fallback four-tuple** in
+   `src/domains/import/dedup-key.ts`. Switching it to `wine_variant_id` changes *which
+   rows collapse into one wine* — a behavioural change needing its own evidence, not a
+   side effect of populating identity.
+3. **`canonical_wines.xwines_wine_id` is 0/250 populated.** The spine now feeds
+   `match_xwines`, but nothing persists the match. Separate gap, newly visible.
+
+**Sequencing conflict to note:** item 1 lands in `src/domains/import/batch-service.ts`
+— the 3,150-line file Phase 2 decomposes. These two must not run concurrently on the
+same file. See §7.4.
 
 ### 3.4 [HIGH for refactor safety] `src/adapters/*` has zero tests
 
@@ -425,12 +469,101 @@ packages cannot be drawn before the boundaries exist. Putting extraction last me
 
 ---
 
-## 7. Open decisions for the owner
+## 7. Decisions — all four resolved 2026-08-29
 
-1. **Identity spine (§3.3)** — finish the `canonical_wines` migration, or park it? Blocks the identity boundary.
-2. **`docs/screenshots/` (25MB)** — keep committed as verification evidence, accept the repo weight, and stop adding; or move to release artifacts and rewrite history? History rewrite on a public repo is a separate, deliberate decision.
-3. **Full e2e in CI (0.3)** — PR-blocking, or nightly with alerting? Runtime vs. feedback latency.
-4. **Phase 2 parallelism** — the ten monolith decompositions are independent and could run concurrently across engineers, at the cost of a noisy `max-lines` baseline file. Serialize the baseline updates, or accept merge conflicts on one JSON file?
+### 7.1 Identity spine — **FINISH IT.** Partly landed.
+
+Migration `0135` is in. See §3.3 for what shipped, what is still open, and why.
+
+### 7.2 `docs/screenshots/` (25MB) — **KEEP COMMITTED.**
+
+They stay in the tree as verification evidence. No history rewrite, which also means
+no force-push against a public repo and no broken clones for anyone who has already
+forked. The cost is accepted knowingly: ~two-thirds of a 37MB repo, paid once per
+clone.
+
+Consequence to hold, not a re-litigation of the decision: this makes the git object
+store monotonic. If the directory keeps growing at its current rate the clone cost
+grows with it and cannot later be undone without the history rewrite that was just
+declined. Worth a periodic size check; not worth acting on now.
+
+### 7.3 Full e2e — **STAYS NIGHTLY + ON-MAIN-PUSH, WITH ALERTING.** Resolved.
+
+Consulted GPT-5.6 (Codex) as instructed, framed on feedback latency at PR time versus
+post-merge detection latency. Its recommendation and the measured state of the repo
+agree, so no change ships:
+
+The required check already runs the critical journeys (G1–8) against a real disposable
+Supabase in ~9 minutes. Promoting the full nineteen-spec suite to merge-blocking would
+multiply that across every push and every rebase of ten concurrent branches, and the
+slower signal would routinely arrive after the author had already context-switched —
+paying PR-cycle time for coverage whose failures are, in this repo, overwhelmingly
+post-merge-detectable and cheap to fix forward.
+
+So the existing split is correct and is now a deliberate decision rather than an
+accident of how the workflows grew:
+
+| Suite | Trigger | Role |
+|---|---|---|
+| Critical journeys G1–8 (`ci.yml`) | every PR, required | merge gate — blocks |
+| Full nineteen specs (`e2e-full.yml`) | nightly 07:00 UTC, push to `main`, manual | regression net — alerts |
+
+Both failure paths are wired and verified present: `e2e-full.yml` and `ci-main-alert.yml`
+each open a labelled issue on failure and comment on the existing one rather than
+spamming duplicates. A scheduled job that fails silently is worse than no job, and
+neither of these does.
+
+**One addition adopted from the consult:** dispatch `e2e-full.yml` manually
+(`workflow_dispatch`) before merging any branch that touches e2e infrastructure or
+crosses unusually many surfaces. That buys full coverage exactly where the cheap
+subset is least representative, without taxing the other ninety-odd percent of PRs.
+
+### 7.4 Phase 2 parallelism — **PARALLEL DEVELOPMENT, SERIALIZED LANDING.** Resolved.
+
+The question "are the ten decompositions independent?" has two different answers
+depending on which activity is being asked about, and conflating them is what makes
+parallel refactors go wrong.
+
+**Development: fully parallel, 10-wide.** Verified by file inventory — each
+decomposition's primary targets sit in a distinct directory, and no two touch the same
+source file:
+
+| # | Target(s) | Lines | Directory |
+|---|---|---|---|
+| 1 | `cellar/wine-detail-drawer.tsx` | 1,220 | `cellar/` |
+| 2 | `cellar/cellar-list.tsx` | 1,110 | `cellar/` |
+| 3 | `import/import-client.tsx` + `session-step.tsx` | 2,390 + 1,650 | `import/` |
+| 4 | `lists/[id]/wine-list-editor.tsx` | 1,250 | `lists/[id]/` |
+| 5 | `team/team-actions.tsx` + `lists/wine-list-landing.tsx` | 745 + 624 | `team/`, `lists/` |
+| 6 | `insights/page.tsx` | 1,201 | `insights/` |
+| 7 | `scan/scanner.tsx` + `scan-bottle/page.tsx` | 913 + 813 | `scan/`, `scan-bottle/` |
+| 8 | `price-comparison/page.tsx` | 875 | `price-comparison/` |
+
+**Landing: strictly serialized merge train.** Independence during development does not
+survive contact with the shared ratchets. Three known contention classes, all of which
+the train handles:
+
+- **`scripts/file-size-baseline.json` and `scripts/design-typography-baseline.json`** —
+  every branch rewrites both. Mechanical, never semantic. Both accept `--update`, so the
+  resolution is always *discard both sides and regenerate against the combined tree* —
+  never `--ours`, never `--theirs`, never hand-merged. Picking a side silently re-admits
+  the other branch's already-eliminated violations back into the baseline, which is how a
+  ratchet quietly stops ratcheting.
+- **`src/domains/import/batch-service.ts` (3,149 lines)** — contended by Phase 2 item 3
+  and by §3.3's open import-path identity work. Serialized against each other regardless.
+- **Generated artifacts** — `schema.snapshot.sql`, `src/types/database.ts`, the
+  API-contract and product-conformance outputs. Any branch touching a migration
+  invalidates them for every branch in flight. Phase 2 touches no migrations, so this
+  class is dormant for this wave, but it reactivates the moment Phase 3 starts.
+
+**The train, per branch, one at a time:** rebase onto current `main` → discard both
+baselines and regenerate → run the full required CI against that exact rebased SHA →
+merge only if green. This also catches the case the whole design is for: two branches
+that each pass CI alone and fail together. Ten branches each green against a stale `main`
+proves nothing about the tree that results from merging them.
+
+Development parallelism is where the wall-clock is won; landing serially costs one CI
+run each and is the only thing that makes the parallelism safe.
 
 ---
 
