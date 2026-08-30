@@ -487,33 +487,83 @@ store monotonic. If the directory keeps growing at its current rate the clone co
 grows with it and cannot later be undone without the history rewrite that was just
 declined. Worth a periodic size check; not worth acting on now.
 
-### 7.3 Full e2e — PR-blocking or nightly?
+### 7.3 Full e2e — **STAYS NIGHTLY + ON-MAIN-PUSH, WITH ALERTING.** Resolved.
 
-Deferred to an explicit GPT-5.6 (Codex) consult, at the owner's request, framed on
-feedback latency at PR time versus post-merge detection latency, the required check's
-wall-clock budget, and flake tolerance on a branch protected with `enforce_admins`.
-**Result pending; retrieve with `/codex:status task-mtf4bfw8-rchb7w`.** Until it
-lands, the shipped configuration stands: `ci.yml` keeps the fast two-spec subset as
-the single required check, and `e2e-full.yml` runs all nineteen nightly and on pushes
-to `main`, opening a labelled issue on failure.
+Consulted GPT-5.6 (Codex) as instructed, framed on feedback latency at PR time versus
+post-merge detection latency. Its recommendation and the measured state of the repo
+agree, so no change ships:
 
-### 7.4 Phase 2 parallelism — **RUN CONCURRENTLY WHERE PROVABLY SAFE.**
+The required check already runs the critical journeys (G1–8) against a real disposable
+Supabase in ~9 minutes. Promoting the full nineteen-spec suite to merge-blocking would
+multiply that across every push and every rebase of ten concurrent branches, and the
+slower signal would routinely arrive after the author had already context-switched —
+paying PR-cycle time for coverage whose failures are, in this repo, overwhelmingly
+post-merge-detectable and cheap to fix forward.
 
-Owner direction: parallelize whatever can be parallelized safely. Same Codex consult
-(§7.3) is producing the conflict matrix. What is already established here:
+So the existing split is correct and is now a deliberate decision rather than an
+accident of how the workflows grew:
 
-- **`scripts/file-size-baseline.json` is the one guaranteed collision.** Every
-  decomposition must update it, it is a single JSON object keyed by path, and ten
-  concurrent branches all rewrite it. This is mechanical, not semantic — the merge
-  resolution is always "regenerate", never "pick a side" — so it wants a regeneration
-  step rather than manual conflict resolution.
-- **`src/domains/import/batch-service.ts` is contended by more than Phase 2.**
-  §3.3's remaining item 1 (wiring `resolve_wine_variants_bulk` into the import path)
-  lands in the same 3,150-line file Phase 2 decomposes. These two must be serialized
-  against each other regardless of what else runs in parallel.
-- **Generated artifacts are a second class of collision** — `schema.snapshot.sql`,
-  `src/types/database.ts`, the API-contract and product-conformance outputs. Any
-  branch that touches a migration invalidates them for every other branch in flight.
+| Suite | Trigger | Role |
+|---|---|---|
+| Critical journeys G1–8 (`ci.yml`) | every PR, required | merge gate — blocks |
+| Full nineteen specs (`e2e-full.yml`) | nightly 07:00 UTC, push to `main`, manual | regression net — alerts |
+
+Both failure paths are wired and verified present: `e2e-full.yml` and `ci-main-alert.yml`
+each open a labelled issue on failure and comment on the existing one rather than
+spamming duplicates. A scheduled job that fails silently is worse than no job, and
+neither of these does.
+
+**One addition adopted from the consult:** dispatch `e2e-full.yml` manually
+(`workflow_dispatch`) before merging any branch that touches e2e infrastructure or
+crosses unusually many surfaces. That buys full coverage exactly where the cheap
+subset is least representative, without taxing the other ninety-odd percent of PRs.
+
+### 7.4 Phase 2 parallelism — **PARALLEL DEVELOPMENT, SERIALIZED LANDING.** Resolved.
+
+The question "are the ten decompositions independent?" has two different answers
+depending on which activity is being asked about, and conflating them is what makes
+parallel refactors go wrong.
+
+**Development: fully parallel, 10-wide.** Verified by file inventory — each
+decomposition's primary targets sit in a distinct directory, and no two touch the same
+source file:
+
+| # | Target(s) | Lines | Directory |
+|---|---|---|---|
+| 1 | `cellar/wine-detail-drawer.tsx` | 1,220 | `cellar/` |
+| 2 | `cellar/cellar-list.tsx` | 1,110 | `cellar/` |
+| 3 | `import/import-client.tsx` + `session-step.tsx` | 2,390 + 1,650 | `import/` |
+| 4 | `lists/[id]/wine-list-editor.tsx` | 1,250 | `lists/[id]/` |
+| 5 | `team/team-actions.tsx` + `lists/wine-list-landing.tsx` | 745 + 624 | `team/`, `lists/` |
+| 6 | `insights/page.tsx` | 1,201 | `insights/` |
+| 7 | `scan/scanner.tsx` + `scan-bottle/page.tsx` | 913 + 813 | `scan/`, `scan-bottle/` |
+| 8 | `price-comparison/page.tsx` | 875 | `price-comparison/` |
+
+**Landing: strictly serialized merge train.** Independence during development does not
+survive contact with the shared ratchets. Three known contention classes, all of which
+the train handles:
+
+- **`scripts/file-size-baseline.json` and `scripts/design-typography-baseline.json`** —
+  every branch rewrites both. Mechanical, never semantic. Both accept `--update`, so the
+  resolution is always *discard both sides and regenerate against the combined tree* —
+  never `--ours`, never `--theirs`, never hand-merged. Picking a side silently re-admits
+  the other branch's already-eliminated violations back into the baseline, which is how a
+  ratchet quietly stops ratcheting.
+- **`src/domains/import/batch-service.ts` (3,149 lines)** — contended by Phase 2 item 3
+  and by §3.3's open import-path identity work. Serialized against each other regardless.
+- **Generated artifacts** — `schema.snapshot.sql`, `src/types/database.ts`, the
+  API-contract and product-conformance outputs. Any branch touching a migration
+  invalidates them for every branch in flight. Phase 2 touches no migrations, so this
+  class is dormant for this wave, but it reactivates the moment Phase 3 starts.
+
+**The train, per branch, one at a time:** rebase onto current `main` → discard both
+baselines and regenerate → run the full required CI against that exact rebased SHA →
+merge only if green. This also catches the case the whole design is for: two branches
+that each pass CI alone and fail together. Ten branches each green against a stale `main`
+proves nothing about the tree that results from merging them.
+
+Development parallelism is where the wall-clock is won; landing serially costs one CI
+run each and is the only thing that makes the parallelism safe.
 
 ---
 
