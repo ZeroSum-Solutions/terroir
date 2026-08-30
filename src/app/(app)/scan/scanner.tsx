@@ -1,19 +1,15 @@
 "use client";
 
 import { AlertTriangle, Check } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { readApiError } from "@/lib/api/client-error";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
-import {
-  PERSISTED_SCAN_VERSION,
-  PersistedScanSchema,
-} from "@/lib/scanner/schema";
+import { loadScan, saveScan } from "@/lib/scanner/scan-storage";
 import { SCORED_FIELDS_COUNT } from "@/lib/scanner/scored-fields";
 import { markScanStage, reportScanStage } from "@/lib/scanner/scan-timing";
 import { useRestaurant } from "@/lib/context/restaurant";
 import type {
   BottleScanResult,
-  LineItem,
   LineItemField,
   RecentScan,
   Scan,
@@ -27,10 +23,9 @@ import { ErrorView } from "./views/error-view";
 import { ConfidenceGateView } from "./views/confidence-gate";
 import { ResultsView } from "./views/results-view";
 import { BottleResultsView } from "./views/bottle-results-view";
+import { initialScannerState, scannerReducer, type ScannerAction } from "./scanner-state";
 
-type Status = "ready" | "processing" | "review" | "results" | "bottle-results" | "error";
 type Feedback = { kind: "success" | "error"; message: string };
-const STORAGE_KEY = "terroir:current-scan";
 // Mirrors the server-side limits in /api/scan and /api/scan-bottle so an
 // oversized file fails immediately, client-side, instead of only after a
 // full network upload.
@@ -89,46 +84,6 @@ async function keepLabelPhoto(wineId: string, file: File): Promise<void> {
 
 export { formatMoney } from "./components/field-inputs";
 
-/**
- * BND-024 / ARCH-010 — the persisted scan is wrapped in a version
- * envelope: `{ version: N, data: Scan-without-rawText }`. Anything
- * that doesn't round-trip through PersistedScanSchema is dropped AND
- * removed from localStorage so a stale blob can't trigger the drop
- * path on every subsequent mount.
- */
-function loadScan(): Scan | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return null;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    localStorage.removeItem(STORAGE_KEY);
-    return null;
-  }
-
-  const result = PersistedScanSchema.safeParse(parsed);
-  if (!result.success) {
-    localStorage.removeItem(STORAGE_KEY);
-    return null;
-  }
-  return result.data.data as Scan;
-}
-
-function saveScan(scan: Scan | null) {
-  if (typeof window === "undefined") return;
-  if (scan) {
-    // Strip rawText to avoid bloating localStorage with OCR dumps
-    const { rawText: _, ...data } = scan;
-    const envelope = { version: PERSISTED_SCAN_VERSION, data };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
-  } else {
-    localStorage.removeItem(STORAGE_KEY);
-  }
-}
-
 class ScanError extends Error {
   rawText?: string;
   constructor(message: string, rawText?: string) {
@@ -176,11 +131,8 @@ export function Scanner({
   initialMode?: ScanMode;
 }) {
   const { restaurantId: _restaurantId } = useRestaurant();
-  const [status, setStatus] = useState<Status>("ready");
+  const [state, dispatch] = useReducer(scannerReducer, initialScannerState);
   const router = useRouter();
-  const [progress, setProgress] = useState(0);
-  const [scan, setScan] = useState<Scan | null>(null);
-  const [originalItems, setOriginalItems] = useState<LineItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   // Authoritative synchronous guard against a double-tap double-submit:
   // `isSaving` state only flips the button's `disabled` attribute on the
@@ -202,10 +154,6 @@ export function Scanner({
   // across retries. Cleared on success or 4xx validation error; held across
   // 5xx / network failures so retry returns cached result.
   const scanKeyRef = useRef<string | null>(null);
-  const [savedResult, setSavedResult] = useState<{
-    itemCount: number;
-    wineCount: number;
-  } | null>(null);
   // SSR-safe hydration flag: returns false during SSR, true after mount.
   // Avoids the setState-in-effect pattern for a one-shot client-only boolean.
   const hydrated = useSyncExternalStore(
@@ -214,15 +162,7 @@ export function Scanner({
     () => false,
   );
   const [feedback, setFeedback] = useState<Feedback | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [rawText, setRawText] = useState<string | null>(null);
-  const [lastFile, setLastFile] = useState<File | null>(null);
-  // The full originally-selected invoice batch (possibly several files),
-  // preserved so a recoverable error's "Retry" resubmits everything the
-  // user picked — not just the first file (see BND-089 retry gap).
-  const [lastFiles, setLastFiles] = useState<File[]>([]);
   const [mode, setMode] = useState<ScanMode>(initialMode);
-  const [bottleResult, setBottleResult] = useState<BottleScanResult | null>(null);
   // Immediate-acknowledgment preview (walkthrough §1.2, item 7): an object
   // URL for the just-picked label photo, set synchronously before the
   // /api/scan-bottle round-trip resolves so ProcessingView can render the
@@ -242,15 +182,14 @@ export function Scanner({
   const handleModeChange = useCallback(
     (next: ScanMode) => {
       setMode(next);
-      if (next === "invoice" && initialMode === "bottle" && scan === null) {
+      if (next === "invoice" && initialMode === "bottle" && state.scan === null) {
         const saved = loadScan();
         if (saved) {
-          setScan(saved);
-          setStatus("results");
+          dispatch({ type: "scan-restored", scan: saved });
         }
       }
     },
-    [initialMode, scan],
+    [initialMode, state.scan],
   );
 
   const setBottlePreview = useCallback((file: File | null) => {
@@ -278,8 +217,7 @@ export function Scanner({
     queueMicrotask(() => {
       const saved = loadScan();
       if (saved) {
-        setScan(saved);
-        setStatus("results");
+        dispatch({ type: "scan-restored", scan: saved });
       }
     });
   }, [initialMode]);
@@ -304,7 +242,7 @@ export function Scanner({
      (when status transitions to "processing") so this effect has no
      synchronous setState on entry. */
   useEffect(() => {
-    if (status !== "processing") return;
+    if (state.status !== "processing") return;
     const start = performance.now();
     const SOFT_DURATION = 18000;
     const id = window.setInterval(() => {
@@ -313,10 +251,10 @@ export function Scanner({
         elapsed <= SOFT_DURATION
           ? Math.min(90, Math.round((elapsed / SOFT_DURATION) * 90))
           : Math.min(95, 90 + Math.round(((elapsed - SOFT_DURATION) / 60000) * 5));
-      setProgress(pct);
+      dispatch({ type: "progress-tick", progress: pct });
     }, 250);
     return () => window.clearInterval(id);
-  }, [status]);
+  }, [state.status]);
 
   const startScan = useCallback(async (files: File[]) => {
     // Client-side pre-validation — every case below must fail immediately,
@@ -325,11 +263,10 @@ export function Scanner({
     // way, so lastFiles is cleared rather than preserved.
     const unsupported = files.find((f) => !isAllowedInvoiceFile(f));
     if (unsupported) {
-      setLastFile(null);
-      setLastFiles([]);
-      setError(`"${unsupported.name}" isn't a supported file type. Upload a JPG, PNG, HEIC, or PDF.`);
-      setRawText(null);
-      setStatus("error");
+      dispatch({
+        type: "invoice-rejected",
+        message: `"${unsupported.name}" isn't a supported file type. Upload a JPG, PNG, HEIC, or PDF.`,
+      });
       return;
     }
 
@@ -340,34 +277,30 @@ export function Scanner({
     // one PDF alone, or up to MAX_INVOICE_PAGES photos with no PDF at all.
     const pdfCount = files.filter((f) => f.type === "application/pdf" || fileExtension(f.name) === "pdf").length;
     if (pdfCount > 0 && files.length > 1) {
-      setLastFile(null);
-      setLastFiles([]);
-      setError(
-        pdfCount > 1
-          ? `You selected ${pdfCount} PDFs. Upload one PDF per invoice — scan each invoice separately, or take a photo of each page instead.`
-          : "A PDF is a complete invoice on its own — upload it by itself, or upload photos without a PDF.",
-      );
-      setRawText(null);
-      setStatus("error");
+      dispatch({
+        type: "invoice-rejected",
+        message:
+          pdfCount > 1
+            ? `You selected ${pdfCount} PDFs. Upload one PDF per invoice — scan each invoice separately, or take a photo of each page instead.`
+            : "A PDF is a complete invoice on its own — upload it by itself, or upload photos without a PDF.",
+      });
       return;
     }
 
     if (files.length > MAX_INVOICE_PAGES) {
-      setLastFile(null);
-      setLastFiles([]);
-      setError(`Select up to ${MAX_INVOICE_PAGES} pages per invoice scan. You selected ${files.length}.`);
-      setRawText(null);
-      setStatus("error");
+      dispatch({
+        type: "invoice-rejected",
+        message: `Select up to ${MAX_INVOICE_PAGES} pages per invoice scan. You selected ${files.length}.`,
+      });
       return;
     }
 
     const oversized = files.find((f) => f.size > INVOICE_MAX_BYTES);
     if (oversized) {
-      setLastFile(null);
-      setLastFiles([]);
-      setError(`"${oversized.name}" is larger than 10 MB. Choose a smaller photo or a lower-resolution scan.`);
-      setRawText(null);
-      setStatus("error");
+      dispatch({
+        type: "invoice-rejected",
+        message: `"${oversized.name}" is larger than 10 MB. Choose a smaller photo or a lower-resolution scan.`,
+      });
       return;
     }
 
@@ -383,12 +316,7 @@ export function Scanner({
       ac.abort();
     }, SCAN_TIMEOUT_MS);
 
-    setLastFile(files[0]);
-    setLastFiles(files);
-    setProgress(0);
-    setStatus("processing");
-    setError(null);
-    setRawText(null);
+    dispatch({ type: "invoice-scan-started", files });
 
     // BND-089: mint scanIdempotency key on first attempt, reuse on retry.
     if (!scanKeyRef.current) {
@@ -405,12 +333,9 @@ export function Scanner({
       const fresh = await postScan(files, ac.signal, scanKeyRef.current);
       if (ac.signal.aborted) return;
       markScanStage("render", "start");
-      setProgress(100);
       scanKeyRef.current = null; // 2xx → clear for next scan
-      setScan(fresh);
-      setOriginalItems([...fresh.items]);
+      dispatch({ type: "invoice-scan-succeeded", scan: fresh });
       saveScan(fresh);
-      setStatus(fresh.quality?.manualFallbackTriggered ? "review" : "results");
       // Double rAF: wait for the browser to actually paint the new status
       // before marking "render" done, not just for React to schedule it.
       if (typeof requestAnimationFrame === "function") {
@@ -430,9 +355,11 @@ export function Scanner({
         : err instanceof Error
           ? err.message
           : "Scan failed.";
-      setError(message);
-      setRawText(!timedOutRef.current && err instanceof ScanError ? err.rawText ?? null : null);
-      setStatus("error");
+      dispatch({
+        type: "invoice-scan-failed",
+        message,
+        rawText: !timedOutRef.current && err instanceof ScanError ? err.rawText ?? null : null,
+      });
     } finally {
       clearScanTimeout();
       if (abortRef.current === ac) abortRef.current = null;
@@ -441,49 +368,34 @@ export function Scanner({
 
   const updateField = useCallback(
     (id: string, field: LineItemField, value: string | number | null) => {
-      setScan((prev) => {
-        if (!prev) return prev;
-        const next: Scan = {
-          ...prev,
-          items: prev.items.map((it) =>
-            it.id === id ? ({ ...it, [field]: value } as LineItem) : it,
-          ),
-          edits: { ...prev.edits, [`${id}:${field}`]: true },
-        };
-        saveScan(next);
-        return next;
-      });
+      const action: ScannerAction = { type: "field-updated", id, field, value };
+      const next = scannerReducer(state, action).scan;
+      dispatch(action);
+      if (next) saveScan(next);
     },
-    [],
+    [state],
   );
 
 
   const updateSource = useCallback(
     (field: "distributor" | "invoiceNo" | "invoiceDate", value: string) => {
-      setScan((prev) => {
-        if (!prev) return prev;
-        const next: Scan = {
-          ...prev,
-          source: { ...prev.source, [field]: value },
-        };
-        saveScan(next);
-        return next;
-      });
+      const action: ScannerAction = { type: "source-updated", field, value };
+      const next = scannerReducer(state, action).scan;
+      dispatch(action);
+      if (next) saveScan(next);
     },
-    [],
+    [state],
   );
 
-  const removeItem = useCallback((id: string) => {
-    setScan((prev) => {
-      if (!prev) return prev;
-      const next: Scan = {
-        ...prev,
-        items: prev.items.filter((it) => it.id !== id),
-      };
-      saveScan(next);
-      return next;
-    });
-  }, []);
+  const removeItem = useCallback(
+    (id: string) => {
+      const action: ScannerAction = { type: "item-removed", id };
+      const next = scannerReducer(state, action).scan;
+      dispatch(action);
+      if (next) saveScan(next);
+    },
+    [state],
+  );
 
   const startOver = useCallback(() => {
     abortRef.current?.abort();
@@ -495,12 +407,8 @@ export function Scanner({
     // unfinished invoice hiding in localStorage (Sol audit 2026-08-27
     // round 3, finding 3).
     if (mode === "invoice") saveScan(null);
-    setScan(null);
-    setBottleResult(null);
+    dispatch({ type: "reset" });
     setBottlePreview(null);
-    setError(null);
-    setRawText(null);
-    setStatus("ready");
   }, [clearScanTimeout, setBottlePreview, mode]);
 
   const cancelScan = useCallback(() => {
@@ -508,19 +416,16 @@ export function Scanner({
     abortRef.current = null;
     clearScanTimeout();
     scanKeyRef.current = null;
-    setProgress(0);
-    setError(null);
-    setRawText(null);
-    setStatus("ready");
+    dispatch({ type: "scan-cancelled" });
   }, [clearScanTimeout]);
 
   const exportCsv = useCallback(() => {
-    if (!scan) return;
+    if (!state.scan) return;
     try {
-      downloadCsv(csvFilename(scan.source), toCsv(scan.items));
+      downloadCsv(csvFilename(state.scan.source), toCsv(state.scan.items));
       setFeedback({
         kind: "success",
-        message: `Exported ${scan.items.length} wines to CSV`,
+        message: `Exported ${state.scan.items.length} wines to CSV`,
       });
     } catch (err) {
       setFeedback({
@@ -528,9 +433,10 @@ export function Scanner({
         message: err instanceof Error ? err.message : "CSV export failed.",
       });
     }
-  }, [scan]);
+  }, [state.scan]);
 
   const exportAccuracyJson = useCallback(() => {
+    const scan = state.scan;
     if (!scan) return;
     const totalFields = scan.items.length * SCORED_FIELDS_COUNT;
     const editedFields = Object.keys(scan.edits).length;
@@ -587,9 +493,10 @@ export function Scanner({
         message: err instanceof Error ? err.message : "Accuracy export failed.",
       });
     }
-  }, [scan]);
+  }, [state.scan]);
 
   const saveToInventory = useCallback(async () => {
+    const { scan, originalItems, lastFile } = state;
     if (!scan || isSavingRef.current) return;
     isSavingRef.current = true;
     setIsSaving(true);
@@ -630,10 +537,7 @@ export function Scanner({
       };
       saveKeyRef.current = null; // 2xx → clear so the next save mints a fresh key
       saveScan(null);
-      setScan(null);
-      setOriginalItems([]);
-      setSavedResult(result);
-      setStatus("ready");
+      dispatch({ type: "invoice-saved", result });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Save failed.";
       setFeedback({ kind: "error", message });
@@ -641,7 +545,7 @@ export function Scanner({
       isSavingRef.current = false;
       setIsSaving(false);
     }
-  }, [scan, originalItems, lastFile]);
+  }, [state]);
 
   const enterManualEntry = useCallback(() => {
     const parsedAt = new Date().toISOString();
@@ -668,20 +572,18 @@ export function Scanner({
         },
       ],
       edits: {},
-      rawText: rawText ?? undefined,
+      rawText: state.rawText ?? undefined,
     };
-    setScan(fresh);
+    dispatch({ type: "manual-entry-started", scan: fresh });
     saveScan(fresh);
-    setError(null);
-    setStatus("results");
-  }, [rawText]);
+  }, [state.rawText]);
 
   const startBottleScan = useCallback(async (file: File) => {
     if (file.size > BOTTLE_MAX_BYTES) {
-      setLastFile(null);
-      setError(`"${file.name}" is larger than 20 MB. Choose a smaller photo.`);
-      setRawText(null);
-      setStatus("error");
+      dispatch({
+        type: "bottle-rejected",
+        message: `"${file.name}" is larger than 20 MB. Choose a smaller photo.`,
+      });
       return;
     }
 
@@ -689,12 +591,8 @@ export function Scanner({
     const ac = new AbortController();
     abortRef.current = ac;
 
-    setLastFile(file);
     setBottlePreview(file);
-    setProgress(0);
-    setStatus("processing");
-    setError(null);
-    setRawText(null);
+    dispatch({ type: "bottle-scan-started", file });
 
     try {
       const body = new FormData();
@@ -715,14 +613,11 @@ export function Scanner({
       }
       const result = (await res.json()) as BottleScanResult;
       if (ac.signal.aborted) return;
-      setProgress(100);
-      setBottleResult(result);
-      setStatus("bottle-results");
+      dispatch({ type: "bottle-scan-succeeded", result });
     } catch (err) {
       if (ac.signal.aborted) return;
       const message = err instanceof Error ? err.message : "Scan failed.";
-      setError(message);
-      setStatus("error");
+      dispatch({ type: "bottle-scan-failed", message });
     } finally {
       if (abortRef.current === ac) abortRef.current = null;
     }
@@ -730,14 +625,14 @@ export function Scanner({
 
   const retryScan = useCallback(() => {
     if (mode === "bottle") {
-      if (lastFile) startBottleScan(lastFile);
-    } else if (lastFiles.length > 0) {
+      if (state.lastFile) startBottleScan(state.lastFile);
+    } else if (state.lastFiles.length > 0) {
       // Resubmit the FULL originally-selected batch, not just the first
       // file — a recoverable (network) error must not silently drop the
       // other pages of a multi-file invoice on retry.
-      startScan(lastFiles);
+      startScan(state.lastFiles);
     }
-  }, [lastFile, lastFiles, mode, startBottleScan, startScan]);
+  }, [state.lastFile, state.lastFiles, mode, startBottleScan, startScan]);
 
   const saveBottleToInventory = useCallback(
     async (wine: {
@@ -788,14 +683,12 @@ export function Scanner({
         // bottle is in the cellar either way, and a failed photo must never
         // read as a failed save.
         const savedWineId = typeof saved?.wineId === "string" ? saved.wineId : null;
-        if (savedWineId && lastFile) {
-          void keepLabelPhoto(savedWineId, lastFile);
+        if (savedWineId && state.lastFile) {
+          void keepLabelPhoto(savedWineId, state.lastFile);
         }
 
-        setBottleResult(null);
         setBottlePreview(null);
-        setSavedResult({ itemCount: 1, wineCount: 1 });
-        setStatus("ready");
+        dispatch({ type: "bottle-saved" });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Save failed.";
         setFeedback({ kind: "error", message });
@@ -804,7 +697,7 @@ export function Scanner({
         setIsSaving(false);
       }
     },
-    [setBottlePreview, lastFile],
+    [setBottlePreview, state.lastFile],
   );
 
   const handleStart = useCallback(
@@ -814,10 +707,10 @@ export function Scanner({
         // an invoice, there's no multi-page concept to batch into. Reject
         // immediately rather than silently scanning only the first photo.
         if (files.length > 1) {
-          setLastFile(null);
-          setError("Select a single bottle photo. Take or choose one photo per wine.");
-          setRawText(null);
-          setStatus("error");
+          dispatch({
+            type: "bottle-rejected",
+            message: "Select a single bottle photo. Take or choose one photo per wine.",
+          });
           return;
         }
         if (files[0]) startBottleScan(files[0]);
@@ -828,7 +721,7 @@ export function Scanner({
     [mode, startBottleScan, startScan],
   );
 
-  const hasRetryableFile = mode === "bottle" ? !!lastFile : lastFiles.length > 0;
+  const hasRetryableFile = mode === "bottle" ? !!state.lastFile : state.lastFiles.length > 0;
 
   // A cellar spreadsheet dropped on the scanner is not an error to report back
   // to the operator — it is the right file at the wrong door. Park it and take
@@ -843,36 +736,36 @@ export function Scanner({
 
   return (
     <>
-      {status === "ready" && <ReadyView onStart={handleStart} onSpreadsheet={handleSpreadsheet} mode={mode} onModeChange={handleModeChange} recentScans={recentScans} savedResult={savedResult} onDismissSaved={() => setSavedResult(null)} />}
-      {status === "processing" && (
+      {state.status === "ready" && <ReadyView onStart={handleStart} onSpreadsheet={handleSpreadsheet} mode={mode} onModeChange={handleModeChange} recentScans={recentScans} savedResult={state.savedResult} onDismissSaved={() => dispatch({ type: "saved-result-dismissed" })} />}
+      {state.status === "processing" && (
         <ProcessingView
-          progress={progress}
-          stage={stageForProgress(mode, progress)}
+          progress={state.progress}
+          stage={stageForProgress(mode, state.progress)}
           mode={mode}
           onCancel={cancelScan}
           previewUrl={bottlePreviewUrl}
         />
       )}
-      {status === "error" && (
+      {state.status === "error" && (
         <ErrorView
           mode={mode}
-          message={error ?? "Unknown error."}
+          message={state.error ?? "Unknown error."}
           onRetry={hasRetryableFile ? retryScan : startOver}
           onNewPhoto={startOver}
           hasFile={hasRetryableFile}
           onManual={enterManualEntry}
         />
       )}
-      {status === "review" && scan && (
+      {state.status === "review" && state.scan && (
         <ConfidenceGateView
-          quality={scan.quality!}
-          onReviewResults={() => setStatus("results")}
+          quality={state.scan.quality!}
+          onReviewResults={() => dispatch({ type: "review-passed" })}
           onManualEntry={enterManualEntry}
         />
       )}
-      {status === "results" && scan && (
+      {state.status === "results" && state.scan && (
         <ResultsView
-          scan={scan}
+          scan={state.scan}
           onUpdate={updateField}
           onUpdateSource={updateSource}
           onRemove={removeItem}
@@ -883,9 +776,9 @@ export function Scanner({
           isSaving={isSaving}
         />
       )}
-      {status === "bottle-results" && bottleResult && (
+      {state.status === "bottle-results" && state.bottleResult && (
         <BottleResultsView
-          result={bottleResult}
+          result={state.bottleResult}
           previewUrl={bottlePreviewUrl}
           onSave={saveBottleToInventory}
           onScanAnother={startOver}
