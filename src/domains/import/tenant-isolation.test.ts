@@ -383,15 +383,32 @@ describe.skipIf(!hasLiveDb)("G1-4 CSV import: cross-tenant containment (MANDATOR
       .single();
     if (reasonError || !reasonCode) throw reasonError ?? new Error("failed to seed a reason code for restaurant B");
 
-    // Tenant B — a member with NO membership in restaurant A, and whose
-    // own RLS-scoped client can never see restaurant A's wine at all —
-    // inserts a stock_adjustments row directly naming A's wine_id. This
-    // is legal per stock_adjustments' own INSERT RLS policy ("members
-    // insert own stock_adjustments"): the check is only
-    // is_member(restaurant_id) [[here, B's own membership]] and
-    // acting_user_id = auth.uid() — it never verifies wine_id belongs to
-    // that same restaurant_id. wine_id is ON DELETE CASCADE.
-    const { error: adjustmentError } = await userBClient.from("stock_adjustments").insert({
+    // UPDATED FOR MIGRATION 0136. This test was written when tenant B could
+    // create this row through its own authenticated client: the INSERT policy
+    // checked only is_member(restaurant_id) and acting_user_id = auth.uid(),
+    // never that wine_id belonged to that same restaurant. 0136 closed that
+    // hole, so the authenticated path is now rejected outright — asserted
+    // here, because this test is the reason we know the hole existed and it
+    // should be the place that notices if it ever reopens.
+    const { error: blockedError } = await userBClient.from("stock_adjustments").insert({
+      restaurant_id: restaurantB,
+      wine_id: wineId,
+      kind: "adjustment",
+      bottles: 1,
+      ml: 0,
+      reason_code_id: (reasonCode as { id: string }).id,
+      acting_user_id: userBId,
+    } as never);
+    expect(blockedError).not.toBeNull();
+
+    // The sweep this test actually exercises is still load-bearing, because
+    // 0136 is a policy and policies only govern new writes. Any cross-tenant
+    // row written BEFORE 0136 shipped is still sitting in the table, still
+    // invisible to tenant A's RLS-scoped client, and still destroyable by an
+    // ON DELETE CASCADE that bypasses row security. Service role bypasses RLS
+    // and is therefore exactly how such a legacy row got there — so that is
+    // how we reconstruct one.
+    const { error: adjustmentError } = await admin.from("stock_adjustments").insert({
       restaurant_id: restaurantB,
       wine_id: wineId,
       kind: "adjustment",
