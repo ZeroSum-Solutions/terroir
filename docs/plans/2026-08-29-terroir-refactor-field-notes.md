@@ -354,6 +354,13 @@ from: Sparkling · White · Rosé · Red · Dessert · Fortified.
 
 The app already knows (or can infer) the style — it should **pre-select the correct one**.
 
+> **Correction (2026-08-30, from the code):** these notes list six sections. The
+> product ships **five** — `DEFAULT_SECTIONS` in `src/lib/wine-list/types.ts` is
+> Sparkling / White / Rosé / Red / **Dessert & Fortified**, the last folding two
+> colours into one. The screenshot's sidebar shows five rows, not six. This mattered:
+> the first implementation matched section names exactly and so missed dessert and
+> fortified entirely. See PRD §8.1.
+
 > Corroborating evidence in `terroir-lists-builder-brandkit.png`: *Benjamin Leroux Vosne-Romanée
 > 2019* — a red Burgundy — is currently filed under the **Sparkling** section. Exactly the failure
 > this requirement prevents.

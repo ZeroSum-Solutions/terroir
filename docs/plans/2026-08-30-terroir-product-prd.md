@@ -459,9 +459,59 @@ one queries inventory, the other queries the world. Worth splitting into two tic
 
 ## 8. What shipped in tonight's autonomous run
 
-See §9 for the honest scope statement. Implemented, tested, and verified:
+Branch `feat/field-notes-tier-1`, three commits. Every gate green at each commit:
+`tsc --noEmit`, `pnpm lint` (0 errors), `pnpm test` (3,032 passing), `check:design`,
+`check:file-size`, `verify:feature-ledger`, `verify:api-contract`,
+`verify:product-conformance`.
 
-- *(populated by the implementation pass — see the run report)*
+| ID | What changed | Verified by |
+|---|---|---|
+| LIST-02 | Adding a wine pre-selects the section matching the wine's own `colour` instead of whichever section was open | 23 unit tests, fixture built from `DEFAULT_SECTIONS` |
+| CELLAR-08 | Bin cards became buttons onto the detail drawer and now render the bottle image | tsc across the three-file payload boundary; full suite |
+| BUG-03 | Section names no longer truncate to `Sp…` / `De…` | reasoning + `title` fallback; **not** visually confirmed |
+| CELLAR-07 | Detail drawer anchors to the viewport instead of the document top | reasoning; **not** visually confirmed |
+
+**Net −44 lines** against the file-size baseline: the bin-grid payload type had been
+declared three times (page / shell / grid) and the add-wine modal's three wire types
+were inline. Both were extracted, which is what made room for the changes above under
+a ratchet that only permits shrinkage.
+
+### 8.1 The audit caught three real defects
+
+A GPT-5.6 adversarial review of the first commit found three problems, all confirmed
+against the tree before fixing. Recorded because two of them are instructive:
+
+1. **LIST-02 was wrong in a way the field notes were also wrong about.** The notes
+   list six sections (Sparkling / White / Rosé / Red / Dessert / Fortified); the code's
+   `DEFAULT_SECTIONS` ships **five**, folding two colours into `"Dessert & Fortified"`.
+   Exact name matching therefore failed for `dessert` and `fortified` — two of six
+   colours, on the default template — and silently fell back to the active section,
+   which is the exact bug being fixed. Section names are now read as alternatives split
+   on real separators. Substring matching is still refused: `"Red Burgundy"` must not
+   swallow every red.
+   *This is worth noticing: Devin's screenshot sidebar shows five rows, not six. The
+   notes recorded the intent; the code records the truth.*
+
+2. **The BUG-03 fix had a touch regression.** Hiding the row's rename/delete behind
+   `opacity-0` and overlaying them reclaims width — but an `opacity-0` button still
+   takes taps, and an iPad meets the `md` breakpoint with no hover. Tapping the right
+   of a row would have hit an invisible Delete. The actions stay in flow; the width
+   comes from the sidebar going 220px → 248px instead.
+
+3. **`src/app/api/cellar/grid/route.ts` is dead code — and broken.** It has no callers
+   anywhere in `src` or `e2e`, and it builds the bin payload **unpaginated** while
+   `page.tsx` pages it 1,000 rows at a time. Wired up as-is it would silently truncate
+   any cellar over 1,000 placed bottles. Left in place and flagged rather than deleted,
+   per the standing rule on unrelated dead code. **Someone should decide its fate.**
+
+### 8.2 Not visually confirmed
+
+BUG-03 and CELLAR-07 are CSS-layout changes. Their reasoning is documented and each
+mirrors a pattern already correct elsewhere in the same component, but no screen was
+available on this run and neither was seen rendered. A local Supabase stack was up but
+belonged to the concurrent session's work, and disturbing it unattended was not worth
+the risk. **Open a wine after scrolling, and open a list sidebar, before trusting
+these two.**
 
 ---
 
