@@ -1,14 +1,24 @@
-import { act, createElement, type ChangeEvent } from "react";
+import { type ChangeEvent, act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHeroImageActions } from "./use-hero-image-actions";
 
 let container: HTMLDivElement;
 let root: Root;
-let hook: ReturnType<typeof useHeroImageActions>;
+// Assigned from inside an effect, never during render — the React
+// Compiler lint (react-hooks) rejects reassigning an outer binding
+// while rendering. Mirrors use-cellar-url-state.test.tsx.
+const holder: { current: ReturnType<typeof useHeroImageActions> | null } = { current: null };
+function hookApi(): ReturnType<typeof useHeroImageActions> {
+  if (!holder.current) throw new Error('Harness not rendered');
+  return holder.current;
+}
 
 function Harness(props: Parameters<typeof useHeroImageActions>[0]) {
-  hook = useHeroImageActions(props);
+  const value = useHeroImageActions(props);
+  useEffect(() => {
+    holder.current = value;
+  });
   return null;
 }
 
@@ -44,7 +54,7 @@ describe("useHeroImageActions", () => {
 
     const file = new File(["x"], "bottle.jpg", { type: "image/jpeg" });
     await act(async () => {
-      await hook.handleImageUpload(fileChangeEvent(file));
+      await hookApi().handleImageUpload(fileChangeEvent(file));
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -53,7 +63,7 @@ describe("useHeroImageActions", () => {
     );
     expect(toast.success).toHaveBeenCalledWith("Image uploaded");
     expect(refresh).toHaveBeenCalledOnce();
-    expect(hook.uploading).toBe(false);
+    expect(hookApi().uploading).toBe(false);
   });
 
   it("reports the upload failure through setErrorMsg without toasting success", async () => {
@@ -67,7 +77,7 @@ describe("useHeroImageActions", () => {
 
     const file = new File(["x"], "bottle.jpg", { type: "image/jpeg" });
     await act(async () => {
-      await hook.handleImageUpload(fileChangeEvent(file));
+      await hookApi().handleImageUpload(fileChangeEvent(file));
     });
 
     expect(setErrorMsg).toHaveBeenCalledWith("Too large.");
@@ -94,14 +104,14 @@ describe("useHeroImageActions", () => {
 
     let deletePromise!: Promise<void>;
     act(() => {
-      deletePromise = hook.handleImageDelete();
+      deletePromise = hookApi().handleImageDelete();
     });
-    expect(hook.uploading).toBe(true);
+    expect(hookApi().uploading).toBe(true);
 
     await act(async () => {
       resolveFetch(new Response("{}", { status: 200 }));
       await deletePromise;
     });
-    expect(hook.uploading).toBe(false);
+    expect(hookApi().uploading).toBe(false);
   });
 });

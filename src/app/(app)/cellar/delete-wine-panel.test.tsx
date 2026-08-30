@@ -1,4 +1,4 @@
-import { act, useState } from "react";
+import { act, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DeleteWinePanel } from "./delete-wine-panel";
@@ -88,7 +88,11 @@ describe("DeleteWinePanel", () => {
     function ErrorHarness() {
       const [busy, setBusy] = useState(false);
       const [errorMsg, setErrorMsg] = useState<string | null>(null);
-      lastError = errorMsg;
+      // In an effect, not during render: the React Compiler lint rejects
+      // reassigning an outer binding while rendering.
+      useEffect(() => {
+        lastError = errorMsg;
+      }, [errorMsg]);
       return (
         <DeleteWinePanel
           wineId="wine-1"

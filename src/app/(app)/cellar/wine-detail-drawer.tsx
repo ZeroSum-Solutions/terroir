@@ -80,7 +80,17 @@ export function WineDetailDrawer({
 
   // BND-058: delete-confirmation state now lives in delete-wine-panel.tsx.
 
-  const heroImage = useHeroImageActions({
+  // Destructured rather than kept as a `heroImage.*` object: reading the
+  // ref off a member expression during render trips react-hooks/refs, which
+  // the React Compiler enforces. The original code held this ref as a plain
+  // `useRef` binding in this component, and destructuring restores exactly
+  // that shape at the JSX call site.
+  const {
+    uploading: heroImageUploading,
+    fileInputRef: heroImageInputRef,
+    handleImageUpload: handleHeroImageUpload,
+    handleImageDelete: handleHeroImageDelete,
+  } = useHeroImageActions({
     wineId: row?.wine_id ?? null,
     setErrorMsg,
     toast,
@@ -330,8 +340,8 @@ export function WineDetailDrawer({
                   {canManage && (
                     <button
                       type="button"
-                      onClick={heroImage.handleImageDelete}
-                      disabled={heroImage.uploading}
+                      onClick={handleHeroImageDelete}
+                      disabled={heroImageUploading}
                       className="absolute top-2 right-2 flex h-11 w-11 items-center justify-center rounded-pill bg-black/50 text-white hover:bg-black/70 disabled:opacity-40"
                       aria-label="Remove image"
                     >
@@ -541,10 +551,10 @@ export function WineDetailDrawer({
             {canManage && !row.hero_image_url && (
               <section aria-label="Upload image" className="mt-md">
                 <input
-                  ref={heroImage.fileInputRef}
+                  ref={heroImageInputRef}
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  onChange={heroImage.handleImageUpload}
+                  onChange={handleHeroImageUpload}
                   className="hidden"
                   id="hero-image-upload"
                 />
@@ -552,12 +562,12 @@ export function WineDetailDrawer({
                   htmlFor="hero-image-upload"
                   className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-xs rounded-lg border border-rule bg-surface text-[12px] font-medium uppercase tracking-[0.1em] text-grey hover:bg-wash hover:text-ink transition-colors"
                 >
-                  {heroImage.uploading ? (
+                  {heroImageUploading ? (
                     <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
                   ) : (
                     <Upload className="h-4 w-4" strokeWidth={2} aria-hidden />
                   )}
-                  {heroImage.uploading ? "Uploading..." : "Add hero image"}
+                  {heroImageUploading ? "Uploading..." : "Add hero image"}
                 </label>
               </section>
             )}

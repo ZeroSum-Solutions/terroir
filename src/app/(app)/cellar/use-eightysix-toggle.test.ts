@@ -1,11 +1,18 @@
-import { act, createElement, useState } from "react";
+import { act, createElement, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEightysixToggle } from "./use-eightysix-toggle";
 
 let container: HTMLDivElement;
 let root: Root;
-let hook: ReturnType<typeof useEightysixToggle>;
+// Assigned from inside an effect, never during render — the React
+// Compiler lint (react-hooks) rejects reassigning an outer binding
+// while rendering. Mirrors use-cellar-url-state.test.tsx.
+const holder: { current: ReturnType<typeof useEightysixToggle> | null } = { current: null };
+function hookApi(): ReturnType<typeof useEightysixToggle> {
+  if (!holder.current) throw new Error('Harness not rendered');
+  return holder.current;
+}
 
 function Harness(props: {
   wineId: string | null;
@@ -14,7 +21,10 @@ function Harness(props: {
   refresh: () => void;
 }) {
   const [busy, setBusy] = useState(false);
-  hook = useEightysixToggle({ ...props, busy, setBusy });
+  const value = useEightysixToggle({ ...props, busy, setBusy });
+  useEffect(() => {
+    holder.current = value;
+  });
   return null;
 }
 
@@ -48,7 +58,7 @@ describe("useEightysixToggle", () => {
     await mount({ wineId: "wine-1", setErrorMsg: vi.fn(), toast, refresh: vi.fn() });
 
     await act(async () => {
-      await hook.onConfirm86("note");
+      await hookApi().onConfirm86("note");
     });
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
@@ -60,12 +70,12 @@ describe("useEightysixToggle", () => {
     await mount({ wineId: "wine-1", setErrorMsg: vi.fn(), toast, refresh });
 
     act(() => {
-      hook.setPendingDirection("eightysixed");
+      hookApi().setPendingDirection("eightysixed");
     });
-    expect(hook.pendingDirection).toBe("eightysixed");
+    expect(hookApi().pendingDirection).toBe("eightysixed");
 
     await act(async () => {
-      await hook.onConfirm86("Sold out");
+      await hookApi().onConfirm86("Sold out");
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith("/api/wines/wine-1/availability", {
@@ -74,7 +84,7 @@ describe("useEightysixToggle", () => {
       body: JSON.stringify({ direction: "eightysixed", note: "Sold out" }),
     });
     expect(toast.success).toHaveBeenCalledWith("Marked as 86'd");
-    expect(hook.pendingDirection).toBeNull();
+    expect(hookApi().pendingDirection).toBeNull();
     expect(refresh).toHaveBeenCalledOnce();
   });
 
@@ -88,14 +98,14 @@ describe("useEightysixToggle", () => {
     await mount({ wineId: "wine-1", setErrorMsg, toast, refresh: vi.fn() });
 
     act(() => {
-      hook.setPendingDirection("restored");
+      hookApi().setPendingDirection("restored");
     });
     await act(async () => {
-      await hook.onConfirm86(undefined);
+      await hookApi().onConfirm86(undefined);
     });
 
     expect(toast.error).toHaveBeenCalledWith("Toggle failed");
     expect(setErrorMsg).toHaveBeenCalledWith("Conflict.");
-    expect(hook.pendingDirection).toBe("restored");
+    expect(hookApi().pendingDirection).toBe("restored");
   });
 });
