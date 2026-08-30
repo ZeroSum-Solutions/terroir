@@ -151,7 +151,7 @@ using the existing `src/components/action-dialog.tsx` — each independently wir
 These outrank the refactor. Two are correctness issues; one is a design decision the
 boundary work depends on.
 
-### 3.1 [HIGH] Cross-tenant cascade-delete via unconstrained `wine_id`
+### 3.1 [CLOSED 2026-08-29 — migration `0136`] Cross-tenant cascade-delete via unconstrained `wine_id`
 
 INSERT policies on `stock_adjustments` and `bottle_closeouts` check
 `is_member(restaurant_id) and acting_user_id = auth.uid()` but **do not verify
@@ -169,8 +169,29 @@ runbook and neither has been done:
 - add an ownership `WITH CHECK` to the write policies, **or**
 - move the re-check and delete into one `SECURITY INVOKER` RPC transaction.
 
-**Action:** fix at the schema level in Phase 0. Do not carry this through a refactor
-that touches wine deletion.
+**Resolution.** Fixed at the schema level, as the action below required, before any
+Phase 2 branch landed. Migration `0136` amends both INSERT policies with an `exists`
+check that the row's `wine_id` — and `bottle_closeouts.open_bottle_id`, which had the
+same unchecked reference — belongs to the row's own `restaurant_id`. It uses
+`alter policy` rather than drop/create, following `0084`'s precedent for this exact
+pair, so the `roles={public}` list is preserved rather than silently narrowed.
+
+The subquery reads `public.wines` under the caller's own rights and is therefore
+RLS-filtered itself, giving the check two independent reasons to reject a foreign
+`wine_id`. A `SECURITY DEFINER` helper was considered and rejected: it would have
+added a new RLS-bypassing surface to close a hole caused by an RLS bypass.
+
+Proven, not assumed. `src/domains/cellar/wine-ownership-write-policies.test.ts` was
+written first and run against the live local stack *before* the migration: tenant B
+held 2 `stock_adjustments` rows, tenant A deleted a wine of their own, and B was left
+with 1 — the attack, executed end to end. After `0136` the same suite passes 5/5, the
+cross-tenant inserts returning 403. Measured 0 pre-existing violating rows, so the
+fix is purely forward-looking.
+
+The app-layer sweep and its TOCTOU race still exist and are now redundant defence
+rather than the only guard. `docs/runbooks/csv-import.md` still says neither real fix
+has been done; that sentence is now stale and should be corrected when that runbook
+is next touched.
 
 ### 3.2 [HIGH] Worker tenant isolation has no database backstop
 

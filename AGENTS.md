@@ -101,11 +101,19 @@ only.
   per batch of unique variants, before the per-row loop. The import dedup key is
   also still the fallback four-tuple in `src/domains/import/dedup-key.ts`.
   Both are open work; see `docs/plans/2026-08-29-modular-architecture-refactor.md`.
-- **A known RLS gap exists** on `stock_adjustments` and `bottle_closeouts` INSERT
-  policies (`wine_id` ownership is unverified; FK cascades bypass RLS). Mitigated in
-  application code with a documented TOCTOU race. See
-  `docs/runbooks/csv-import.md`. Do not build on top of the mitigation without
-  reading it.
+- **The `stock_adjustments` / `bottle_closeouts` RLS gap is CLOSED as of `0136`.**
+  Both INSERT policies now require the row's `wine_id` (and
+  `bottle_closeouts.open_bottle_id`, when non-null) to belong to the row's own
+  `restaurant_id`. Before that they gated only on membership, and because both
+  columns are `on delete cascade` and cascades bypass RLS, one tenant could file a
+  policy-compliant row naming another tenant's wine and have it silently destroyed
+  when that tenant deleted their own wine.
+  `src/domains/cellar/wine-ownership-write-policies.test.ts` is the containment
+  suite; it is live-DB-only, because the boundary being tested *is* RLS.
+  The application-layer reference sweep in `src/domains/import/batch-service.ts`
+  and its documented TOCTOU race (`docs/runbooks/csv-import.md`) still exist and
+  are now belt-and-braces rather than the only guard. That runbook's claim that
+  neither real fix has been done is stale — the policy fix is the one that landed.
 
 ## Commits
 
