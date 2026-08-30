@@ -14,6 +14,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   public: {
     Tables: {
       availability_events: {
@@ -1147,6 +1152,54 @@ export type Database = {
           },
           {
             foreignKeyName: "pricing_recommendations_wine_id_fkey"
+            columns: ["wine_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      producer_backfill_audit: {
+        Row: {
+          created_at: string
+          id: string
+          matched_words: number
+          migration: string
+          new_producer: string
+          old_producer: string
+          restaurant_id: string
+          wine_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          matched_words: number
+          migration?: string
+          new_producer: string
+          old_producer: string
+          restaurant_id: string
+          wine_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          matched_words?: number
+          migration?: string
+          new_producer?: string
+          old_producer?: string
+          restaurant_id?: string
+          wine_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "producer_backfill_audit_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "producer_backfill_audit_wine_id_fkey"
             columns: ["wine_id"]
             isOneToOne: false
             referencedRelation: "wines"
