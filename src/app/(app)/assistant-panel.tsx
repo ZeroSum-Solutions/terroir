@@ -11,6 +11,7 @@
 // that answered the question — which is the failure worth designing against.
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { MessageCircleQuestion, Search, X } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
@@ -115,7 +116,14 @@ function AssistantDialog({ onClose }: { onClose: () => void }) {
   const chips = result ? chipsFor(result.query) : [];
   const understoodNothing = result != null && result.query.understood.length === 0;
 
-  return (
+  // Portalled to <body> because the trigger lives in the header, and the
+  // header carries `.glass` — which sets backdrop-filter, and an element with
+  // a backdrop-filter becomes the CONTAINING BLOCK for its position:fixed
+  // descendants. Rendered in place, this dialog's `inset-0` resolved against
+  // the header's own 72px-tall box instead of the viewport, so the panel was
+  // squashed into the header strip. Nothing in the DOM or the tests showed
+  // it: role="dialog" was present and focusable either way. Keep the portal.
+  return createPortal(
     <div
       className="fixed inset-0 z-[var(--z-dialog)] flex items-start justify-center bg-scrim px-md py-xl"
       role="dialog"
@@ -292,7 +300,8 @@ function AssistantDialog({ onClose }: { onClose: () => void }) {
           ) : null}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
