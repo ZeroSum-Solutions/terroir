@@ -81,9 +81,26 @@ create table if not exists public.producer_backfill_audit (
 create index if not exists producer_backfill_audit_wine_id_idx
   on public.producer_backfill_audit (wine_id);
 
--- Operator-facing only. RLS on with no policy means `authenticated` reaches
--- nothing; service_role bypasses RLS and is how the down migration reads it.
+-- Operator-facing only, denied at BOTH layers deliberately.
+--
+-- RLS on with no policy is the deny-all backstop. It is not enough on its own
+-- here: Supabase's default privileges grant full CRUD on new public tables to
+-- `anon` and `authenticated`, so without the revoke below the table's only
+-- protection is RLS — and anything that later disables RLS, or adds one
+-- permissive policy, exposes every tenant's wine and restaurant ids at once.
+--
+-- The revoke is also what makes the two environments agree. Without it, this
+-- table is reachable-but-empty for `authenticated` where migrations run as
+-- `postgres` (a hosted project) and outright denied where they do not (a fresh
+-- CLI stack) — the same table failing two different ways, which is exactly the
+-- kind of divergence a test cannot be written against.
 alter table public.producer_backfill_audit enable row level security;
+
+revoke all on public.producer_backfill_audit from anon, authenticated;
+
+-- service_role keeps its access: 0137's down reads this table to restore the
+-- prior producers, and a repair that cannot be reverted is not a repair.
+grant select, insert, update, delete on public.producer_backfill_audit to service_role;
 
 comment on table public.producer_backfill_audit is
   'Prior producer values overwritten by 0137''s LWIN prefix backfill. Exists so '

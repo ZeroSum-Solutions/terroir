@@ -6,9 +6,18 @@
 // in producer_backfill_audit so the repair is reversible. That table is
 // operator-facing: it names wines and restaurants across every tenant, and it
 // exists to be read by a down migration under service_role, never by an
-// application session. It carries RLS ON with NO POLICY, which is the deny-all
-// shape — easy to get right, and just as easy to undo by adding a well-meaning
-// policy later. This suite is what notices if someone does.
+// application session.
+//
+// It is denied at TWO layers, and the distinction matters for what these tests
+// assert. `create table` grants nothing to `authenticated`, so PostgREST is
+// refused at the privilege layer with SQLSTATE 42501 before row-level security
+// is ever consulted; RLS ON with no policy sits behind that as the deny-all
+// backstop. The observable result is an outright error, not an empty result
+// set — which is the stronger of the two behaviours, because a silent `[]` is
+// indistinguishable from "no rows matched".
+//
+// Both layers are easy to undo later by adding a well-meaning grant or policy.
+// This suite is what notices if someone does.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
@@ -94,10 +103,14 @@ describe.skipIf(!hasLiveDb)("producer_backfill_audit is operator-only (MANDATORY
     const { data, error } = await userClient
       .from("producer_backfill_audit").select("*").eq("wine_id", wineId);
 
-    // RLS with no policy filters rather than raises: the honest assertion is
-    // that nothing comes back, not that an error did.
-    expect(error).toBeNull();
-    expect(data).toEqual([]);
+    // 42501 = insufficient_privilege. Asserted as the exact code rather than
+    // "some error", because the two denial layers fail differently and only
+    // this one proves the grant was never issued: if a SELECT grant were added
+    // later, RLS would take over and this call would start returning an empty
+    // array with a null error instead. That regression must fail here, and a
+    // loose `expect(error).not.toBeNull()` would let it through.
+    expect(error?.code).toBe("42501");
+    expect(data).toBeNull();
   });
 
   it("an owner cannot write to it either", async () => {
@@ -109,7 +122,7 @@ describe.skipIf(!hasLiveDb)("producer_backfill_audit is operator-only (MANDATORY
       matched_words: 1,
     } as never);
 
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe("42501");
   });
 
   it("service_role still reaches it, or the down migration cannot revert", async () => {
