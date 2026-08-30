@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import http from "node:http";
 import https from "node:https";
 
 export const runtime = "nodejs";
@@ -14,25 +15,35 @@ class ProbeTimeoutError extends Error {}
  * flap the container on a transient Supabase blip. The JSON payload
  * still reports DB reachability for ops + automated checks.
  *
- * Uses node:https directly (not globalThis.fetch) to bypass proxy env
- * vars. Node's undici-backed fetch reads HTTP_PROXY/HTTPS_PROXY at
+ * Uses node:http/node:https directly (not globalThis.fetch) to bypass proxy
+ * env vars. Node's undici-backed fetch reads HTTP_PROXY/HTTPS_PROXY at
  * resolution time and caches the ProxyAgent globally — clearing
- * process.env per-request is a race condition. The native https module
- * never uses a proxy unless explicitly configured via an Agent, so this
+ * process.env per-request is a race condition. The native modules
+ * never use a proxy unless explicitly configured via an Agent, so this
  * path is immune to proxy leakage from sandboxed environments.
  */
 
 /**
- * Single-shot DB probe via node:https. Returns true if the PostgREST
+ * Single-shot DB probe via node:http(s). Returns true if the PostgREST
  * endpoint responds 2xx within the timeout, false for non-2xx, and
  * throws on network/timeout errors.
+ *
+ * The transport follows the configured URL's scheme. Probing an
+ * `http://127.0.0.1:<port>` local stack over `https` throws, so every
+ * correctly-configured local server reported `probe_failed` — which made a
+ * server pointed at production look healthier than one pointed at the local
+ * stack, and hid exactly the misconfiguration this endpoint should expose.
  */
 function probeSupabase(url: string, serviceKey: string): Promise<boolean> {
   return new Promise<boolean>((resolve, reject) => {
     const u = new URL(url + "/rest/v1/lwin_catalog?select=lwin_id&limit=1");
-    const req = https.request(
+    const transport = u.protocol === "http:" ? http : https;
+    const req = transport.request(
       {
         hostname: u.hostname,
+        // A non-default port lives only in the URL — without it the request
+        // goes to 443/80 and the local stack is unreachable.
+        port: u.port || undefined,
         path: u.pathname + u.search,
         method: "HEAD",
         headers: {
@@ -40,7 +51,7 @@ function probeSupabase(url: string, serviceKey: string): Promise<boolean> {
           Authorization: "Bearer " + serviceKey,
         },
         timeout: 3000,
-        // No agent → direct TLS connection, no proxy.
+        // No agent → direct connection, no proxy.
       },
       (res) => {
         res.resume(); // consume response body

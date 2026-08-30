@@ -8,6 +8,13 @@ vi.mock("node:https", () => ({
   },
 }));
 
+const mockHttpRequest = vi.fn();
+vi.mock("node:http", () => ({
+  default: {
+    request: (...args: unknown[]) => mockHttpRequest(...args),
+  },
+}));
+
 const { GET } = await import("./route");
 
 type ProbeMode =
@@ -15,8 +22,8 @@ type ProbeMode =
   | { kind: "error"; error: Error & { code?: string } }
   | { kind: "timeout" };
 
-function mockProbe(mode: ProbeMode) {
-  mockHttpsRequest.mockImplementation(
+function mockProbe(mode: ProbeMode, transport = mockHttpsRequest) {
+  transport.mockImplementation(
     (
       _options: unknown,
       onResponse: (response: {
@@ -89,6 +96,22 @@ describe("GET /api/health", () => {
     mockProbe({ kind: "response", status: 204 });
 
     await expectHealth({ db: "connected" });
+  });
+
+  it("probes a local http stack over node:http, on its own port", async () => {
+    // An https-only probe threw on every `http://127.0.0.1:<port>` URL, so a
+    // correctly-configured local server could never report healthy — the one
+    // configuration this endpoint most needs to tell apart from production.
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://127.0.0.1:57321");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "local-service-role");
+    mockProbe({ kind: "response", status: 200 }, mockHttpRequest);
+
+    await expectHealth({ db: "connected" });
+    expect(mockHttpsRequest).not.toHaveBeenCalled();
+    expect(mockHttpRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ hostname: "127.0.0.1", port: "57321" }),
+      expect.any(Function),
+    );
   });
 
   it("uses a stable reason for upstream non-2xx responses", async () => {
