@@ -1,6 +1,6 @@
 # Terroir — Product PRD (from the 2026-08-29 field walk)
 
-**Status:** DRAFT — awaiting Devin's decisions on the four gated items in §6
+**Status:** DRAFT — awaiting Devin's decisions on the six gated items in §6
 **Date:** 2026-08-30
 **Source:** `docs/plans/2026-08-29-terroir-refactor-field-notes.md` (field walk, 2026-08-29)
 **Baseline commit:** `39afe36`
@@ -12,7 +12,7 @@
 
 This document converts the 2026-08-29 field-walk notes into specced, sized, sequenced
 requirements. It is written to be actioned without further clarification **except** for the
-four items in §6, which are genuinely blocked on a product decision only Devin can make.
+six items in §6, which are genuinely blocked on a product decision only Devin can make.
 
 **What changed while this was being written.** A concurrent session landed six PRs
 (#154, #155, #156, #157, #160, #161) between 19:30 and 21:13 on 2026-08-29, including the
@@ -246,8 +246,25 @@ for the name of the wine, which I think is ridiculous."*
 **Acceptance:** a zero-result scan produces a visible ledger row with a zero-item state and a
 reason; deletion is explicit, confirmed, and audited.
 
-**Size:** M · **Risk:** low–medium (touches ledger semantics; confirm soft vs hard delete
-against the existing reconcile-ledger compensation model before implementing).
+**Verified state (2026-08-30):** there is **no delete endpoint for scans or invoices** —
+nothing under `src/app/api/scan*` handles `DELETE`, and no client calls one.
+
+**Why this was not implemented autonomously.** The button is the easy half. The real question
+is what deletion means for an invoice whose line items were **already applied to inventory**:
+
+- refuse to delete an applied invoice, or
+- delete it and revert the stock it added, or
+- soft-delete — hide it from the ledger, keep the rows.
+
+The third contradicts Devin's own requirement that entries stay viewable. The second needs to
+reuse the import domain's existing revert path (`batch-revert`, per the Phase 3 plan), not
+invent a second one. The first is the cheapest and may well be right.
+
+Deleting an invoice that has already moved stock, chosen wrong and unattended, silently
+corrupts inventory — the one class of bug this product cannot afford. **Needs Devin's call;
+promoted from Tier 1 to a decision gate.**
+
+**Size:** M once decided · **Risk:** medium — inventory correctness.
 
 ---
 
@@ -434,6 +451,12 @@ rule that visual identity is owned, not assumed.
 
 ---
 
+### 6.6 SCAN-04 — what does deleting an applied invoice do?
+
+Promoted here from Tier 1 once the code was actually checked. See §4's SCAN-04 entry: no
+delete endpoint exists, and the decision that matters is what happens to inventory an
+invoice already added. Refuse / revert / soft-delete — pick one.
+
 ## 7. Tier 3 — Epics needing their own specs
 
 Each is multi-week and deserves a document of its own. Listed for sequencing, not specced here.
@@ -542,7 +565,7 @@ accounting matters more than a green checkmark:
    saying so.
 
 **The highest-value thing available tonight was this document** — it turns thirty-odd scattered
-observations into specced work with acceptance criteria, and isolates the five decisions that
+observations into specced work with acceptance criteria, and isolates the six decisions that
 unblock the rest. `/goal` requires an approved spec with measurable success criteria; the field
 notes explicitly were not one. Now there is a candidate.
 
@@ -550,7 +573,7 @@ notes explicitly were not one. Now there is a candidate.
 
 ## 10. Recommended sequence
 
-1. **Devin answers §6** (five decisions, ~30 minutes of his time — the highest-leverage half
+1. **Devin answers §6** (six decisions, ~30 minutes of his time — the highest-leverage half
    hour available on this project).
 2. **Tier 1 lands** (§4) — small, already partly done tonight.
 3. **GLOBAL-01 gate script + GLOBAL-02 search** — cheap, and they constrain everything after.
