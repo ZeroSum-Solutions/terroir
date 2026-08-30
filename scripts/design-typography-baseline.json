@@ -56,14 +56,19 @@
     "text-[18px]": 2
   },
   "src/app/(app)/cellar/cellar-list.tsx": {
-    "class:font-mono": 5,
-    "text-[10.5px]": 4,
     "text-[10px]": 6,
-    "text-[11px]": 4,
-    "text-[12px]": 12,
-    "text-[13px]": 9,
+    "text-[12px]": 9,
+    "text-[13px]": 7,
+    "text-[17px]": 1
+  },
+  "src/app/(app)/cellar/cellar-row.tsx": {
+    "class:font-mono": 5,
+    "text-[10.5px]": 1,
+    "text-[11px]": 1,
+    "text-[12px]": 3,
+    "text-[13px]": 1,
     "text-[14px]": 2,
-    "text-[17px]": 4
+    "text-[17px]": 2
   },
   "src/app/(app)/cellar/cellar-shell.tsx": {
     "class:font-mono": 1,
@@ -100,6 +105,11 @@
   "src/app/(app)/cellar/enrich-control.tsx": {
     "text-[11px]": 1,
     "text-[13px]": 1
+  },
+  "src/app/(app)/cellar/lineage-block-list.tsx": {
+    "text-[10.5px]": 1,
+    "text-[11px]": 1,
+    "text-[17px]": 1
   },
   "src/app/(app)/cellar/merge-duplicates-panel.tsx": {
     "text-[12px]": 1,
@@ -186,6 +196,11 @@
     "text-[12px]": 1,
     "text-[13px]": 1
   },
+  "src/app/(app)/cellar/section-group.tsx": {
+    "text-[10.5px]": 1,
+    "text-[11px]": 1,
+    "text-[13px]": 1
+  },
   "src/app/(app)/cellar/serving-temp-section.tsx": {
     "text-[12px]": 1,
     "text-[14px]": 1
@@ -197,6 +212,10 @@
     "class:font-mono": 1,
     "text-[12px]": 6,
     "text-[13px]": 6
+  },
+  "src/app/(app)/cellar/taxonomy-group.tsx": {
+    "text-[10.5px]": 1,
+    "text-[11px]": 1
   },
   "src/app/(app)/cellar/voice-cellar-control.tsx": {
     "text-[11.5px]": 1,
