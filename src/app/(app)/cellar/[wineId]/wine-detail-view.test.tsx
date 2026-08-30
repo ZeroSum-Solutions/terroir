@@ -74,6 +74,7 @@ const PROFILE: XWinesProfile = {
   hasNonVintage: false,
   ratingAvg: 3.639,
   ratingCount: 6666,
+  image: null,
 };
 
 const BASE: WineDetailViewProps = {
@@ -100,6 +101,62 @@ describe("without a reference match", () => {
     expect(el.querySelector("h1")?.textContent).toBe("Koonunga Hill Shiraz-Cabernet");
     expect(el.textContent).toContain("6 on hand");
     expect(headings(el)).toContain("In your cellar");
+  });
+});
+
+describe("corpus imagery in the hero", () => {
+  // The corpus's picture is only sometimes a picture of this wine (0138), and
+  // the hero is the one place a reader will take it as the bottle in front of
+  // them. These pin the two things that make that safe: a non-"label" kind is
+  // captioned with what it actually is, and the tenant's own photograph is
+  // never displaced by one.
+  const withImage = (kind: "label" | "producer" | "representative") => ({
+    ...PROFILE,
+    image: {
+      url: "http://127.0.0.1:57321/storage/v1/object/public/wine-images/catalog/x.jpg",
+      kind,
+      source: "openfoodfacts",
+      credit: "Open Food Facts contributors, CC-BY-SA-3.0 (123)",
+    },
+  });
+
+  it("fills an empty hero with the corpus's picture and credits its source", async () => {
+    const el = await render({ ...BASE, profile: ok(withImage("label")) });
+    const img = el.querySelector("img");
+    expect(img?.getAttribute("src")).toContain("/catalog/x.jpg");
+    expect(el.textContent).toContain("Reference label for this wine");
+    expect(el.textContent).toContain("CC-BY-SA-3.0");
+  });
+
+  it("says a producer shot is not this cuvée, in the caption and the alt text", async () => {
+    const el = await render({ ...BASE, profile: ok(withImage("producer")) });
+    expect(el.textContent).toContain("A bottle from this producer — not this cuvée");
+    expect(el.querySelector("img")?.getAttribute("alt")).toBe(
+      "A bottle from this producer — not this cuvée",
+    );
+  });
+
+  it("never lets a representative bottle pass as this wine's label", async () => {
+    const el = await render({ ...BASE, profile: ok(withImage("representative")) });
+    expect(el.textContent).toContain("Representative bottle — not this wine's label");
+    // The alt text must not name the producer over somebody else's bottle.
+    expect(el.querySelector("img")?.getAttribute("alt")).not.toContain("Penfolds");
+  });
+
+  it("keeps the tenant's own photograph when they have one", async () => {
+    const el = await render({
+      ...BASE,
+      wine: { ...WINE, hero_image_url: "https://example.test/theirs.jpg" },
+      profile: ok(withImage("representative")),
+    });
+    expect(el.querySelector("img")?.getAttribute("src")).toBe("https://example.test/theirs.jpg");
+    expect(el.textContent).not.toContain("Representative bottle");
+  });
+
+  it("keeps the placeholder when the corpus has no picture either", async () => {
+    const el = await render({ ...BASE, profile: ok(PROFILE) });
+    expect(el.textContent).not.toContain("Representative bottle");
+    expect(el.textContent).not.toContain("Reference label");
   });
 });
 

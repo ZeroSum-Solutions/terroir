@@ -520,15 +520,23 @@ create temp table pool on commit drop as
     from img
    where source = 'openfoodfacts' and nullif(wine_type, '') is not null;
 
+-- The count() window takes NO order by, deliberately. A window with one
+-- defaults to RANGE UNBOUNDED PRECEDING .. CURRENT ROW, which makes count(*)
+-- a RUNNING total rather than the partition size — and then the first row of
+-- every partition has rn = 0 and n = 1, so wine_id % n = 0 = rn matches EVERY
+-- wine and a single photograph is served to the whole partition. Measured
+-- before this comment existed: 10,754 French reds, one bottle between them.
 create temp table pool_type_country on commit drop as
-  select p.*, (row_number() over w) - 1 as rn, count(*) over w as n
-    from pool p where p.country is not null
-  window w as (partition by p.wine_type, p.country order by p.key);
+  select p.*,
+         (row_number() over (partition by p.wine_type, p.country order by p.key)) - 1 as rn,
+         count(*) over (partition by p.wine_type, p.country) as n
+    from pool p where p.country is not null;
 
 create temp table pool_type on commit drop as
-  select p.*, (row_number() over w) - 1 as rn, count(*) over w as n
-    from pool p
-  window w as (partition by p.wine_type order by p.key);
+  select p.*,
+         (row_number() over (partition by p.wine_type order by p.key)) - 1 as rn,
+         count(*) over (partition by p.wine_type) as n
+    from pool p;
 
 update public.xwines_catalog c
    set image_url = p.image_url, image_kind = 'representative',

@@ -69,3 +69,7 @@ scripts/lwin.csv
 .zeroforge/
 supabase/.temp/
 scratchpad/
+
+# harvest-wine-imagery.mjs cache — ~8 MB of source metadata, re-fetchable and
+# not a build input. seed-catalog-imagery.mjs reads it from here by default.
+/.wine-imagery/

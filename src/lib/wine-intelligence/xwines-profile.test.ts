@@ -6,6 +6,7 @@ import {
   bodyAxis,
   fetchVintageRatings,
   resolveXWinesProfile,
+  toImage,
   XWINES_NAME_FLOOR,
   XWINES_PRODUCER_FLOOR,
   XWINES_SCORE_FLOOR,
@@ -33,6 +34,10 @@ const CATALOG_ROW = {
   has_non_vintage: false,
   rating_avg: 3.639,
   rating_count: 6666,
+  image_url: "http://127.0.0.1:57321/storage/v1/object/public/wine-images/xwines/174177.jpeg",
+  image_kind: "label",
+  image_source: "xwines",
+  image_credit: null,
 };
 
 type Recorded = { table: string; filters: Record<string, unknown> };
@@ -289,6 +294,58 @@ describe("resolveXWinesProfile — acceptance rule", () => {
     expect(value(await resolveXWinesProfile({ supabase, ...base, producer: null }))).toBeNull();
     expect(value(await resolveXWinesProfile({ supabase, ...base, producer: "   " }))).toBeNull();
     expect(calls.filter((c) => c.table === "rpc:match_xwines")).toHaveLength(0);
+  });
+});
+
+describe("corpus imagery", () => {
+  // 0138 stores three different strengths of claim in one column. A reader that
+  // loses the kind renders a stranger's bottle as this wine's label, so these
+  // pin that the kind survives the read and that an unreadable one drops the
+  // picture rather than guessing which of the three it was.
+  const row = (over: Record<string, unknown>) => ({ ...CATALOG_ROW, ...over });
+
+  it("carries the picture and its kind onto the profile", async () => {
+    const { supabase } = fakeSupabase({
+      canonical: { xwines_wine_id: 174177 },
+      catalog: row({
+        image_kind: "producer",
+        image_source: "openfoodfacts",
+        image_credit: "Open Food Facts contributors, CC-BY-SA-3.0 (3500610095429)",
+      }) as typeof CATALOG_ROW,
+    });
+    const profile = value(
+      await resolveXWinesProfile({
+        supabase,
+        canonicalWineId: "c0000000-0000-4000-8000-000000000001",
+        producer: "Penfolds",
+        name: "Koonunga Hill",
+      }),
+    );
+    expect(profile!.image).toEqual({
+      url: CATALOG_ROW.image_url,
+      kind: "producer",
+      source: "openfoodfacts",
+      credit: "Open Food Facts contributors, CC-BY-SA-3.0 (3500610095429)",
+    });
+  });
+
+  it("accepts each kind the corpus is allowed to store", () => {
+    for (const kind of ["label", "producer", "representative"]) {
+      expect(toImage(row({ image_kind: kind }))!.kind).toBe(kind);
+    }
+  });
+
+  it("drops a picture whose kind it cannot read rather than assuming one", () => {
+    // Not a hypothetical safety net: promoting an unknown kind to "label"
+    // asserts a bottle, and demoting it to "representative" hides a real
+    // label. Neither is answerable from the row, so there is no picture.
+    expect(toImage(row({ image_kind: "hero" }))).toBeNull();
+    expect(toImage(row({ image_kind: null }))).toBeNull();
+  });
+
+  it("drops a picture with no URL or no recorded source", () => {
+    expect(toImage(row({ image_url: null }))).toBeNull();
+    expect(toImage(row({ image_source: null }))).toBeNull();
   });
 });
 
