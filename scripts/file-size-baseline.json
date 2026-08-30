@@ -1,6 +1,6 @@
 {
   "src/app/(app)/cellar/[wineId]/wine-detail-view.tsx": 442,
-  "src/app/(app)/cellar/cellar-list.tsx": 1111,
+  "src/app/(app)/cellar/cellar-list.tsx": 612,
   "src/app/(app)/cellar/cellar-shell.tsx": 662,
   "src/app/(app)/cellar/config/page.tsx": 455,
   "src/app/(app)/cellar/edit-metadata-modal.tsx": 418,
