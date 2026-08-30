@@ -41,13 +41,17 @@ pnpm run types:check     # regenerate and diff the Supabase TypeScript types
 pnpm run downs:check     # verify migrations 0011+ have paired down files
 ```
 
-[`app_spec.txt`](app_spec.txt) is the source requirement inventory.
 [`docs/feature-ledger.json`](docs/feature-ledger.json) is the sole authoritative
-completion and status ledger for all 269 active core requirements.
-[`claude-progress.txt`](claude-progress.txt) is historical evidence only and does
-not determine completion status. Run `pnpm verify:feature-ledger` after changing
-the ledger or its source requirements; CI runs the same verification before the
-typecheck, lint, and test gates.
+completion and status ledger for all 269 active core requirements. Run
+`pnpm verify:feature-ledger` after changing the ledger or its source requirements;
+CI runs the same verification before the typecheck, lint, and test gates. Never
+hand-edit the ledger.
+
+The original requirement inventory
+([`docs/_archive/app_spec.txt`](docs/_archive/app_spec.txt)) and the session diary
+([`docs/_archive/claude-progress.txt`](docs/_archive/claude-progress.txt)) were moved
+to [`docs/_archive/`](docs/_archive/README.md) on 2026-08-29. Both are historical
+evidence only, both contain drifted claims, and neither determines completion status.
 
 [`docs/PRODUCT-CONTRACT-CONFORMANCE.md`](docs/PRODUCT-CONTRACT-CONFORMANCE.md)
 defines the separate product-conformance classification artifact and drift
@@ -89,7 +93,10 @@ application modules in `src/lib/`, and database migrations in
 
 ## Documentation
 
+- [`AGENTS.md`](AGENTS.md) is the working contract — read it before your first edit.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) owns module and database boundaries.
+- [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) owns verified code conventions.
+- [`docs/runbooks/README.md`](docs/runbooks/README.md) indexes the operational runbooks.
 - [`docs/LOCAL-SUPABASE.md`](docs/LOCAL-SUPABASE.md) owns sanitized local seed setup and coverage.
 - [`docs/STAGING-SETUP.md`](docs/STAGING-SETUP.md) owns preview and staging setup.
 - [`docs/PRODUCT-CONTRACT-CONFORMANCE.md`](docs/PRODUCT-CONTRACT-CONFORMANCE.md) owns the TER-CF conformance artifact.

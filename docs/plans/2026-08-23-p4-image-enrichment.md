@@ -1,5 +1,22 @@
 # P4 — Image Enrichment: Sourcing, Licensing, Caching, and Serving
 
+> **STATUS CORRECTION (2026-08-29).** This document is no longer "design only," and
+> it no longer describes what shipped. A **narrower** design landed instead, in
+> migrations `0130`–`0134`: `0130_wine_image_storage.sql`,
+> `0131_xwines_catalog.sql`, `0132_canonical_wines_xwines_link.sql`,
+> `0133_xwines_catalog_lower_trgm_indexes.sql`, `0134_match_xwines_top_n.sql`, with
+> `src/lib/wine-intelligence/xwines-profile.ts`. That is X-Wines catalogue linkage
+> plus basic image storage — **not** the full derivative-pipeline, licensing, and
+> caching design specified below, and **not** at the migration numbers this document
+> and its amendments predict (`0112`–`0121`).
+>
+> Treat everything below as the **superseded original proposal**. The licensing and
+> derivative-caching sections describe work that has not been built. Before acting on
+> any part of it, diff it against what `0130`–`0134` actually did and cut a fresh
+> spec for the remaining gap.
+
+Status: superseded in part — see the correction above. Original status line follows.
+
 Status: design only. No code, no migrations applied, no Supabase stack touched by this pass.
 
 > **Amendments (2026-08-24, from `2026-08-24-visual-wine-platform-synthesis.md` v3, audit
