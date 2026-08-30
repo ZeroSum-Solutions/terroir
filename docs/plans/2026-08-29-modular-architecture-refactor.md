@@ -300,6 +300,52 @@ teeth.
 
 ---
 
+## 3B. Production reality, measured 2026-08-29
+
+Phases 0–2 landed as five squashed commits (#152, #157, #154, #155, #156). Applying
+their migrations to production surfaced three things no local run could have.
+
+**Production was 25 versions behind.** It sat at `0111`; the repo was at `0136`. Ten
+migrations had never been applied, including `0136` — the HIGH-severity RLS fix this
+plan's §3.1 is about. Nothing was broken; there was simply no procedure, no gate, and
+nothing that would ever have said so. All ten are now applied and verified, and the
+procedure is written down at `docs/runbooks/production-migrations.md`.
+
+**`0135` could not be applied at all, and would never have worked.** Its backfill
+aborted:
+
+```
+ERROR: null value in column "producer_norm" of relation "_rwvb_input"
+violates not-null constraint
+```
+
+`resolve_wine_variants_bulk` (0099) documents that it drops rows whose producer
+collapses under normalization. It does not — the column is `NOT NULL`, so one such row
+raises `23502` and takes the whole call down. The backfill is unguarded, so the
+migration died; the write path *is* guarded, so wine creation succeeded while every
+other wine in the batch silently lost its identity. Fixed in `0135` itself rather than
+a `0137`, because a follow-up cannot make `0135` replayable and a restore drill replays
+`0001..N` in order.
+
+**The identity spine is inert in production, for a reason outside this plan.** 108 of
+1385 wines resolve. 1277 carry an empty `producer` with the producer name embedded in
+`name`. No migration fixes that; splitting producer out of `name` is separate work and
+should be scoped as such.
+
+### What this says about the plan's method
+
+§3.1 and §3.4 were both written from inspection and both needed correcting after
+measurement (§3.4's correction is in place above). `0135` extends the pattern to
+testing: it had a test for the exact failing input — "a wine whose producer and cuvee
+normalize to nothing" — which passed throughout, because it asserted only that the
+write did not fail. The guard clause made a total failure indistinguishable from
+success at the call site.
+
+**A test that asserts "it didn't throw" cannot see a swallowed failure.** Where code
+deliberately downgrades an error to a warning, the test has to assert the
+*consequence* — here, that a wine sharing the batch still resolved. That test now
+exists.
+
 ## 4. Target architecture
 
 Five packages, each with a stated reason to exist. Not thirteen — contexts that still

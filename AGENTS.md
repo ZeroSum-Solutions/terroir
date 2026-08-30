@@ -40,6 +40,14 @@ Break any of these and you will cause damage that tests will not catch.
    `pnpm verify:feature-ledger`.
 6. **`main` is protected** with `enforce_admins: true` and a single required check
    running 14 gates. There is no path around it, by design. Do not try to find one.
+7. **Merging to `main` deploys. Migrations do not ride along.** Railway is connected to
+   `main` and ships the same SHA to *both* the `production` and `staging` environments;
+   `railway.toml` runs `pnpm start` and nothing else. There is one Supabase project, so
+   there is no database-level staging either. A migration reaches production only when
+   someone applies it by hand —
+   `docs/runbooks/production-migrations.md` is how. Write every migration so it is safe
+   against a database the *old* code is still talking to, because that is the window it
+   lands in.
 
 ## Gates that must pass before anything lands
 
@@ -96,6 +104,13 @@ only.
   `canonical_wine_id` follows from 0098's trigger. `backfill_wine_identity(uuid)`
   is the idempotent repair function; the local seeder calls it because it writes
   `wines` directly.
+  **In production the spine is installed but nearly empty: 108 of 1385 wines
+  resolve (2026-08-29).** That is a data shape problem, not a code one — 1277 of
+  those wines carry an *empty* `producer`, with the producer name embedded in
+  `name` ("Benjamin Leroux Vosne-Romanée"). Nothing can resolve an identity
+  without a producer, so they are filtered out and keep a null
+  `wine_variant_id`. Splitting producer out of `name` is the unlock; until then
+  the spine only grows on newly created wines that supply one.
   **The CSV import path (`apply_import_batch_chunk`) is still unresolved by
   design** — the P2 plan (§9/§12) puts that call in P3's TypeScript caller, once
   per batch of unique variants, before the per-row loop. The import dedup key is
