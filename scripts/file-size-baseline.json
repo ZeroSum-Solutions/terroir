@@ -16,7 +16,7 @@
   "src/app/(app)/lists/[id]/components/add-wine-modal.tsx": 658,
   "src/app/(app)/lists/[id]/components/wine-row.tsx": 516,
   "src/app/(app)/lists/[id]/wine-list-editor.mobile.test.tsx": 430,
-  "src/app/(app)/lists/[id]/wine-list-editor.tsx": 1251,
+  "src/app/(app)/lists/[id]/wine-list-editor.tsx": 915,
   "src/app/(app)/lists/wine-list-landing.tsx": 625,
   "src/app/(app)/price-comparison/page.tsx": 876,
   "src/app/(app)/scan-bottle/page.tsx": 814,
