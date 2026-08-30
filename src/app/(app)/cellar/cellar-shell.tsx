@@ -18,6 +18,7 @@ import { drawerStateKey, WineDetailDrawer } from "./wine-detail-drawer";
 import { ReconcileModal } from "./reconcile-modal";
 import { AutoEightysixModal } from "./auto-eightysix-modal";
 import { CellarGridView, CellarSetup } from "./cellar-grid";
+import type { GridData } from "./grid-types";
 import { resolveCellarNavigationIntent } from "./cellar-navigation";
 import { useCellarUrlState } from "./use-cellar-url-state";
 import { buildCellarCounters, CellarCounters } from "./cellar-counters";
@@ -47,19 +48,7 @@ export function CellarShell({
   rows: CellarWineRow[];
   reconcileItems: OpenBottleRow[];
   cellarConfig: { id: string; rows: number; columns: number; name: string; lowStockThreshold: number; reconcileVarianceThresholdOz: number } | null;
-  gridData: Record<
-    string,
-    {
-      wines: Array<{
-        wineId: string;
-        name: string;
-        producer: string;
-        vintage: number | null;
-        quantity: number;
-      }>;
-      totalBottles: number;
-    }
-  >;
+  gridData: GridData;
   restaurantName: string;
   restaurantId: string;
   autoEightysixEnabled: boolean;
@@ -459,7 +448,7 @@ export function CellarShell({
           sections={cellarSections}
         />
       ) : cellarConfig ? (
-        <CellarGridView config={cellarConfig} gridData={gridData} />
+        <CellarGridView config={cellarConfig} gridData={gridData} onSelectWine={openWine} />
       ) : (
         <CellarSetup restaurantName={restaurantName} />
       )}

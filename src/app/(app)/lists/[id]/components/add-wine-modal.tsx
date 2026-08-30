@@ -4,44 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, Plus, Search, Sparkles } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { WineThumb } from "@/components/wine-thumb";
-
-// BND-040 — pricing suggestion response shape from
-// /api/wines/[id]/pricing-suggestion. Mirrors the route's JSON.
-type PricingSuggestion = {
-  wineId: string;
-  suggestedBottle: number | null;
-  suggestedGlass: number | null;
-  glassPourMl: number;
-  targetMarkupRatio: number;
-  targetPourCostPct: number;
-  retailMedian: number | null;
-  retailMin: number | null;
-  retailMax: number | null;
-  retailRetailerCount: number | null;
-  retailRefreshedAt: string | null;
-  categoryBandApplied: boolean;
-  hasRetailData: boolean;
-};
-
-type SearchWine = {
-  id: string;
-  name: string;
-  producer: string;
-  vintage: number | null;
-  varietal: string | null;
-  region: string | null;
-  colour: string | null;
-  hero_image_url: string | null;
-};
-
-type LwinWine = {
-  lwin_id: string;
-  display_name: string;
-  producer: string | null;
-  varietal: string | null;
-  region: string | null;
-  country: string | null;
-};
+import { sectionIdForColour } from "@/domains/wine-lists/section-for-colour";
+import type { LwinWine, PricingSuggestion, SearchWine } from "./add-wine-modal.types";
 
 interface AddWineModalProps {
   sections: { id: string; name: string }[];
@@ -163,6 +127,17 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
     };
   }, [selectedId]);
 
+  /**
+   * LIST-02 — pre-check the section that matches the wine's own colour rather
+   * than whichever section the user was looking at. Falls back to the active
+   * section when the wine has no colour (a catalog import moments old) or the
+   * list has no section for it.
+   */
+  const selectWine = (wine: SearchWine) => {
+    setSelected(wine);
+    setSelectedSectionIds(new Set([sectionIdForColour(wine.colour, sections) ?? activeSectionId]));
+  };
+
   /** Clear suggestion + price drafts when the user goes Back to search. */
   const clearSelection = () => {
     setSelected(null);
@@ -251,7 +226,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
         return;
       }
       const { id } = await res.json();
-      setSelected({
+      selectWine({
         id,
         name: lwin.display_name,
         producer: lwin.producer ?? "",
@@ -371,7 +346,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                     <button
                       key={wine.id}
                       type="button"
-                      onClick={() => setSelected(wine)}
+                      onClick={() => selectWine(wine)}
                       className="flex w-full items-center gap-md border-b border-rule/50 px-lg py-sm text-left transition-colors hover:bg-wash"
                     >
                       <WineThumb

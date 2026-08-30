@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Grid2x2, Loader2, X, Wine } from "lucide-react";
+import { WineThumb } from "@/components/wine-thumb";
+import type { GridData } from "./grid-types";
 import { useRouter } from "next/navigation";
 
 type CellarConfig = {
@@ -10,19 +12,6 @@ type CellarConfig = {
   columns: number;
   name: string;
 };
-
-type BinData = {
-  wines: Array<{
-    wineId: string;
-    name: string;
-    producer: string;
-    vintage: number | null;
-    quantity: number;
-  }>;
-  totalBottles: number;
-};
-
-type GridData = Record<string, BinData>;
 
 const CELL_SIZE = 48;
 const GAP = 4;
@@ -147,9 +136,12 @@ export function CellarSetup({ restaurantName: _restaurantName }: { restaurantNam
 export function CellarGridView({
   config,
   gridData,
+  onSelectWine,
 }: {
   config: CellarConfig;
   gridData: GridData;
+  /** CELLAR-08 — opens the wine detail drawer, same as a list-view row. */
+  onSelectWine?: (wineId: string) => void;
 }) {
   const [selectedBin, setSelectedBin] = useState<string | null>(null);
 
@@ -293,22 +285,40 @@ export function CellarGridView({
                   {selectedData.totalBottles !== 1 ? "s" : ""}
                 </div>
                 <div className="flex flex-col gap-sm">
+                  {/* CELLAR-08 — this was a plain div: a bin card named the
+                      wine and did nothing else. Someone sent to Bin A5 for one
+                      of ten bottles could neither see what it looks like nor
+                      click through to find out. It is now a button onto the
+                      same detail drawer the list view opens, and it carries the
+                      bottle's picture. */}
                   {selectedData.wines.map((w, i) => (
-                    <div
+                    <button
                       key={`${w.wineId}-${i}`}
-                      className="rounded-md border border-rule px-sm py-sm"
+                      type="button"
+                      onClick={() => onSelectWine?.(w.wineId)}
+                      disabled={!onSelectWine}
+                      className="flex w-full items-center gap-sm rounded-md border border-rule px-sm py-sm text-left transition-colors hover:bg-wash focus-ring disabled:cursor-default disabled:hover:bg-transparent"
                     >
-                      <div className="font-serif text-[17px] font-medium leading-snug text-ink">
-                        {w.producer}, {w.name}
-                      </div>
-                      <div className="mt-2xs flex items-center gap-sm text-[12px] font-light text-grey">
-                        <span className="tabular">
-                          {w.vintage ?? "NV"}
+                      <WineThumb
+                        src={w.heroImageUrl}
+                        producer={w.producer}
+                        name={w.name}
+                        colour={w.colour}
+                        size={40}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-serif text-[17px] font-medium leading-snug text-ink">
+                          {w.producer}, {w.name}
                         </span>
-                        <span>&middot;</span>
-                        <span className="tabular">Qty {w.quantity}</span>
-                      </div>
-                    </div>
+                        <span className="mt-2xs flex items-center gap-sm text-[12px] font-light text-grey">
+                          <span className="tabular">
+                            {w.vintage ?? "NV"}
+                          </span>
+                          <span>&middot;</span>
+                          <span className="tabular">Qty {w.quantity}</span>
+                        </span>
+                      </span>
+                    </button>
                   ))}
                 </div>
               </>
