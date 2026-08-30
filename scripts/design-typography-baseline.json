@@ -371,19 +371,20 @@
     "text-[14px]": 2,
     "text-[22px]": 1
   },
+  "src/app/(app)/price-comparison/comparable-price-cards.tsx": {
+    "text-[10.5px]": 2
+  },
+  "src/app/(app)/price-comparison/comparable-price-table.tsx": {
+    "text-[10.5px]": 3
+  },
   "src/app/(app)/price-comparison/export-csv-button.tsx": {
     "text-[13px]": 1
   },
-  "src/app/(app)/price-comparison/page.tsx": {
-    "class:font-mono": 24,
-    "text-[10.5px]": 8,
-    "text-[11px]": 5,
-    "text-[12px]": 2,
-    "text-[13px]": 10,
-    "text-[14px]": 4,
-    "text-[15px]": 4,
-    "text-[17px]": 5,
-    "text-[20px]": 4
+  "src/app/(app)/price-comparison/single-source-price-cards.tsx": {
+    "text-[10.5px]": 1
+  },
+  "src/app/(app)/price-comparison/single-source-price-table.tsx": {
+    "text-[10.5px]": 2
   },
   "src/app/(app)/price-comparison/sort-controls.tsx": {
     "text-[10px]": 1,
