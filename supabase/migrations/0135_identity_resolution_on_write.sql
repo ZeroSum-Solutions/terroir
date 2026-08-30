@@ -150,6 +150,17 @@ begin
     -- cuvee_norm itself via identity_normalize_text (the P2 round-5 fix);
     -- a caller-supplied identity key is exactly the cross-tenant hole that
     -- fix closed, so none is sent.
+    --
+    -- Wines whose producer collapses to nothing under normalization are
+    -- filtered out HERE rather than left for resolve_wine_variants_bulk to
+    -- drop. Its contract says it drops them; it does not — `_rwvb_input`
+    -- declares `producer_norm not null`, so such a row raises 23502 and
+    -- takes the whole call down with it. That was invisible until this ran
+    -- against real data: 1277 of 1385 production wines carry an empty
+    -- producer with the producer name embedded in `name`, and a single one
+    -- of them in a batch cost every other wine in that batch its identity.
+    -- Filtering keeps the blast radius at the one unresolvable row, which
+    -- simply keeps a null wine_variant_id — the designed outcome (0099).
     select jsonb_agg(
              jsonb_build_object(
                'idx',          u.ord - 1,
@@ -162,15 +173,22 @@ begin
            )
       into v_payload
       from unnest(v_unique_ids) with ordinality as u(wine_id, ord)
-      join public.wines w on w.id = u.wine_id;
+      join public.wines w on w.id = u.wine_id
+     where public.identity_normalize_text(w.producer) is not null;
+  end if;
+
+  -- Every wine in the batch was unresolvable: nothing to send, and calling
+  -- with a null payload would fail jsonb_to_recordset.
+  if v_payload is not null then
 
     begin
-      -- Rows whose producer/cuvee collapse to nothing under normalization
-      -- are dropped by resolve_wine_variants_bulk rather than given a
-      -- placeholder identity, so they simply never come back and keep a
-      -- null wine_variant_id. That is the designed outcome (0099), not a
-      -- failure: an unresolvable name is a data-quality problem for a
-      -- human, not a reason to refuse to create the wine.
+      -- Rows that cannot be normalized were already filtered out of
+      -- v_payload above, so everything sent here is resolvable in
+      -- principle. Anything the spine still declines to match simply never
+      -- comes back and keeps a null wine_variant_id. That is the designed
+      -- outcome (0099), not a failure: an unresolvable name is a
+      -- data-quality problem for a human, not a reason to refuse to
+      -- create the wine.
       update public.wines w
          set wine_variant_id = r.wine_variant_id
         from public.resolve_wine_variants_bulk(p_restaurant_id, v_payload) r
@@ -275,6 +293,12 @@ begin
         where restaurant_id = v_restaurant.restaurant_id
           and wine_variant_id is null
           and id > v_cursor
+          -- Same filter, same reason as find_or_create_wines_batch above:
+          -- an unnormalizable producer raises inside
+          -- resolve_wine_variants_bulk instead of being dropped by it.
+          -- Unfiltered, this backfill aborts the whole migration on the
+          -- first such row.
+          and public.identity_normalize_text(producer) is not null
         order by id
         limit 500
       ) s;
