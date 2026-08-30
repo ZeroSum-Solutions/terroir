@@ -52,6 +52,39 @@ fuzzy matching live.
 **A good page to land on:** the cellar's most-rated wine — Esporão Reserva Tinto,
 4.21/5 from 9,662 ratings, Alicante Bouschet, pairs with beef.
 
+## The wine assistant
+
+The **?** button in the header, on every authenticated page. Type a question:
+
+> a bold red that pairs with beef
+
+It answers from the cellar — 74 matches, best first, each with grape, region,
+body, community rating **with its sample size**, price and bottles on hand.
+Clicking a result opens that wine.
+
+**The point to make, if anyone asks whether it is an LLM: it is not.** There is
+no model in the path. The question is parsed into a whitelisted struct against
+closed vocabularies — the corpus's own type/body/pairing/blend values, and the
+cellar's own countries, regions and grapes — and every line rendered is a
+column read from a row. That is a deliberate reading of decision **D-006b**,
+which defers open-ended chat from v1 and forbids ungrounded prose.
+
+Worth demonstrating on purpose, because it is the differentiator:
+
+| Ask | What happens |
+|---|---|
+| `a blend from Argentina, $200-400, for meats` | The PRD's own example. Parses completely and returns Tussock Jumper Malbec 2021, $209.56, 2 on hand |
+| `a red from Narnia` | Reds, with a banner: *"I did not understand narnia, so that was left out of this search."* It cannot invent a country |
+| `hello how are you` | No results and no list. A query that understood nothing matches nothing |
+
+Dimensions understood: style, body, blend vs single varietal, grape, region,
+country, food pairing, price (`under $40`, `$200-400`, `over $100`). When the
+cellar holds nothing that fits, it offers corpus wines clearly labelled **not in
+your cellar**.
+
+It is not on the print views or the public guest menu — those are not staff
+surfaces.
+
 ## What the imagery actually claims
 
 `xwines_catalog.image_kind` is a closed vocabulary, and the distinction is load-bearing
