@@ -48,7 +48,7 @@
   "src/domains/import/p3-live.test.ts": 782,
   "src/domains/import/preview-service.test.ts": 562,
   "src/domains/import/row-validator.test.ts": 500,
-  "src/domains/import/tenant-isolation.test.ts": 429,
+  "src/domains/import/tenant-isolation.test.ts": 446,
   "src/domains/scanning/invoice-arithmetic.test.ts": 493,
   "src/lib/api-route-inventory/generator.test.ts": 415,
   "src/lib/feature-ledger/verify-feature-ledger.test.ts": 412,
