@@ -18,6 +18,8 @@
     "test:e2e": "playwright test",
     "worker": "tsx src/worker/index.ts",
     "check:design": "node scripts/check-design-palette.mjs && node scripts/check-design-contrast.mjs && node scripts/check-design-token-sync.mjs && node scripts/check-design-typography.mjs",
+    "check:file-size": "node scripts/check-file-size.mjs",
+    "check:file-size:update": "node scripts/check-file-size.mjs --update",
     "verify:api-contract": "node scripts/verify-api-contract.mjs",
     "generate:product-conformance": "node scripts/generate-product-contract-conformance.mjs --write",
     "verify:product-conformance": "node scripts/generate-product-contract-conformance.mjs --check",

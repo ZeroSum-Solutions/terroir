@@ -1,0 +1,164 @@
+# Full end-to-end suite.
+#
+# Why this exists: ci.yml runs exactly two spec files —
+# e2e/demo-critical-journeys.test.ts and e2e/pour-flow.test.ts. The repo has
+# nineteen. The other seventeen (import journey, reconcile queue, cellar
+# health, insights drilldown, pricing recommendations, branded menus,
+# taxonomy, lineage, bins, team, and every mobile variant) were executed by
+# no workflow at all, so a regression in any of them was invisible on merge
+# and stayed invisible until someone ran Playwright by hand.
+#
+# This does not touch the PR gate. ci.yml keeps its fast two-spec subset as
+# the required check; this runs the whole suite on a schedule and on pushes
+# to main, and opens an issue when it breaks — the same pattern
+# ci-main-alert.yml already uses for main going red.
+#
+# Several specs self-skip under CI with "shared DB — run locally only for
+# now." That guard predates this workflow, which stands up a disposable
+# per-job Postgres exactly like ci.yml does, so the shared-DB reason no
+# longer applies. Removing those skips is tracked as Phase 0 work in
+# docs/plans/2026-08-29-modular-architecture-refactor.md; until then this
+# workflow reports how many specs actually ran, so the gap stays visible
+# rather than reading as a pass.
+
+name: E2E (full)
+
+on:
+  schedule:
+    # 07:00 UTC daily — after the nightly db-backup job, before the workday.
+    - cron: "0 7 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-full-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  e2e:
+    name: E2E — full suite
+    runs-on: ubuntu-latest
+    # The two-spec subset fits inside ci.yml's 25 min alongside everything
+    # else; nineteen specs against a cold stack needs its own headroom.
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1 (v1.7.1)
+        with:
+          version: 2.109.1
+
+      - name: Start local Supabase
+        # Disposable stack, lives only for this job. Identical to ci.yml.
+        run: |
+          if [ ! -f supabase/config.toml ]; then
+            supabase init --with-vscode-settings=false --with-intellij-settings=false
+          fi
+          supabase start
+
+      - name: Export local Supabase env for E2E
+        # Kept byte-identical to ci.yml's equivalent step on purpose. If you
+        # change one, change both — a drift here produces auth failures that
+        # look like product bugs.
+        run: |
+          supabase status -o env \
+            --override-name api.url=NEXT_PUBLIC_SUPABASE_URL \
+            --override-name auth.anon_key=NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY \
+            --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY \
+            2>/dev/null \
+            | grep -E '^(NEXT_PUBLIC_SUPABASE_URL|NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY|SUPABASE_SERVICE_ROLE_KEY)=' \
+            | tr -d '"' >> "$GITHUB_ENV"
+          supabase status -o env 2>/dev/null \
+            | grep -E '^(MAILPIT_URL|INBUCKET_URL)=' | head -1 \
+            | sed 's/^[A-Z_]*=/E2E_MAILBOX_URL=/' | tr -d '"' >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
+          echo "ACTIVE_RESTAURANT_COOKIE_SECRET=ci-e2e-cookie-secret-not-sensitive" >> "$GITHUB_ENV"
+          echo "DEV_BYPASS_EMAIL=owner+local@terroir.test" >> "$GITHUB_ENV"
+
+      - name: Seed local Supabase
+        run: pnpm run supabase:seed:local:apply
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E — every spec
+        # No file list. That is the entire point of this workflow.
+        run: pnpm exec playwright test
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-full
+          path: test-results/
+          retention-days: 14
+
+      - name: Open an issue if the full suite broke
+        # Mirrors ci-main-alert.yml: a scheduled job that fails silently is
+        # a scheduled job nobody reads. Only fires for scheduled and
+        # main-push runs, not manual dispatch.
+        if: failure() && github.event_name != 'workflow_dispatch'
+        uses: actions/github-script@v7
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+        with:
+          script: |
+            const title = 'E2E (full) is failing';
+            const runUrl = process.env.RUN_URL;
+            const sha = process.env.COMMIT_SHA;
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'ci',
+            });
+            const open = existing.data.find((i) => i.title === title);
+            const body = [
+              'The full end-to-end suite failed.',
+              '',
+              `Run: ${runUrl}`,
+              `Commit: ${sha}`,
+              '',
+              'This suite covers the seventeen specs the required PR check does',
+              'not run, so a failure here is a real regression that merged clean.',
+              'Playwright traces and screenshots are attached to the run as the',
+              '`playwright-report-full` artifact.',
+            ].join('\n');
+            if (open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: open.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['ci'],
+              });
+            }

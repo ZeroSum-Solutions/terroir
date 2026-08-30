@@ -181,6 +181,14 @@ jobs:
         # shrinks).
         run: pnpm run check:design
 
+      - name: File-size ratchet
+        # "No monoliths" was a stated rule with nothing enforcing it: 62 files
+        # in src/ are over 400 lines and one is 3,149. Those are frozen in
+        # scripts/file-size-baseline.json — a baselined file may shrink but
+        # never grow, and a new file may not cross the budget at all. Pay the
+        # debt down with `pnpm check:file-size:update` after splitting.
+        run: pnpm run check:file-size
+
       - name: Down migrations check
         # INT-006 — every forward migration from 0011 onward must have a
         # paired .down.sql sibling. Catches PRs that add a forward
