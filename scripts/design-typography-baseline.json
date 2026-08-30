@@ -235,15 +235,51 @@
     "text-[12px]": 1,
     "text-[13px]": 1
   },
+  "src/app/(app)/import/batch-step.tsx": {
+    "text-[13px]": 5,
+    "text-[14px]": 7,
+    "text-[20px]": 2
+  },
+  "src/app/(app)/import/chunk-upload-progress.tsx": {
+    "text-[13px]": 1
+  },
   "src/app/(app)/import/import-client.tsx": {
-    "text-[13px]": 25,
-    "text-[14px]": 12,
-    "text-[20px]": 5
+    "text-[13px]": 1,
+    "text-[14px]": 1,
+    "text-[20px]": 1
+  },
+  "src/app/(app)/import/preview-error-rows.tsx": {
+    "text-[13px]": 3
+  },
+  "src/app/(app)/import/preview-lwin-rows.tsx": {
+    "text-[13px]": 5
+  },
+  "src/app/(app)/import/preview-step.tsx": {
+    "text-[13px]": 5,
+    "text-[14px]": 2,
+    "text-[20px]": 1
+  },
+  "src/app/(app)/import/recent-imports.tsx": {
+    "text-[13px]": 1
+  },
+  "src/app/(app)/import/session-chunk-list.tsx": {
+    "text-[13px]": 1
+  },
+  "src/app/(app)/import/session-pending-rows.tsx": {
+    "text-[13px]": 5,
+    "text-[14px]": 2
   },
   "src/app/(app)/import/session-step.tsx": {
-    "text-[13px]": 9,
-    "text-[14px]": 10,
+    "text-[13px]": 2,
+    "text-[14px]": 8,
     "text-[20px]": 2
+  },
+  "src/app/(app)/import/summary-stat.tsx": {
+    "text-[20px]": 1
+  },
+  "src/app/(app)/import/upload-step.tsx": {
+    "text-[13px]": 5,
+    "text-[14px]": 2
   },
   "src/app/(app)/insights/briefing-alert-card.tsx": {
     "text-[11px]": 2,
