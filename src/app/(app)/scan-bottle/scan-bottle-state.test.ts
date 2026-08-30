@@ -76,6 +76,30 @@ describe("bottleScanReducer", () => {
     expect(completed.searchResults).toBe(results);
   });
 
+  it("correct-search-failed clears results and records the message", () => {
+    const seeded: BottleScanState = {
+      ...initialBottleScanState,
+      searchResults: [wine()],
+      searching: true,
+    };
+    const failed = bottleScanReducer(seeded, {
+      type: "correct-search-failed",
+      message: "Search failed (500)",
+    });
+    expect(failed.searching).toBe(false);
+    expect(failed.searchResults).toEqual([]);
+    expect(failed.searchError).toBe("Search failed (500)");
+    // The phase is untouched: a failed search must not tear the user out of
+    // the correcting flow the way a failed lookup does.
+    expect(failed.phase).toBe(seeded.phase);
+
+    const retyped = bottleScanReducer(failed, {
+      type: "correct-search-query-changed",
+      query: "esporao",
+    });
+    expect(retyped.searchError).toBeNull();
+  });
+
   it("correction-started resets the search box and results", () => {
     const seeded: BottleScanState = {
       ...initialBottleScanState,
