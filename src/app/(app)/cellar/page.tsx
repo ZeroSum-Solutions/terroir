@@ -11,20 +11,9 @@ import { isCellarHealthSegment } from "@/lib/cellar-health/classify";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import type { GridData } from "./grid-types";
+
 export const metadata: Metadata = { title: "Cellar" };
-
-type BinData = {
-  wines: Array<{
-    wineId: string;
-    name: string;
-    producer: string;
-    vintage: number | null;
-    quantity: number;
-  }>;
-  totalBottles: number;
-};
-
-type GridData = Record<string, BinData>;
 
 const FETCH_PAGE_SIZE = 1000;
 
@@ -434,6 +423,9 @@ export default async function CellarPage() {
       producer: wine.producer,
       vintage: wine.vintage,
       quantity: item.quantity ?? 0,
+      // CELLAR-08 — the bin card shows the bottle, not just its name.
+      heroImageUrl: wine.hero_image_url ?? null,
+      colour: wine.colour ?? null,
     });
     gridData[bin].totalBottles += item.quantity ?? 0;
   }

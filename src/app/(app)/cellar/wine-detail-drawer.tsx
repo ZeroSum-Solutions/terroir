@@ -279,7 +279,7 @@ export function WineDetailDrawer({
           role="dialog"
           aria-modal="true"
           aria-labelledby={headingId}
-          className="fixed inset-x-0 bottom-0 z-[var(--z-dialog)] flex flex-col rounded-t-lg bg-surface md:absolute md:inset-y-0 md:right-0 md:left-auto md:w-[420px] md:rounded-none md:border-l md:border-rule"
+          className="fixed inset-x-0 bottom-0 z-[var(--z-dialog)] flex flex-col rounded-t-lg bg-surface md:top-[var(--chrome-header-total)] md:bottom-0 md:right-0 md:left-auto md:w-[420px] md:rounded-none md:border-l md:border-rule"
           style={{ maxHeight: "calc(100dvh - 3.5rem)" }}
         >
           {/* Grab handle — mobile sheet affordance */}

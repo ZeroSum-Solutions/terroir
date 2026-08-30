@@ -134,7 +134,9 @@ export function SortableSectionButton({
             isActive ? "text-ink font-medium" : "text-grey",
           )}
         >
-          <span className="truncate text-[14px]">{section.name}</span>
+          <span className="truncate text-[14px]" title={section.name}>
+            {section.name}
+          </span>
           <span
             className={cn(
               "tabular text-[12px] ml-xs",
@@ -146,7 +148,12 @@ export function SortableSectionButton({
         </button>
       )}
 
-      {/* Action buttons — visible on hover */}
+      {/* BUG-03 — these stay in flow on purpose. Hiding them behind
+          `opacity-0` and overlaying the row reclaims width for the name, but an
+          opacity-0 button still takes taps: on an iPad, which meets the `md`
+          breakpoint with no hover, tapping the right of a row would hit an
+          invisible Rename or Delete instead of selecting the section. The room
+          for the name comes from the sidebar's own width instead. */}
       {!isEditing && (
         <div className="flex items-center gap-0.5 pr-sm">
           <button
