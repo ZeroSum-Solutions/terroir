@@ -523,11 +523,36 @@ serializing the landing, recorded because the next wave will face the same thing
    render, which `react-hooks/refs` rejects. Every branch passed `tsc` and its own
    scoped tests; only `pnpm lint` on the combined tree saw it.
 
-The second one also exposed a gap in how the wave was briefed: the agents were told to
-run `tsc` and scoped tests, and only some were told to run `pnpm lint`. **Any future
-wave must require the full lint pass per branch**, not just per integration — catching
-it at the train is late enough to be annoying and early enough to be cheap, but
-catching it per branch is free.
+3. **A coverage threshold nobody ran locally.** `vitest.config.ts` holds
+   `src/domains/cellar/**` to 100% statements and lines and 90% branches. The
+   insights decomposition moved two fetchers into that directory with happy-path
+   tests only, so the sort comparators' fallbacks were never exercised, and the
+   integration went red at 99.35/89.
+
+**The verification lesson, which is bigger than any of the three.** Failure 3 got
+through because the tree was checked with `vitest run` while CI runs
+`pnpm run coverage` — the same suite, but only one of them instrumented, so the
+threshold simply never executed. `build` and `test:contracts` were skipped entirely
+for the same reason: they were not part of the command that *looked* like "run the
+tests".
+
+**Verify with the command CI runs, not a command that resembles it.** The gate list in
+`AGENTS.md` is the contract, and every entry has to be executed as written. A local
+check that differs from CI by a flag is not a weaker signal — it is a *misleading* one,
+because it returns green and licenses a claim the evidence does not support.
+
+Concretely, for any future wave:
+
+- **Per branch, before it enters the train:** `pnpm exec tsc --noEmit`, **`pnpm lint`**
+  (the full pass, not scoped — this is what caught the `react-hooks/refs` bug), and
+  the scoped tests.
+- **Per admission:** the ratchets, regenerated against the combined tree.
+- **Before the PR:** `pnpm run coverage` (**not** `vitest run`), `pnpm run build`,
+  `pnpm run test:contracts`, and the remaining `AGENTS.md` gates.
+
+Failures 1 and 2 also exposed a briefing gap — agents were told to run `tsc` and scoped
+tests, and only some were told to run `pnpm lint`. Catching that at the train is late
+enough to be annoying and early enough to be cheap; catching it per branch is free.
 
 **Deferred to Phase 3 by the wave, deliberately:**
 
