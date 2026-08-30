@@ -6,7 +6,7 @@
   "src/app/(app)/cellar/edit-metadata-modal.tsx": 418,
   "src/app/(app)/cellar/page.tsx": 481,
   "src/app/(app)/cellar/wine-detail-drawer-state.test.tsx": 461,
-  "src/app/(app)/cellar/wine-detail-drawer.tsx": 1221,
+  "src/app/(app)/cellar/wine-detail-drawer.tsx": 638,
   "src/app/(app)/import/import-client.test.tsx": 2467,
   "src/app/(app)/import/import-client.tsx": 2391,
   "src/app/(app)/import/session-step.conflict.test.tsx": 560,
