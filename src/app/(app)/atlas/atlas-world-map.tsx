@@ -16,7 +16,10 @@ const MIN_INTENSITY = 0.16;
  * gold by night — the one-accent-per-room law; a gold ramp over the light
  * room's cream drifted olive/brown, which is banned), scaled to the
  * cellar's own max country (never an absolute scale) — semantic tokens
- * only, no hex.
+ * only, no hex. A country without bottles is `wash`, one step off the
+ * canvas the map sits on, outlined in `rule-strong`: `canvas` is the page
+ * ground itself, so filling with it erases every country that has no data,
+ * and `rule` at a 0.5 stroke is below Nocturne's visibility floor.
  * Tap-only in v1: no pan/zoom. Each country with bottles is a button-role
  * path, but small-country geometry can't guarantee a 44px hit area — the
  * accessible country list AtlasShell renders below the map is the reliable
@@ -51,8 +54,8 @@ export function AtlasWorldMap({
             <path
               key={key}
               d={geo.d}
-              fill="var(--color-canvas)"
-              stroke="var(--color-hairline)"
+              fill="var(--color-wash)"
+              stroke="var(--color-rule-strong)"
               strokeWidth={0.5}
             />
           );
@@ -84,7 +87,7 @@ export function AtlasWorldMap({
               }
             }}
             fill={`color-mix(in srgb, var(--color-accent) ${fillPct}%, var(--color-surface))`}
-            stroke={selected ? "var(--color-accent)" : "var(--color-hairline)"}
+            stroke={selected ? "var(--color-accent)" : "var(--color-rule-strong)"}
             strokeWidth={selected ? 2 : 0.5}
             className="cursor-pointer outline-none transition-[stroke-width] duration-150 focus-ring"
           >
