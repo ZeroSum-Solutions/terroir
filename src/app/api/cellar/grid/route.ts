@@ -13,10 +13,7 @@ export async function GET() {
   // Fetch inventory items with bin_location and wine info
   const { data: items, error } = await supabase
     .from("inventory_items")
-    // CELLAR-08: hero_image_url and colour ride along so a bin card can show
-    // what the bottle looks like. Staff sent to "Bin A5" find ten different
-    // bottles there; a name alone doesn't tell them which one.
-    .select("bin_location, quantity, wines(id, name, producer, vintage, hero_image_url, colour)")
+    .select("bin_location, quantity, wines(id, name, producer, vintage)")
     .eq("restaurant_id", restaurantId)
     .not("bin_location", "is", null);
 
@@ -39,8 +36,6 @@ export async function GET() {
         producer: string;
         vintage: number | null;
         quantity: number;
-        heroImageUrl: string | null;
-        colour: string | null;
       }>;
       totalBottles: number;
     }
@@ -55,8 +50,6 @@ export async function GET() {
       name: string;
       producer: string;
       vintage: number | null;
-      hero_image_url: string | null;
-      colour: string | null;
     } | null;
 
     if (!wine) continue;
@@ -71,8 +64,6 @@ export async function GET() {
       producer: wine.producer,
       vintage: wine.vintage,
       quantity: item.quantity,
-      heroImageUrl: wine.hero_image_url,
-      colour: wine.colour,
     });
     grid[bin].totalBottles += item.quantity;
   }

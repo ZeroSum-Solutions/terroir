@@ -637,7 +637,7 @@ export function WineListEditor({
       </div>
 
       {/* Desktop: sidebar + content */}
-      <div className="md:grid md:grid-cols-[220px_1fr] md:gap-lg">
+      <div className="md:grid md:grid-cols-[248px_1fr] md:gap-lg">
         {/* Desktop sidebar */}
         <aside className="hidden md:block">
           <div className="text-caption font-medium uppercase text-grey">

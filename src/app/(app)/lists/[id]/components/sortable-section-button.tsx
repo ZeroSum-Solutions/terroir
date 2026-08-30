@@ -92,7 +92,7 @@ export function SortableSectionButton({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group relative flex items-center rounded-pill transition-colors",
+        "group flex items-center rounded-pill transition-colors",
         isActive && !isDragging
           ? "bg-wash"
           : "hover:bg-wash",
@@ -148,16 +148,14 @@ export function SortableSectionButton({
         </button>
       )}
 
-      {/* BUG-03 — Rename and delete are revealed on hover, but as ordinary
-          flex children they still reserved 88px (2 × the 44px touch-target
-          minimum) of a 220px sidebar row while invisible. That left ~45px for
-          the name, so "Sparkling" and "Dessert" rendered as "Sp…" and "De…" in
-          a sidebar whose only job is naming sections. Taking them out of flow
-          gives the name the full row at rest; they overlay the right edge only
-          once hovered or focused, carrying the row's own hover background so
-          they stay legible over it. */}
+      {/* BUG-03 — these stay in flow on purpose. Hiding them behind
+          `opacity-0` and overlaying the row reclaims width for the name, but an
+          opacity-0 button still takes taps: on an iPad, which meets the `md`
+          breakpoint with no hover, tapping the right of a row would hit an
+          invisible Rename or Delete instead of selecting the section. The room
+          for the name comes from the sidebar's own width instead. */}
       {!isEditing && (
-        <div className="absolute right-0 top-0 flex h-full items-center gap-0.5 rounded-r-pill bg-wash pr-sm opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <div className="flex items-center gap-0.5 pr-sm">
           <button
             type="button"
             onClick={(e) => {

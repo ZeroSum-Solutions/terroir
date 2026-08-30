@@ -141,7 +141,7 @@ export function CellarGridView({
   config: CellarConfig;
   gridData: GridData;
   /** CELLAR-08 — opens the wine detail drawer, same as a list-view row. */
-  onSelectWine?: (wineId: string) => void;
+  onSelectWine: (wineId: string) => void;
 }) {
   const [selectedBin, setSelectedBin] = useState<string | null>(null);
 
@@ -295,9 +295,8 @@ export function CellarGridView({
                     <button
                       key={`${w.wineId}-${i}`}
                       type="button"
-                      onClick={() => onSelectWine?.(w.wineId)}
-                      disabled={!onSelectWine}
-                      className="flex w-full items-center gap-sm rounded-md border border-rule px-sm py-sm text-left transition-colors hover:bg-wash focus-ring disabled:cursor-default disabled:hover:bg-transparent"
+                      onClick={() => onSelectWine(w.wineId)}
+                      className="flex w-full items-center gap-sm rounded-md border border-rule px-sm py-sm text-left transition-colors hover:bg-wash focus-ring"
                     >
                       <WineThumb
                         src={w.heroImageUrl}

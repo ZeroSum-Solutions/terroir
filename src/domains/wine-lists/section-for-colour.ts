@@ -9,14 +9,23 @@
  * told and the wrong thing.
  *
  * The six colours the enrichment writes (`red | white | sparkling | rose |
- * dessert | fortified`, see `src/lib/cellar-facets`) map 1:1 onto the six
- * sections a wine list ships with — but only once the accent on "Rosé" and the
- * casing on everything else are folded away.
+ * dessert | fortified`, see `src/lib/cellar-facets`) do not map 1:1 onto
+ * sections, because `DEFAULT_SECTIONS` ships **five** and folds two colours
+ * into one: "Dessert & Fortified". So a section name is matched as a list of
+ * alternatives — split on the separators people actually use — and a colour
+ * matches when it equals one of them outright.
  *
- * Matching is deliberately exact-after-folding. A section named "Sparkling &
- * Champagne" or "Reds" does not match, and the caller falls back to the active
- * section — i.e. today's behaviour. Guessing at compound names risks pre-filing
- * a wine into the wrong section, which is the bug this exists to fix.
+ * That is deliberately narrower than substring matching:
+ *
+ *   "Dessert & Fortified"  → dessert | fortified   → both match
+ *   "Sparkling & Champagne"→ sparkling | champagne → sparkling matches
+ *   "Red Burgundy"         → red burgundy          → `red` does NOT match
+ *   "Reds"                 → reds                  → `red` does NOT match
+ *
+ * "Red Burgundy" not matching `red` is the point: pre-filing every red into a
+ * Burgundy-only section would be the same class of bug this exists to fix. A
+ * miss is safe — the caller falls back to the active section, i.e. today's
+ * behaviour — so the rule errs toward missing rather than guessing.
  */
 
 export type ColourSection = { id: string; name: string };
@@ -31,9 +40,25 @@ function fold(value: string): string {
 }
 
 /**
+ * The alternatives a section name offers, e.g. "Dessert & Fortified" →
+ * ["dessert", "fortified"]. Splits only on explicit list separators, never on
+ * plain whitespace, so multi-word names stay a single alternative.
+ */
+function alternatives(sectionName: string): string[] {
+  return fold(sectionName)
+    .split(/\s*(?:&|\/|\+|,|\band\b)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+/**
  * The id of the section matching `colour`, or null when the wine has no
  * colour or no section corresponds to it. Null means "caller decides" — it is
  * not an error.
+ *
+ * A section whose whole name is the colour wins over one that merely lists it,
+ * so a list carrying both "Dessert" and "Dessert & Fortified" sends a dessert
+ * wine to the specific section rather than the combined one.
  */
 export function sectionIdForColour(
   colour: string | null | undefined,
@@ -42,5 +67,9 @@ export function sectionIdForColour(
   if (!colour) return null;
   const target = fold(colour);
   if (!target) return null;
-  return sections.find((section) => fold(section.name) === target)?.id ?? null;
+
+  const exact = sections.find((section) => fold(section.name) === target);
+  if (exact) return exact.id;
+
+  return sections.find((section) => alternatives(section.name).includes(target))?.id ?? null;
 }
