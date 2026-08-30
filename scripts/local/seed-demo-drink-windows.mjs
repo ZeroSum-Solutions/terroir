@@ -174,9 +174,14 @@ function chooseVintage(vintages, potential, bucket) {
   // short and the wine comes out mid-window anyway.
   const matching = usable.filter((v) => stateFor(v, potential) === bucket);
   if (matching.length > 0) {
-    // Newest match for "in"/"young" (a cellar buys the current drinking
-    // vintage); oldest for "past", which is what dead stock looks like.
-    return bucket === "past" ? matching[0] : matching[matching.length - 1];
+    // Newest match in every bucket, "past" included. Taking the OLDEST past
+    // vintage was the first instinct — it is the most emphatically dead — but
+    // it put a 1950 Moët and a 1974 Tariquet in a Brazilian by-the-glass
+    // cellar, and /insights sorts by how far past a wine is, so those four
+    // bottles led the page. Real dead stock is recently lapsed: a rosé that
+    // needed drinking last year, not a Champagne older than the restaurant.
+    // The newest past vintage is still past, so the bucket still holds.
+    return matching[matching.length - 1];
   }
 
   // No vintage can produce the intended state — usually "young", because the
