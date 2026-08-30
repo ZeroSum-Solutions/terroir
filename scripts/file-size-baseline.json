@@ -12,7 +12,7 @@
   "src/app/(app)/import/session-step.conflict.test.tsx": 560,
   "src/app/(app)/import/session-step.resume.test.ts": 580,
   "src/app/(app)/import/session-step.tsx": 1651,
-  "src/app/(app)/insights/page.tsx": 1202,
+  "src/app/(app)/insights/page.tsx": 948,
   "src/app/(app)/lists/[id]/components/add-wine-modal.tsx": 658,
   "src/app/(app)/lists/[id]/components/wine-row.tsx": 516,
   "src/app/(app)/lists/[id]/wine-list-editor.mobile.test.tsx": 430,

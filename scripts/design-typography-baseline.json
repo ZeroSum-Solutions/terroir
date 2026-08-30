@@ -224,15 +224,14 @@
     "text-[26px]": 1
   },
   "src/app/(app)/insights/page.tsx": {
-    "class:font-mono": 3,
-    "text-[11px]": 2,
+    "class:font-mono": 2,
+    "text-[11px]": 1,
     "text-[12px]": 15,
     "text-[13px]": 15,
     "text-[14px]": 3,
     "text-[15px]": 6,
     "text-[17px]": 1,
-    "text-[28px]": 2,
-    "text-[9px]": 1
+    "text-[28px]": 2
   },
   "src/app/(app)/insights/pour-analytics-section.tsx": {
     "text-[11px]": 2,
@@ -594,6 +593,11 @@
   "src/components/action-dialog.tsx": {
     "text-[14px]": 3,
     "text-[24px]": 1
+  },
+  "src/components/charts/throughput-bar-chart.tsx": {
+    "class:font-mono": 1,
+    "text-[11px]": 1,
+    "text-[9px]": 1
   },
   "src/components/drink-window-timeline.tsx": {
     "class:font-mono": 2,
