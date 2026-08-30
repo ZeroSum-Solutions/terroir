@@ -472,18 +472,66 @@
     "text-[18px]": 1
   },
   "src/app/(app)/scan-bottle/page.tsx": {
-    "class:font-mono": 2,
-    "text-[10.5px]": 1,
-    "text-[11px]": 2,
-    "text-[12px]": 6,
-    "text-[13px]": 10,
-    "text-[14px]": 22,
+    "text-[12px]": 1,
+    "text-[13px]": 1,
+    "text-[14px]": 1,
     "text-[15px]": 1,
-    "text-[17px]": 3,
-    "text-[18px]": 2,
-    "text-[20px]": 2,
-    "text-[22px]": 5,
+    "text-[22px]": 1,
     "text-[28px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/confirmed-view.tsx": {
+    "text-[12px]": 1,
+    "text-[14px]": 2,
+    "text-[17px]": 1,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/correcting-view.tsx": {
+    "text-[11px]": 1,
+    "text-[13px]": 2,
+    "text-[14px]": 3,
+    "text-[17px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/error-view.tsx": {
+    "class:font-mono": 1,
+    "text-[12px]": 1,
+    "text-[13px]": 1,
+    "text-[14px]": 2,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/location-view.tsx": {
+    "text-[12px]": 1,
+    "text-[13px]": 2,
+    "text-[14px]": 4
+  },
+  "src/app/(app)/scan-bottle/views/manual-view.tsx": {
+    "class:font-mono": 1,
+    "text-[12px]": 1,
+    "text-[14px]": 3
+  },
+  "src/app/(app)/scan-bottle/views/matched-view.tsx": {
+    "text-[10.5px]": 1,
+    "text-[13px]": 1,
+    "text-[14px]": 2,
+    "text-[18px]": 1,
+    "text-[20px]": 2,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/no-camera-view.tsx": {
+    "text-[13px]": 1,
+    "text-[14px]": 1,
+    "text-[22px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/scanning-view.tsx": {
+    "text-[13px]": 1,
+    "text-[14px]": 1
+  },
+  "src/app/(app)/scan-bottle/views/summary-view.tsx": {
+    "text-[11px]": 1,
+    "text-[12px]": 1,
+    "text-[13px]": 1,
+    "text-[14px]": 3,
+    "text-[17px]": 1,
+    "text-[18px]": 1
   },
   "src/app/(app)/scan/[id]/components/re-extract-button.tsx": {
     "text-[12px]": 1,
