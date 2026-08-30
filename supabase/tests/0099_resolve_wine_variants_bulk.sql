@@ -10,18 +10,34 @@ select plan(11);
 
 -- Fixtures: a real restaurant + membership, created as postgres (table
 -- owner bypasses RLS) since `authenticated` has no insert policy on
--- restaurants/memberships outside the signup trigger. Reuses the
--- dev-stack seed user (scripts/local/seed-local.mjs) rather than
--- inserting into auth.users directly, since a raw insert there would
--- also fire handle_new_user (0001) and needs columns only GoTrue
--- normally populates.
+-- restaurants/memberships outside the signup trigger. Reuses an existing
+-- seeded auth user rather than inserting into auth.users directly, since
+-- a raw insert there would also fire handle_new_user (0001) and needs
+-- columns only GoTrue normally populates.
+--
+-- The lookup PREFERS the dev-stack user but does not require it.
+-- scripts/local/seed-local.mjs creates DEV_BYPASS_EMAIL, which only
+-- DEFAULTS to devlocal@terroir.test — so on any stack that sets that
+-- variable (or that was seeded by scripts/seed-local-supabase.mjs, which
+-- creates owner+local@terroir.test instead) the hardcoded address does
+-- not exist. The cross join then yields no rows, the fixture table is
+-- empty, request.jwt.claim.sub is set to NULL, no membership exists, and
+-- the very first resolve_wine_variants_bulk call dies on wine_variants'
+-- RLS insert policy — aborting the file before a single one of the 11
+-- planned tests reports. That failure reads exactly like an RLS
+-- regression in the function under test and is not one, which is the
+-- specific trap this ordering avoids. Any authenticated user works here;
+-- the test needs a user id to hang a membership on, not a named person.
 create temporary table _t9099_fixture (restaurant_id uuid, user_id uuid) on commit drop;
 with new_restaurant as (
   insert into public.restaurants (name) values ('P2 RWVB Test') returning id
 )
 insert into _t9099_fixture (restaurant_id, user_id)
 select nr.id, u.id
-from new_restaurant nr, (select id from auth.users where email = 'devlocal@terroir.test' limit 1) u;
+from new_restaurant nr,
+     (select id from auth.users
+       order by (email = 'devlocal@terroir.test') desc, created_at
+       limit 1) u;
 insert into public.memberships (user_id, restaurant_id, role)
 select user_id, restaurant_id, 'owner' from _t9099_fixture;
 
