@@ -197,4 +197,41 @@ describe.skipIf(!hasLiveDb)("identity is populated on write (MANDATORY)", { time
     expect(wine.wine_variant_id).toBeNull();
     expect(wine.canonical_wine_id).toBeNull();
   });
+
+  it("one unresolvable wine in a batch does not cost the others their identity", async () => {
+    // REGRESSION (found in production, 2026-08-29). The test above only
+    // asserted that the write succeeds, which it did even while resolution
+    // was failing outright: find_or_create_wines_batch catches resolution
+    // errors and downgrades them to a warning, so a broken batch is
+    // indistinguishable from a healthy one at the call site.
+    //
+    // What actually happened: resolve_wine_variants_bulk documents that it
+    // drops rows whose producer collapses under normalization, but its
+    // `_rwvb_input.producer_norm` is NOT NULL, so such a row raises 23502
+    // and aborts the whole call. Every other wine in the batch lost its
+    // identity with it. 1277 of 1385 production wines carry an empty
+    // producer, so in production this was the common path, not the edge.
+    //
+    // A blank producer with a real name is the exact production shape —
+    // the producer is embedded in `name` for those rows.
+    const { data, error } = await userAClient.rpc("find_or_create_wines_batch", {
+      p_restaurant_id: restaurantA,
+      p_wines: [
+        { name: "Benjamin Leroux Vosne-Romanee", producer: "", vintage: 2018, size_ml: 750 },
+        { name: "Batch Survivor", producer: PRODUCER, vintage: 2018, size_ml: 750 },
+      ],
+    } as never);
+    expect(error).toBeNull();
+
+    const [unresolvableId, survivorId] = data as string[];
+
+    // The blank-producer row is still created, just unresolved.
+    const unresolvable = await readIdentity(unresolvableId);
+    expect(unresolvable.wine_variant_id).toBeNull();
+
+    // The point of the test: its neighbour still resolved.
+    const survivor = await readIdentity(survivorId);
+    expect(survivor.wine_variant_id).not.toBeNull();
+    expect(survivor.canonical_wine_id).not.toBeNull();
+  });
 });
