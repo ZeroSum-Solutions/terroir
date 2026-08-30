@@ -260,7 +260,7 @@ canonical rows, 250 variants. Full suite 2779 passing with the live DB attached.
 — the 3,150-line file Phase 2 decomposes. These two must not run concurrently on the
 same file. See §7.4.
 
-### 3.4 [HIGH for refactor safety] `src/adapters/*` has zero tests
+### 3.4 [CLOSED 2026-08-29 — and the original finding was overstated] `src/adapters/*` has zero tests
 
 Four adapters — Azure Document Intelligence OCR, Anthropic invoice extraction,
 html-to-pdf, Supabase storage — have **no test files**, and every call site mocks the
@@ -268,8 +268,35 @@ adapter module wholesale. Response parsing, error mapping, and retry/timeout beh
 of the real calls are never exercised. A refactor here is invisible to the entire
 suite, and §2.4 says this layer needs to change.
 
-**Action:** Phase 0 adds fixture-based adapter contract tests before Phase 3 touches
-them.
+**Correction after measuring.** "Zero test files" was true; the conclusion drawn from
+it was not. All four adapters together are **128 lines**, and two of them are pure
+re-export shims:
+
+| Adapter | Own logic | Real implementation | Was it covered? |
+|---|---|---|---|
+| `ocr/azure-document-intelligence.ts` | 0 lines — re-export only | `src/lib/scanner/ocr-service.ts` | yes, `ocr-service.test.ts` |
+| `llm/anthropic-invoice-extraction.ts` | 3 lines (`assertInvoiceExtractionConfigured`) | `src/lib/scanner/ai-extract.ts`, `src/lib/ai/anthropic-client.ts` | yes, both have suites |
+| `pdf/html-to-pdf.ts` | 26 lines | itself | **no** |
+| `storage/supabase-storage.ts` | 72 lines | itself | **no** |
+
+So OCR response parsing and LLM error mapping were never the uncovered surface — they
+are tested where they actually live, one directory over. This is itself a symptom of
+the §2.4 dependency inversion: the adapters import *from* `@/lib`, so auditing the
+adapter directory says nothing about whether the behavior is exercised. The real gap
+was ~98 lines in two files.
+
+**Resolution.** Contract tests added for exactly that gap — 20 tests across the three
+files that own any logic. They target the branches a mocked call site can never
+reach: `createSupabaseSignedUrl`'s success-but-no-URL case, which has no `error` to
+key off; `getSupabasePublicUrl`'s silent `?? ""` fallback, pinned as the current
+contract so changing it becomes a visible test change rather than a quiet one; and
+`renderHtmlToPdf`'s `finally { await browser?.close() }`, which is the one that
+matters — Puppeteer holds a real OS process, and a throw that skipped the close would
+leak a Chromium per failed render until the container died.
+
+Verified by mutation rather than assertion: deleting the `close()` from the `finally`
+block fails exactly 3 of the 7 pdf tests, and restoring it returns 7/7. The suite has
+teeth.
 
 ---
 
