@@ -515,6 +515,13 @@ against the tree before fixing. Recorded because two of them are instructive:
    *This is worth noticing: Devin's screenshot sidebar shows five rows, not six. The
    notes recorded the intent; the code records the truth.*
 
+   Measured against the seeded local database, the stored `colour` values are exactly
+   the six expected, lowercase and unaccented, with **no nulls**:
+   `red` 126 · `white` 70 · `fortified` 14 · `sparkling` 14 · `dessert` 13 · `rose` 13.
+   So the first version would have silently misfiled **27 of 250 wines — 11% of the
+   corpus** — while appearing to work for everything else. That is the shape of bug an
+   adversarial pass is worth running for.
+
 2. **The BUG-03 fix had a touch regression.** Hiding the row's rename/delete behind
    `opacity-0` and overlaying them reclaims width — but an `opacity-0` button still
    takes taps, and an iPad meets the `md` breakpoint with no hover. Tapping the right
