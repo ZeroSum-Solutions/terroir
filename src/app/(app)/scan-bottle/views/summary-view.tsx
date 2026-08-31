@@ -2,6 +2,7 @@
 
 import { Camera, MapPin } from "lucide-react";
 import type { SessionScan } from "../scan-bottle-state";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 interface SummaryViewProps {
   session: SessionScan[];
@@ -29,7 +30,7 @@ export function SummaryView({ session, onNewSession }: SummaryViewProps) {
                     {scan.wine.producer}
                   </p>
                   <p className="text-[14px] text-grey truncate">
-                    {scan.wine.name}
+                    {wineDisplayName(scan.wine.producer, scan.wine.name)}
                     {scan.wine.vintage ? " (" + scan.wine.vintage + ")" : ""}
                   </p>
                 </div>

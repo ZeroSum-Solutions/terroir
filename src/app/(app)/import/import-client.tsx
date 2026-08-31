@@ -208,7 +208,11 @@ export function ImportClient() {
     }
   }, [file, runSingleFilePreview, runChunkedPreview]);
 
-  const handleConfirm = useCallback(async () => {
+  // SD-41: acknowledgedMissingProducerRows is PreviewStep's own effective
+  // count (inline fixes in, skipped chunks out) at the moment the operator
+  // ticked the box and pressed Confirm — echoed back for the server to
+  // re-check against its own re-derived rows. See producer-acknowledgement.ts.
+  const handleConfirm = useCallback(async (acknowledgedMissingProducerRows: number) => {
     if (!file) return;
     setConfirming(true);
     try {
@@ -217,6 +221,7 @@ export function ImportClient() {
         rowOverrides,
         rejectedLwinRows,
         previewRows: preview?.rows ?? null,
+        acknowledgedMissingProducerRows,
       });
       if (!result.ok) {
         setPreviewError(result.error);
@@ -239,7 +244,7 @@ export function ImportClient() {
    * chunks are actually re-sent. See session-step.tsx for the sequential
    * driver itself, and confirmChunkedSessionWithResume's own comment for
    * why a cross-session conflict now RETRIES instead of hard-stopping. */
-  const handleConfirmChunked = useCallback(async () => {
+  const handleConfirmChunked = useCallback(async (acknowledgedMissingProducerRows: number) => {
     if (!chunkedPlan) return;
     setConfirmingChunked(true);
     setPreviewError(null);
@@ -261,6 +266,10 @@ export function ImportClient() {
         // shown for every currently-linking matched row across every
         // chunk, from the aggregated chunked preview's own matchedRows.
         approvedLwinRows: buildApprovedLwinRows(chunkedPreview?.matchedRows ?? []),
+        // SD-41: the WHOLE file's acknowledged count, sent with every
+        // chunk. Each chunk's own server-side count can only be a subset of
+        // it, so the >= comparison the guard makes holds for all of them.
+        acknowledgedMissingProducerRows,
         onSessionId: (id) => {
           setSessionId(id);
           setSessionLabel(file?.name ?? sessionLabel);
@@ -495,7 +504,7 @@ export function ImportClient() {
           onSkipChunk={chunkedPreview ? handleSkipChunk : undefined}
           onImportAnyway={chunkedPreview ? handleImportAnyway : undefined}
           onUndoSkip={chunkedPreview ? handleUndoSkip : undefined}
-          onConfirm={chunkedPreview ? () => void handleConfirmChunked() : () => void handleConfirm()}
+          onConfirm={(ack) => void (chunkedPreview ? handleConfirmChunked(ack) : handleConfirm(ack))}
           confirming={chunkedPreview ? confirmingChunked : confirming}
           onBack={reset}
           error={previewError}

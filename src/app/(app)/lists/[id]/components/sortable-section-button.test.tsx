@@ -87,6 +87,7 @@ describe("SortableSectionButton", () => {
           onEditCommit={onEditCommit}
           onEditCancel={onEditCancel}
           editRef={{ current: null }}
+          canManage
           {...props}
         />,
       );

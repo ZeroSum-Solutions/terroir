@@ -166,23 +166,29 @@ describe("CellarShell open bottles route", () => {
       "overflow-x-hidden",
     );
 
-    // CELLAR-01 / GLOBAL-01 — ONE control row. The scope pills, the
-    // open-bottle cluster, Filters, the view toggle and Cellar settings all
-    // live in it; it used to be four stacked rows.
+    // CELLAR-01 / GLOBAL-01 — ONE control row, and every control in it inside
+    // the frame. It used to be four stacked rows; then it was one row holding
+    // ten controls of which three fitted at 390px and seven sat behind 740px
+    // of sideways scroll. The scope select, the open-bottle cluster, Filters,
+    // the view toggle and the overflow menu live here now.
     const controlRows = container.querySelectorAll("[data-cellar-control-row]");
     expect(controlRows).toHaveLength(1);
     const controlRow = controlRows[0]!;
-    expect(controlRow.querySelector('[role="tablist"]')).not.toBeNull();
     expect(controlRow.contains(link)).toBe(true);
 
-    // The pills scroll sideways inside that row rather than wrapping into a
-    // second one.
-    expect(
-      container.querySelector('[role="tablist"]')?.className.split(" "),
-    ).toContain("flex-nowrap");
-    container.querySelectorAll('[role="tab"]').forEach((tab) => {
-      expect(tab.className).toContain("min-h-11");
-    });
+    // The scope is ONE control carrying every counter, not a strip of pills:
+    // the strip's width is data-dependent (424px at four counters, ~670px at
+    // six) and no breakpoint can make that fit a 354px row.
+    const scope = controlRow.querySelector<HTMLSelectElement>(
+      'select[aria-label="Cellar scope"]',
+    )!;
+    expect(scope).not.toBeNull();
+    expect(scope.className).toContain("h-11");
+    expect(controlRow.querySelector('[role="tablist"]')).toBeNull();
+
+    // Nothing in the row scrolls sideways — a row that scrolls is the same
+    // "too many buttons" defect with the evidence hidden.
+    expect(controlRow.querySelector(".overflow-x-auto")).toBeNull();
 
     // GLOBAL-02 — search is exempt from the one-row rule, sits above it, and
     // is present at every width. The old mobile search icon + overlay are gone.
@@ -193,25 +199,36 @@ describe("CellarShell open bottles route", () => {
     expect(controlRow.contains(search)).toBe(false);
     expect(container.querySelector('[aria-label="Search all wines"]')).toBeNull();
 
-    for (const label of ["List view", "Grid view"]) {
-      const control = container.querySelector<HTMLElement>(`[aria-label="${label}"]`)!;
-      expect(control.className).toContain("h-11");
-      expect(control.className).toContain("w-11");
-    }
+    // CELLAR-08 — the bin grid stays reachable on a phone, so the view toggle
+    // cannot be demoted into the overflow menu (a menu item is not visible
+    // until the menu opens). It is ONE 44px button labelled for the view it
+    // switches to, not a 88px segmented pair.
+    const viewToggle = container.querySelector<HTMLElement>('[aria-label="Grid view"]')!;
+    expect(viewToggle).not.toBeNull();
+    expect(viewToggle.className).toContain("h-11");
+    expect(viewToggle.className).toContain("w-11");
+    expect(container.querySelector('[aria-label="List view"]')).toBeNull();
 
-    // CELLAR-01b — settings is no longer an icon-only button wearing the same
-    // sliders glyph as the real Filters control. It carries its own label and
-    // sits outside the filter cluster.
-    const settings = [...controlRow.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Cellar settings",
-    );
-    expect(settings).not.toBeUndefined();
-    expect(settings?.className).toContain("h-11");
+    // CELLAR-01b — settings is still not an icon-only button wearing the same
+    // sliders glyph as the real Filters control: it carries its own label, and
+    // it now carries it inside the overflow menu, which is where a control the
+    // row cannot afford belongs.
     const filters = [...controlRow.querySelectorAll("button")].find((button) =>
       button.textContent?.trim().startsWith("Filters"),
     );
     expect(filters).not.toBeUndefined();
-    expect(filters).not.toBe(settings);
+    expect(filters?.className).toContain("h-11");
+    const moreActions = controlRow.querySelector<HTMLButtonElement>(
+      '[aria-label="More cellar actions"]',
+    )!;
+    expect(moreActions).not.toBeNull();
+    expect(moreActions.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      [...controlRow.querySelectorAll("button")].some(
+        (button) => button.textContent?.trim() === "Cellar settings",
+      ),
+      "Cellar settings should be behind the overflow menu, not standing in the row",
+    ).toBe(false);
 
     for (const label of ["Reconcile 1 open bottle →", "Show"]) {
       const control = [...container.querySelectorAll("button")].find(

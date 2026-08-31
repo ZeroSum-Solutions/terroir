@@ -64,6 +64,38 @@ export type PricingAlertRow = {
  * Returns empty on no-alerts (not an error). Throws only on unrecoverable
  * DB errors — callers should catch and 500.
  */
+/**
+ * PostgREST puts an `.in()` filter in the URL, so the request grows with the
+ * cellar. `wine_id=in.(…)` over a 250-wine tenant is already 9,027 characters
+ * and the server answers **HTTP 414 URI Too Long** — measured, not estimated.
+ *
+ * `insights/page.tsx` calls this behind `.catch(() => [])`, so the failure was
+ * invisible: PricingReviewCard simply never mounted, and the bigger the
+ * restaurant the more certain it was to be missing. A cellar large enough to
+ * need pricing review was exactly the one that could not get it.
+ *
+ * 100 ids per request keeps the filter near 3.7 KB. Chunking is safe for both
+ * call sites here because ids are PARTITIONED across chunks — every row for a
+ * given wine lands in exactly one request — so per-chunk ordering is still
+ * ordering per wine, which is all `costByWine`'s first-wins loop relies on.
+ */
+const WINE_ID_CHUNK = 100;
+
+async function inChunks<T>(
+  ids: readonly string[],
+  // The PostgREST builder is thenable but is not a Promise — PromiseLike is
+  // what it actually satisfies, and `await` treats the two identically.
+  run: (chunk: string[]) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += WINE_ID_CHUNK) {
+    const { data, error } = await run(ids.slice(i, i + WINE_ID_CHUNK));
+    if (error) throw error;
+    if (data) out.push(...data);
+  }
+  return out;
+}
+
 export async function fetchPricingAlerts(
   supabase: SupabaseClient<Database>,
   restaurantId: string,
@@ -100,13 +132,14 @@ export async function fetchPricingAlerts(
   // Pull list items with prices set. Use a simple two-pass join: list
   // items + sections + lists, scoped to this restaurant via restaurant_id
   // on the wine_lists table.
-  const { data: listItems, error: itemErr } = await supabase
-    .from("wine_list_items")
-    .select(
-      "id, wine_id, bottle_price, glass_price, glass_pour_ml, section_id, wine_list_sections!inner(wine_list_id, wine_lists!inner(restaurant_id))",
-    )
-    .in("wine_id", wineIds);
-  if (itemErr) throw itemErr;
+  const listItems = await inChunks<Record<string, unknown>>(wineIds, (chunk) =>
+    supabase
+      .from("wine_list_items")
+      .select(
+        "id, wine_id, bottle_price, glass_price, glass_pour_ml, section_id, wine_list_sections!inner(wine_list_id, wine_lists!inner(restaurant_id))",
+      )
+      .in("wine_id", chunk),
+  );
 
   // Filter to this restaurant's lists and where at least one price is set.
   type ListItemRow = {
@@ -137,13 +170,18 @@ export async function fetchPricingAlerts(
   // Pull invoice cost (most-recent inventory_items.unit_cost per wine) so
   // we can compute pour cost % against the actual cost basis. Median
   // retail is fine for markup ratio, but pour cost needs cost-per-bottle.
-  const { data: invRows, error: invErr } = await supabase
-    .from("inventory_items")
-    .select("wine_id, unit_cost, added_at")
-    .eq("restaurant_id", restaurantId)
-    .in("wine_id", wineIds)
-    .order("added_at", { ascending: false });
-  if (invErr) throw invErr;
+  const invRows = await inChunks<{
+    wine_id: string | null;
+    unit_cost: number | null;
+    added_at: string | null;
+  }>(wineIds, (chunk) =>
+    supabase
+      .from("inventory_items")
+      .select("wine_id, unit_cost, added_at")
+      .eq("restaurant_id", restaurantId)
+      .in("wine_id", chunk)
+      .order("added_at", { ascending: false }),
+  );
 
   const costByWine = new Map<string, number>();
   for (const row of invRows ?? []) {

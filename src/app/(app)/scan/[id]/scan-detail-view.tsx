@@ -10,6 +10,7 @@ import { csvFilename, downloadCsv, toCsv } from "@/lib/scanner/csv";
 import { LOW_CONFIDENCE_ITEM_THRESHOLD } from "@/lib/scanner/scoring";
 import type { LineItem } from "@/lib/scanner/types";
 import { cn } from "@/lib/utils";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 type InventoryItemRow = {
   id: string;
@@ -424,11 +425,8 @@ export function ScanDetailView({
                       className={i > 0 ? "border-t border-rule" : ""}
                     >
                       <td className="px-sm py-sm font-serif text-[17px] font-medium text-ink">
-                        <Link
-                          href={`/cellar?wine=${ii.wine_id}`}
-                          className="text-ink hover:text-accent focus-ring"
-                        >
-                          {ii.wine_name}
+                        <Link href={`/cellar?wine=${ii.wine_id}`} className="text-ink hover:text-accent focus-ring">
+                          {wineDisplayName(ii.wine_producer, ii.wine_name)}
                         </Link>
                       </td>
                       <td className="px-sm py-sm text-ink">{ii.wine_producer}</td>
@@ -465,7 +463,7 @@ export function ScanDetailView({
                       <Package className="h-5 w-5 text-grey" strokeWidth={1.5} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-serif text-[17px] font-medium text-ink">{ii.wine_name}</div>
+                      <div className="font-serif text-[17px] font-medium text-ink">{wineDisplayName(ii.wine_producer, ii.wine_name)}</div>
                       <div className="mt-2xs text-[13px] text-grey">{ii.wine_producer}</div>
                     </div>
                     <div className="shrink-0 text-right">

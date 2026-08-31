@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { formatPrice } from "./price-comparison-helpers";
 import type { WineComparison } from "./price-comparison-helpers";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 // BND-140: summary stats above the comparable-wines table — count, total
 // savings opportunity, overpaid-vs-market count, and a link to the single
@@ -53,7 +54,7 @@ export function PriceSummaryCard({
         {topOpportunity && topOpportunity.potentialSavings > 0 && (
           <Link
             href={`/cellar?wine=${topOpportunity.wine.id}`}
-            aria-label={`View top savings opportunity: ${topOpportunity.wine.producer} ${topOpportunity.wine.name} in cellar`}
+            aria-label={`View top savings opportunity: ${topOpportunity.wine.producer} ${wineDisplayName(topOpportunity.wine.producer, topOpportunity.wine.name)} in cellar`}
             className="group min-w-0 max-w-full rounded-md focus-ring"
           >
             <div className="text-caption font-medium uppercase text-grey">
@@ -63,7 +64,8 @@ export function PriceSummaryCard({
               Save {formatPrice(topOpportunity.potentialSavings)}
             </div>
             <div className="mt-2xs truncate text-ledger text-grey group-hover:text-accent">
-              {topOpportunity.wine.producer} · {topOpportunity.wine.name}
+              {topOpportunity.wine.producer} ·{" "}
+              {wineDisplayName(topOpportunity.wine.producer, topOpportunity.wine.name)}
               {topOpportunity.wine.vintage
                 ? ` ${topOpportunity.wine.vintage}`
                 : ""}

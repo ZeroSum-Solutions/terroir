@@ -5,12 +5,12 @@ import { ArrowLeft, ChevronLeft, ChevronRight, FileText, ScanLine } from "lucide
 import { RouteDataEmpty } from "@/components/route-data-state";
 import { describeScanStatusReason } from "@/lib/scanner/scan-status-reason";
 import { ExportCsvButton } from "./export-csv-button";
+import { ScanStatusSelect } from "./scan-status-select";
 import {
   buildQuery,
   parseStatus,
   statusBadge,
   statusLabel,
-  STATUS_FILTERS,
   type StatusFilter,
 } from "./scan-list-status";
 
@@ -96,44 +96,8 @@ export default async function ScansPage({
   const rows: ScanRow[] = scans;
   const hasMore = page < totalPages;
 
-  const filterChips = (
-    <div
-      role="radiogroup"
-      aria-label="Filter scans by status"
-      className="mt-md flex flex-wrap gap-xs"
-    >
-      {STATUS_FILTERS.map((f) => {
-        const active = status === f.value;
-        const countForChip =
-          f.value === "all"
-            ? statusCounts.complete + statusCounts.processing + statusCounts.failed
-            : statusCounts[f.value];
-        return (
-          <Link
-            key={f.value}
-            href={`/scans${buildQuery({ status: f.value })}`}
-            role="radio"
-            aria-checked={active}
-            aria-label={`${f.label} (${countForChip})`}
-            className={`inline-flex min-h-11 items-center gap-xs rounded-pill border px-md text-[12px] font-medium transition-colors focus-ring ${
-              active
-                ? "border-ink bg-ink text-on-inverse"
-                : "border-edge bg-surface text-grey hover:bg-wash"
-            }`}
-          >
-            <span>{f.label}</span>
-            <span
-              aria-hidden
-              className={`tabular text-[11px] ${
-                active ? "text-on-inverse/70" : "text-grey"
-              }`}
-            >
-              {countForChip}
-            </span>
-          </Link>
-        );
-      })}
-    </div>
+  const statusFilter = (
+    <ScanStatusSelect status={status} counts={statusCounts} />
   );
 
   const headerBlock = (
@@ -156,7 +120,7 @@ export default async function ScansPage({
           <ExportCsvButton rows={rows} />
         </div>
       </div>
-      {filterChips}
+      {statusFilter}
     </header>
   );
 

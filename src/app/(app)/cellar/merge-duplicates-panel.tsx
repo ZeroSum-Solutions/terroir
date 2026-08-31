@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import type { CellarWineRow } from "./types";
+import { wineTitle } from "@/lib/wine-display-name";
 
 type Toast = { success: (text: string) => void; error: (text: string) => void };
 
@@ -109,7 +110,7 @@ export function MergeDuplicatesPanel({
             onClick={() => setMergeConfirm(dup.wine_id)}
             className="flex h-11 items-center justify-center rounded-pill border border-edge bg-surface px-sm text-[13px] font-medium text-ink hover:bg-wash disabled:opacity-60"
           >
-            Merge &ldquo;{dup.producer} {dup.name}
+            Merge &ldquo;{wineTitle(dup.producer, dup.name)}
             {dup.vintage ? ` ${dup.vintage}` : ""}&rdquo; into this record
           </button>
         ),

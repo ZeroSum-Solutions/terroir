@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import type { MatchedWine } from "../scan-bottle-state";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 interface CorrectingViewProps {
   searchQuery: string;
@@ -68,7 +69,7 @@ export function CorrectingView({
                     {w.producer}
                   </p>
                   <p className="truncate text-[14px] text-grey">
-                    {w.name}
+                    {wineDisplayName(w.producer, w.name)}
                     {w.vintage ? ", " + w.vintage : ""}
                   </p>
                 </div>

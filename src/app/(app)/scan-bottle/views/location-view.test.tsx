@@ -37,6 +37,7 @@ describe("LocationView", () => {
           wine={testWine}
           section=""
           binLocation=""
+          locationError={null}
           onSectionChange={vi.fn()}
           onBinLocationChange={vi.fn()}
           onSubmit={vi.fn()}
@@ -55,6 +56,55 @@ describe("LocationView", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * SD-10 — a refused save used to tear the operator out to the `error` view,
+   * headed "Lookup failed", discarding the bin they had just typed. The
+   * failure belongs here, next to the fields, the way the correction search
+   * already reports its own.
+   */
+  it("reports a failed save in place, keeping the typed section and bin", async () => {
+    await act(async () => {
+      root.render(
+        <LocationView
+          wine={testWine}
+          section="Red Room"
+          binLocation="A-1"
+          locationError="Bin A-1 is already full."
+          onSectionChange={vi.fn()}
+          onBinLocationChange={vi.fn()}
+          onSubmit={vi.fn()}
+          onBack={vi.fn()}
+          confirming={false}
+        />,
+      );
+    });
+
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("Bin A-1 is already full.");
+    expect(container.querySelector<HTMLInputElement>("#bottle-section")?.value).toBe("Red Room");
+    expect(container.querySelector<HTMLInputElement>("#bottle-bin")?.value).toBe("A-1");
+    expect(container.textContent).not.toContain("Lookup failed");
+  });
+
+  it("shows no alert when there is no save error", async () => {
+    await act(async () => {
+      root.render(
+        <LocationView
+          wine={testWine}
+          section="Red Room"
+          binLocation="A-1"
+          locationError={null}
+          onSectionChange={vi.fn()}
+          onBinLocationChange={vi.fn()}
+          onSubmit={vi.fn()}
+          onBack={vi.fn()}
+          confirming={false}
+        />,
+      );
+    });
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it("enables Save location with both fields, and disables/labels it while confirming", async () => {
     await act(async () => {
       root.render(
@@ -62,6 +112,7 @@ describe("LocationView", () => {
           wine={testWine}
           section="Red Room"
           binLocation="A-1"
+          locationError={null}
           onSectionChange={vi.fn()}
           onBinLocationChange={vi.fn()}
           onSubmit={vi.fn()}

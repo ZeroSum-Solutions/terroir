@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { assertLiveDbTargetIsLocal } from "@/test/live-db-target";
+import { reserveLwinCatalogRow } from "@/test/fixtures/reserve-lwin-catalog-row";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -31,7 +32,6 @@ if (!hasLiveDb && process.env.CI) {
     "MANDATORY live-DB suite: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY / SUPABASE_SERVICE_ROLE_KEY missing in CI - refusing to skip silently.",
   );
 }
-
 
 async function signedInClient(email: string, password: string): Promise<SupabaseClient<Database>> {
   const throwaway = createClient<Database>(supabaseUrl!, publishableKey!, { auth: { persistSession: false } });
@@ -70,10 +70,23 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
   let userBClient: SupabaseClient<Database>;
   let userAId: string;
   let userBId: string;
-  const d9LwinId = String(1000000 + (Date.now() % 8999999)).padStart(7, "0").slice(0, 7);
+  // Reserved in beforeAll against the live catalogue, not derived from the clock:
+  // `Date.now() % N` hit one of the 211,512 seeded rows on ~1 run in 40 (23505).
+  let d9LwinId = "";
+  let baronLwinId = "";
+
 
   beforeAll(async () => {
     admin = createClient<Database>(supabaseUrl!, serviceRoleKey!, { auth: { persistSession: false } });
+
+    d9LwinId = await reserveLwinCatalogRow(admin, {
+      display_name: "P2 D9 Real Producer Real Wine",
+      producer: "P2 D9 Real Producer",
+    });
+    baronLwinId = await reserveLwinCatalogRow(admin, {
+      display_name: "Chateau Pichon Longueville Baron Grand Vin",
+      producer: "Chateau Pichon Longueville Baron",
+    });
 
     const { data: rA, error: rAErr } = await admin.from("restaurants").insert({ name: "P2 RWVB Tenant A" } as never).select("id").single();
     if (rAErr || !rA) throw rAErr ?? new Error("failed to insert restaurant A");
@@ -123,7 +136,7 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
     if (canonRows && canonRows.length > 0) {
       await admin.from("canonical_wines").delete().in("id", (canonRows as { id: string }[]).map((r) => r.id));
     }
-    await admin.from("lwin_catalog").delete().eq("lwin_id", d9LwinId);
+    await admin.from("lwin_catalog").delete().in("lwin_id", [d9LwinId, baronLwinId].filter(Boolean));
     if (userAId) await admin.auth.admin.deleteUser(userAId);
     if (userBId) await admin.auth.admin.deleteUser(userBId);
   });
@@ -207,12 +220,7 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
   // UPDATE/DELETE policy on canonical_wines, the victim cannot repair
   // this themselves.
   it("D9 fix: a tenant cannot squat a real LWIN with garbage text to hijack another tenant's later correct import", async () => {
-    const { error: catalogErr } = await admin.from("lwin_catalog").insert({
-      lwin_id: d9LwinId,
-      display_name: "P2 D9 Real Producer Real Wine",
-      producer: "P2 D9 Real Producer",
-    } as never);
-    expect(catalogErr).toBeNull();
+    // catalogue row reserved in beforeAll
 
     // ATTACKER (tenant A): garbage producer/cuvee, but the REAL lwin7.
     const { data: attackerData, error: attackerError } = await userAClient.rpc("resolve_wine_variants_bulk", {
@@ -293,15 +301,7 @@ describe.skipIf(!hasLiveDb)("P2 resolve_wine_variants_bulk: cross-tenant contain
   // proving the vulnerability needed no adversary at all — just two real
   // wines whose names overlap.
   it("D9-residual fix: Pichon Baron and Pichon Longueville Comtesse de Lalande never cross-bind, even with no attacker involved", async () => {
-    const baronLwinId = String(2000000 + (Date.now() % 7999999))
-      .padStart(7, "0")
-      .slice(0, 7);
-    const { error: catalogErr } = await admin.from("lwin_catalog").insert({
-      lwin_id: baronLwinId,
-      display_name: "Chateau Pichon Longueville Baron Grand Vin",
-      producer: "Chateau Pichon Longueville Baron",
-    } as never);
-    expect(catalogErr).toBeNull();
+    // catalogue row reserved in beforeAll
 
     // Tenant A: Lalande's OWN correct text, with Baron's real lwin7.
     const { data: lalandeData, error: lalandeError } = await userAClient.rpc("resolve_wine_variants_bulk", {

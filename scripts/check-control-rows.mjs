@@ -38,6 +38,25 @@
  * deep into a scroll, at 1440px and 390px. Treat that spec as the gate and
  * this ratchet as the thing that stops the count creeping back up.
  *
+ * ── ONE ROW IS NOT THE WHOLE RULE (2026-08-30) ───────────────────────────
+ *
+ * Counting rows — here or in the frame — answers only half of it. The rule
+ * says "if you cannot FIT ALL THE BUTTONS horizontally in one frame, then
+ * there are too many buttons", and a single row can fail that two ways this
+ * file will never see:
+ *   • it scrolls sideways. /cellar held TEN controls at 390px, of which three
+ *     were on screen and seven sat behind 740px of scroll inside an
+ *     `overflow-x-auto`. One row, one source container, and the page's own
+ *     `scrollWidth` never grew, because the row absorbed the overflow.
+ *   • it wraps. `ListActions` on /lists/[id] was ONE `flex-wrap` container
+ *     holding six pills that painted two lines at 390px (three when
+ *     published). One element, one counted row, and the eye counts three.
+ * e2e/one-row-rule.ts measures both, with `getBoundingClientRect()` against
+ * `window.innerWidth`, and is used by e2e/cellar-control-row.test.ts and
+ * e2e/mobile-list-editor.test.ts. A row that scrolls or wraps is the same
+ * "too many buttons" defect with the evidence hidden — do not read a passing
+ * count here, in either gate, as a claim that the controls fit.
+ *
  * ── THE HEURISTIC, AND WHAT IT CANNOT SEE ────────────────────────────────
  *
  * There is no honest way for a static reader of JSX to know what paints as a

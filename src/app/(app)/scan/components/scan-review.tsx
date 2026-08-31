@@ -348,15 +348,20 @@ export function ScanReview({
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : <Save className="h-4 w-4" strokeWidth={2} aria-hidden="true" />}
                 <span>{isSaving ? "Saving..." : "Save Edits"}</span>
               </button>
-              <button
-                type="button"
-                onClick={handleCommit}
-                disabled={isCommitting || commitOk}
-                className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
-              >
-                {isCommitting ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : null}
-                <span>{isCommitting ? "Committing..." : commitOk ? "Committed ✓" : "Commit to Inventory"}</span>
-              </button>
+              {/* SD-39: handleCommit early-returns on an empty scan, so the
+                  button was an action that could not happen. Export CSV
+                  above already hides itself for the same condition. */}
+              {items.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleCommit}
+                  disabled={isCommitting || commitOk}
+                  className="flex h-11 flex-1 items-center justify-center gap-sm rounded-pill bg-primary text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-60 md:h-[38px] md:flex-none md:px-md"
+                >
+                  {isCommitting ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden="true" /> : null}
+                  <span>{isCommitting ? "Committing..." : commitOk ? "Committed ✓" : "Commit to Inventory"}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

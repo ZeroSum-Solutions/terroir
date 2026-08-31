@@ -2,11 +2,14 @@
 
 import { Check, X } from "lucide-react";
 import type { MatchedWine } from "../scan-bottle-state";
+import { wineTitle } from "@/lib/wine-display-name";
 
 interface LocationViewProps {
   wine: MatchedWine;
   section: string;
   binLocation: string;
+  /** SD-10: a refused save, reported next to the fields that produced it. */
+  locationError: string | null;
   onSectionChange: (value: string) => void;
   onBinLocationChange: (value: string) => void;
   onSubmit: (e?: React.FormEvent) => void;
@@ -18,6 +21,7 @@ export function LocationView({
   wine,
   section,
   binLocation,
+  locationError,
   onSectionChange,
   onBinLocationChange,
   onSubmit,
@@ -32,7 +36,7 @@ export function LocationView({
             Bottle location
           </span>
           <span className="rounded-pill bg-surface-sunken px-sm py-2xs text-[12px] font-medium text-ink-soft">
-            {wine.producer} {wine.name}
+            {wineTitle(wine.producer, wine.name)}
             {wine.vintage ? " " + wine.vintage : ""}
           </span>
         </div>
@@ -72,6 +76,11 @@ export function LocationView({
               className="w-full rounded-pill border border-rule bg-surface px-md py-sm text-[14px] text-ink placeholder:text-grey focus:border-accent focus-ring"
             />
           </div>
+          {locationError && (
+            <p role="alert" className="text-body-sm text-risk-ink">
+              {locationError}
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-sm">
             <button
               type="button"

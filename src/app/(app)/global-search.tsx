@@ -34,6 +34,7 @@ import { useRouter } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { WineThumb } from "@/components/wine-thumb";
 import { cn } from "@/lib/utils";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 /** The row shape /api/wines/search returns. */
 type SearchWine = {
@@ -359,7 +360,7 @@ function ResultsPanel({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-control text-ink">
                     {wine.producer ? `${wine.producer} ` : ""}
-                    {wine.name}
+                    {wineDisplayName(wine.producer, wine.name)}
                     {wine.vintage ? ` ${wine.vintage}` : ""}
                   </span>
                   <span className="block truncate text-ledger font-light text-grey">

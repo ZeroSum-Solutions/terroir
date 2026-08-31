@@ -177,7 +177,7 @@ export default async function WineListEditorPage({
       list={listMeta as Omit<WineList, "wine_list_sections">}
       sections={sections}
       brandKit={brandKitView}
-      canManageBranding={role === "owner" || role === "manager"}
+      canManage={role === "owner" || role === "manager"}
     />
   );
 }

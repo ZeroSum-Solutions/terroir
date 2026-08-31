@@ -8,6 +8,7 @@ import {
   pickMostRecent,
 } from "./price-comparison-helpers";
 import type { WineComparison } from "./price-comparison-helpers";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 // BND-140/BND-138: mobile card layout for wines seen from only one
 // distributor — the small-screen counterpart to SingleSourcePriceTable.
@@ -32,11 +33,11 @@ export function SingleSourcePriceCards({ wines }: { wines: WineComparison[] }) {
               <div className="flex items-start gap-xs min-w-0 flex-1">
                 <Link
                   href={`/cellar?wine=${comp.wine.id}`}
-                  aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
+                  aria-label={`View ${comp.wine.producer} ${wineDisplayName(comp.wine.producer, comp.wine.name)} in cellar`}
                   className="group min-w-0 flex-1 rounded-md focus-ring"
                 >
                   <div className="font-serif text-body-lg font-medium text-ink group-hover:text-accent">
-                    {comp.wine.name}
+                    {wineDisplayName(comp.wine.producer, comp.wine.name)}
                     {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
                   </div>
                   <div className="text-body-sm text-grey group-hover:text-accent">

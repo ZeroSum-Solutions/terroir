@@ -57,6 +57,7 @@ export function SortableSectionButton({
   onEditCommit,
   onEditCancel,
   editRef,
+  canManage,
 }: {
   section: Section;
   isActive: boolean;
@@ -69,6 +70,8 @@ export function SortableSectionButton({
   onEditCommit: () => void;
   onEditCancel: () => void;
   editRef: React.RefObject<HTMLInputElement | null>;
+  /** SD-12: reorder, rename and delete are all owner/manager routes. */
+  canManage: boolean;
 }) {
   const {
     attributes,
@@ -99,15 +102,17 @@ export function SortableSectionButton({
       )}
     >
       {/* Drag handle */}
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="flex min-h-11 min-w-11 flex-shrink-0 cursor-grab touch-none items-center justify-center px-1 py-xs text-grey hover:text-ink active:cursor-grabbing"
-        aria-label={`Drag to reorder ${section.name}`}
-      >
-        <GripVertical className="h-3.5 w-3.5" strokeWidth={2} />
-      </button>
+      {canManage && (
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="flex min-h-11 min-w-11 flex-shrink-0 cursor-grab touch-none items-center justify-center px-1 py-xs text-grey hover:text-ink active:cursor-grabbing"
+          aria-label={`Drag to reorder ${section.name}`}
+        >
+          <GripVertical className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+      )}
 
       {/* Section name or inline edit input */}
       {isEditing ? (
@@ -166,7 +171,7 @@ export function SortableSectionButton({
           breakpoint with no hover, tapping the right of a row would hit an
           invisible Rename or Delete instead of selecting the section. The room
           for the name comes from the sidebar's own width instead. */}
-      {!isEditing && (
+      {!isEditing && canManage && (
         <div className="flex items-center gap-0.5 pr-sm">
           <button
             type="button"

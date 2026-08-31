@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { ReconcileQueueKind, ReconcileQueueRow } from "@/lib/reconcile-queue";
 import { buildAcceptAction } from "./accept-action";
 import type { QueueBin } from "./types";
@@ -24,33 +25,44 @@ type Props = {
   binId?: string;
   checked: boolean;
   disabled: boolean;
+  /** Accepting a batch is owner/manager only, so staff get neither the
+   *  selection checkbox nor the bin picker — both exist only to build an
+   *  accept action the API would refuse. */
+  canManage: boolean;
   onBinChange: (binId: string) => void;
   onToggle: () => void;
 };
 
 export function QueueIssueRow(props: Props) {
-  const { row, bins, binId, checked, disabled, onBinChange, onToggle } = props;
+  const { row, bins, binId, checked, disabled, canManage, onBinChange, onToggle } = props;
   const actionable = buildAcceptAction(row, binId) !== null;
   return (
     <article
       data-queue-row
       data-queue-kind={row.kind}
       data-risk={row.atRisk}
-      className="grid gap-sm border-t border-rule px-md py-md first:border-t-0 md:grid-cols-[44px_minmax(0,1fr)_minmax(180px,auto)_100px] md:items-center"
+      className={cn(
+        "grid gap-sm border-t border-rule px-md py-md first:border-t-0 md:items-center",
+        canManage
+          ? "md:grid-cols-[44px_minmax(0,1fr)_minmax(180px,auto)_100px]"
+          : "md:grid-cols-[minmax(0,1fr)_minmax(180px,auto)_100px]",
+      )}
     >
-      <label className="flex h-11 w-11 items-center justify-center">
-        <span className="sr-only">Select {row.title}</span>
-        <input
-          type="checkbox"
-          aria-label={`Select ${row.title}`}
-          checked={checked}
-          disabled={disabled || !actionable}
-          onChange={onToggle}
-          className="h-4 w-4 rounded-sm border-rule-strong text-accent focus-ring disabled:opacity-35"
-        />
-      </label>
+      {canManage && (
+        <label className="flex h-11 w-11 items-center justify-center">
+          <span className="sr-only">Select {row.title}</span>
+          <input
+            type="checkbox"
+            aria-label={`Select ${row.title}`}
+            checked={checked}
+            disabled={disabled || !actionable}
+            onChange={onToggle}
+            className="h-4 w-4 rounded-sm border-rule-strong text-accent focus-ring disabled:opacity-35"
+          />
+        </label>
+      )}
       <IssueIdentity row={row} />
-      <IssueControl row={row} bins={bins} binId={binId} onBinChange={onBinChange} />
+      <IssueControl row={row} bins={bins} binId={binId} canManage={canManage} onBinChange={onBinChange} />
       <div className="flex items-baseline justify-between gap-md md:block md:text-right">
         <span className="text-caption uppercase text-grey md:hidden">At risk</span>
         <span className="font-mono text-[14px] font-medium tabular-nums text-ink">
@@ -98,8 +110,8 @@ function BasisChip({ row }: { row: ReconcileQueueRow }) {
   );
 }
 
-function IssueControl({ row, bins, binId, onBinChange }: Pick<Props, "row" | "bins" | "binId" | "onBinChange">) {
-  if (row.kind !== "unplaced") {
+function IssueControl({ row, bins, binId, canManage, onBinChange }: Pick<Props, "row" | "bins" | "binId" | "canManage" | "onBinChange">) {
+  if (row.kind !== "unplaced" || !canManage) {
     return <p className="text-[12px] text-grey">{row.action?.label ?? "Review in cellar"}</p>;
   }
   if (bins.length === 0) return <p className="text-[12px] text-risk-ink">Create an active bin first</p>;

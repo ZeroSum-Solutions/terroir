@@ -95,3 +95,34 @@ export function wineDisplayName(
   const remainder = rawName.slice(cut).replace(/^[\s,;:.–—-]+/, "").trim();
   return remainder === "" ? rawName : remainder;
 }
+
+
+/**
+ * BUG-02 — the producer's separator, when there is no producer.
+ *
+ * Devin's second field note, alongside BUG-01: a list row rendering as
+ * **", Benjamin Leroux Vosne-Romanée"** — "a leading comma from an empty
+ * producer segment."
+ *
+ * Roughly eighteen surfaces compose a title as `{producer}, {name}` or
+ * `{producer} {name}`. `producer` is NOT NULL, so a wine that never had one
+ * holds the empty string rather than null — which is 23% of the production
+ * cellar (321 of 1,385) — and every one of those sites emits its separator
+ * anyway. The comma ones show Devin's exact string; the space ones show a
+ * leading space, which hides in HTML flow and then surfaces in an aria-label,
+ * a PDF, or text extraction.
+ *
+ * `assistant-panel.tsx` already guarded this by hand. One helper instead of
+ * eighteen hand-guards, so the next surface added gets it for free.
+ */
+export function wineTitle(
+  producer: string | null | undefined,
+  name: string | null | undefined,
+  separator = " ",
+): string {
+  const shown = wineDisplayName(producer, name);
+  const trimmedProducer = (producer ?? "").trim();
+  if (trimmedProducer === "") return shown;
+  if (shown === "") return trimmedProducer;
+  return `${trimmedProducer}${separator}${shown}`;
+}

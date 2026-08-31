@@ -52,22 +52,30 @@ describe("WineListLanding permanent-delete confirmation", () => {
       slug: "published-list",
     });
     const { container } = await mount(
-      <WineListLanding lists={[list]} archivedLists={[]} />,
+      <WineListLanding lists={[list]} archivedLists={[]} canManage />,
     );
 
     for (const label of [
       "Copy public link for Published list",
       "Open public Published list list in a new tab",
-      "Clone Published list",
-      "Archive Published list",
     ]) {
       const control = container.querySelector<HTMLElement>(`[aria-label="${label}"]`)!;
       expect(control.className, label).toContain("min-h-11");
     }
-    expect(
-      container.querySelector<HTMLElement>('[aria-label="Archive Published list"]')
-        ?.className,
-    ).toContain("min-w-11");
+    // GLOBAL-01: Clone, Archive/Restore and Delete are demoted behind the
+    // overflow trigger (five controls did not fit a 390px card footer — see
+    // e2e/one-row-rule.test.ts). The trigger is the control that has to clear
+    // the floor here; the items get it from OverflowMenu's own `min-h-11`,
+    // asserted in src/components/overflow-menu.test.tsx.
+    const trigger = container.querySelector<HTMLElement>(
+      '[aria-label="More actions for Published list"]',
+    )!;
+    expect(trigger.className).toContain("h-11");
+    expect(trigger.className).toContain("w-11");
+    for (const action of ["Clone", "Archive"]) {
+      const item = await menuAction(container, "Published list", action);
+      expect(item.className, action).toContain("min-h-11");
+    }
   });
 
   it.each([
@@ -87,10 +95,10 @@ describe("WineListLanding permanent-delete confirmation", () => {
       is_published: published,
     });
     const { container } = await mount(
-      <WineListLanding lists={[]} archivedLists={[list]} showArchived />,
+      <WineListLanding lists={[]} archivedLists={[list]} showArchived canManage />,
     );
 
-    await click(buttonByLabel(container, `Permanently delete ${list.name}`));
+    await click(await menuAction(container, list.name, "Permanently delete"));
     const dialog = dialogByTitle(container, "Permanently delete list");
     expect(dialog).toBeDefined();
     expect(dialog!.textContent).toContain(warning);
@@ -102,15 +110,15 @@ describe("WineListLanding permanent-delete confirmation", () => {
     const fetchMock = vi.fn(() => pending.promise);
     vi.stubGlobal("fetch", fetchMock);
     const { container } = await mount(
-      <WineListLanding lists={[]} archivedLists={[list]} showArchived />,
+      <WineListLanding lists={[]} archivedLists={[list]} showArchived canManage />,
     );
 
-    await click(buttonByLabel(container, "Permanently delete Reserve"));
+    await click(await menuAction(container, "Reserve", "Permanently delete"));
     await click(button(dialogByTitle(container, "Permanently delete list")!, "Cancel"));
     expect(fetchMock).not.toHaveBeenCalled();
     expect(dialogByTitle(container, "Permanently delete list")).toBeUndefined();
 
-    await click(buttonByLabel(container, "Permanently delete Reserve"));
+    await click(await menuAction(container, "Reserve", "Permanently delete"));
     let dialog = dialogByTitle(container, "Permanently delete list")!;
     await click(button(dialog, "Permanently delete list"));
     expect(fetchMock).toHaveBeenCalledOnce();
@@ -140,10 +148,10 @@ describe("WineListLanding permanent-delete confirmation", () => {
       .mockResolvedValueOnce(okResponse());
     vi.stubGlobal("fetch", fetchMock);
     const { container } = await mount(
-      <WineListLanding lists={[]} archivedLists={[list]} showArchived />,
+      <WineListLanding lists={[]} archivedLists={[list]} showArchived canManage />,
     );
 
-    await click(buttonByLabel(container, "Permanently delete Cellar Picks"));
+    await click(await menuAction(container, "Cellar Picks", "Permanently delete"));
     await click(button(dialogByTitle(container, "Permanently delete list")!, "Permanently delete list"));
     expect(dialogByTitle(container, "Permanently delete list")).toBeDefined();
     expect(dialogByTitle(container, "Permanently delete list")!.querySelector('[role="alert"]')?.textContent).toContain(
@@ -159,9 +167,9 @@ describe("WineListLanding permanent-delete confirmation", () => {
     const list = wineList({ id: "active-list", name: "Active list", archived: false });
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const { container } = await mount(<WineListLanding lists={[list]} />);
+    const { container } = await mount(<WineListLanding lists={[list]} canManage />);
 
-    expect(buttonByLabelOrNull(container, "Permanently delete Active list")).toBeNull();
+    expect(await menuActionOrNull(container, "Active list", "Permanently delete")).toBeNull();
     expect(dialogByTitle(container, "Permanently delete list")).toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -171,10 +179,10 @@ describe("WineListLanding permanent-delete confirmation", () => {
     const confirm = vi.mocked(window.confirm);
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const { container } = await mount(<WineListLanding lists={[list]} />);
+    const { container } = await mount(<WineListLanding lists={[list]} canManage />);
 
-    await click(buttonByLabel(container, "Archive Active list"));
-    await click(buttonByLabel(container, "Clone Active list"));
+    await click(await menuAction(container, "Active list", "Archive"));
+    await click(await menuAction(container, "Active list", "Clone"));
 
     expect(confirm).toHaveBeenNthCalledWith(
       1,
@@ -230,12 +238,34 @@ function button(root: ParentNode, name: string) {
   )!;
 }
 
-function buttonByLabel(root: ParentNode, label: string) {
-  return root.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+/**
+ * Opens one card's overflow menu and returns the named item. Clone,
+ * Archive/Restore and Delete moved in there when the footer was cut from five
+ * controls to three (GLOBAL-01, e2e/one-row-rule.test.ts); the trigger carries
+ * the list name, the item carries the verb.
+ */
+async function menuAction(root: ParentNode, listName: string, action: string) {
+  const item = await menuActionOrNull(root, listName, action);
+  if (!item) throw new Error(`no "${action}" action for ${listName}`);
+  return item;
 }
 
-function buttonByLabelOrNull(root: ParentNode, label: string) {
-  return root.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+async function menuActionOrNull(root: ParentNode, listName: string, action: string) {
+  const trigger = root.querySelector<HTMLButtonElement>(
+    `button[aria-label="More actions for ${listName}"]`,
+  );
+  if (!trigger) return null;
+  if (trigger.getAttribute("aria-expanded") !== "true") {
+    await act(async () => trigger.click());
+  }
+  const menu = root.querySelector<HTMLElement>(
+    `[role="menu"][aria-label="More actions for ${listName}"]`,
+  );
+  return (
+    [...(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].find(
+      (node) => node.textContent?.trim() === action,
+    ) ?? null
+  );
 }
 
 async function click(element: HTMLElement) {

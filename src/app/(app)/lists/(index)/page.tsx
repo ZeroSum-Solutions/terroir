@@ -13,7 +13,10 @@ export default async function WineListPage({
 }) {
   const { show_archived } = await searchParams;
   const auth = (await getAuthContext())!; // AppLayout redirects when null
-  const { supabase, restaurantId } = auth;
+  const { supabase, restaurantId, userRole } = auth;
+  // SD-12: creating, cloning, archiving and deleting a list are all
+  // requireRole(["owner","manager"]); reading them is membership-only.
+  const canManage = userRole === "owner" || userRole === "manager";
 
   const { data: lists, error: listsError } = await supabase
     .from("wine_lists")
@@ -52,6 +55,7 @@ export default async function WineListPage({
       lists={visibleLists}
       archivedLists={archivedLists}
       showArchived={show_archived === "1"}
+      canManage={canManage}
     />
   );
 }

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Wine, TrendingUp, DollarSign } from "lucide-react";
 import { metricHref } from "./metric-href";
+import { wineTitle } from "@/lib/wine-display-name";
 
 type PourVolumeItem = {
   section: string;
@@ -258,7 +259,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[13px] font-medium text-ink">
-                            {w.producer} {w.name}
+                            {wineTitle(w.producer, w.name)}
                             {w.vintage ? " " + String(w.vintage) : ""}
                           </div>
                         </div>
@@ -304,7 +305,7 @@ export function PourAnalyticsContent({ data }: { data: PourData }) {
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[13px] font-medium text-ink">
-                            {w.producer} {w.name}
+                            {wineTitle(w.producer, w.name)}
                             {w.vintage ? " " + String(w.vintage) : ""}
                           </div>
                           <div className="mt-2xs text-[12px] text-grey">

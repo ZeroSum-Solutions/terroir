@@ -10,6 +10,7 @@ import {
   latestPriceByDistributor,
 } from "./price-comparison-helpers";
 import type { WineComparison } from "./price-comparison-helpers";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 // BND-140/BND-138: desktop table for wines with 2+ distributors — one row
 // per distributor price, with the wine, spread and savings columns spanning
@@ -60,14 +61,14 @@ export function ComparablePriceTable({ wines }: { wines: WineComparison[] }) {
                       />
                       <Link
                         href={`/cellar?wine=${comp.wine.id}`}
-                        aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
+                        aria-label={`View ${comp.wine.producer} ${wineDisplayName(comp.wine.producer, comp.wine.name)} in cellar`}
                         className="group block min-w-0 flex-1 rounded-md focus-ring"
                       >
                         <div className="font-serif text-body-lg font-medium text-ink group-hover:text-accent">
                           {comp.wine.producer}
                         </div>
                         <div className="text-grey group-hover:text-accent">
-                          {comp.wine.name}
+                          {wineDisplayName(comp.wine.producer, comp.wine.name)}
                           {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
                         </div>
                       </Link>

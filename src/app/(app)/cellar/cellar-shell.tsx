@@ -201,7 +201,21 @@ export function CellarShell({
     return { totalBottles, openCount, outCount, lowCount, drinkNowCount, holdCount };
   }, [rows]);
 
-  const counters = useMemo(() => buildCellarCounters(alerts), [alerts]);
+  const counters = useMemo(() => {
+    const built = buildCellarCounters(alerts);
+    // `buildCellarCounters` suppresses zero-count scopes — a filter to nothing
+    // is noise. As pills that read as "no pill is selected"; as ONE select it
+    // would read as "All" while the list is filtered to nothing, because a
+    // select cannot display a value it has no option for. So the active scope
+    // always gets an option, whatever its count.
+    if (urlState.filter === "all" || built.some((c) => c.id === urlState.filter)) {
+      return built;
+    }
+    return [
+      ...built,
+      { id: urlState.filter, label: FILTER_LABELS[urlState.filter], value: 0 },
+    ];
+  }, [alerts, urlState.filter]);
   // Everything the one filter surface now owns: the facets, the grouping and
   // the sort. Counted from the URL alone so the badge needs no row data.
   const activeFilterCount =

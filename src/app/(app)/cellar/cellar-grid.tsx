@@ -5,6 +5,7 @@ import { Grid2x2, Loader2, X, Wine } from "lucide-react";
 import { WineThumb } from "@/components/wine-thumb";
 import type { GridData } from "./grid-types";
 import { useRouter } from "next/navigation";
+import { wineTitle } from "@/lib/wine-display-name";
 
 type CellarConfig = {
   id: string;
@@ -313,7 +314,7 @@ export function CellarGridView({
                       />
                       <span className="min-w-0 flex-1">
                         <span className="block font-serif text-[17px] font-medium leading-snug text-ink">
-                          {w.producer}, {w.name}
+                          {wineTitle(w.producer, w.name, ", ")}
                         </span>
                         <span className="mt-2xs flex items-center gap-sm text-[12px] font-light text-grey">
                           <span className="tabular">

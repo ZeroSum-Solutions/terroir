@@ -4,6 +4,8 @@
  * Columns: Name, Menu Group, Menu Subgroup, Price, POS Name, SKU, Item Type
  */
 
+import { wineDisplayName } from "@/lib/wine-display-name";
+
 type ToastRow = {
   name: string;
   producer: string;
@@ -33,7 +35,15 @@ export function generateToastCsv(rows: ToastRow[]): string {
   const lines = [headers.join(",")];
 
   for (const row of rows) {
-    const displayName = [row.producer, row.name, row.vintage]
+    // BUG-01 — the POS item name is a display name, so it must not repeat a
+    // producer a CSV import already left embedded in `wines.name`. POS Name
+    // below is deliberately untouched: it never carries the producer, so the
+    // whole of `name` is the only identity it has.
+    const displayName = [
+      row.producer,
+      wineDisplayName(row.producer, row.name),
+      row.vintage,
+    ]
       .filter(Boolean)
       .join(" ");
 

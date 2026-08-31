@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import { type CellarUrlFilter } from "@/lib/cellar-facets/url-state";
 
 export type CellarCounterAlerts = {
@@ -59,7 +58,26 @@ export function buildCellarCounters(alerts: CellarCounterAlerts): CellarCounterD
   return counters;
 }
 
-export function CellarCounters({
+/**
+ * GLOBAL-01 / CELLAR-01 — the scope control, as ONE control.
+ *
+ * These counters used to render as a strip of pills. Measured on the seeded
+ * cellar at 390px (e2e/cellar-control-row.test.ts), four of them are 424px
+ * wide before the gaps, against 354px of usable row — so three of the row's
+ * ten controls were on screen and seven sat behind 740px of sideways scroll
+ * inside an `overflow-x-auto`. The page reported no horizontal overflow the
+ * whole time, because the row absorbed it.
+ *
+ * The fix is not a breakpoint. The pill strip's width is DATA-dependent: four
+ * counters here, six on a cellar with low stock and holds (~670px), and no
+ * media query can know which. A `<select>` is constant-width whatever the
+ * data, so it is the only form of this control that fits by construction —
+ * and it is the rule's own answer, six buttons becoming one.
+ *
+ * Nothing is lost: every counter's number is in its option, and the active
+ * one is on screen at all times, which is what the pills showed.
+ */
+export function CellarScopeSelect({
   counters,
   activeFilter,
   onSelect,
@@ -69,53 +87,20 @@ export function CellarCounters({
   onSelect: (filter: CellarUrlFilter) => void;
 }) {
   return (
-    // GLOBAL-01: the scope pills are the primary segment of the page's ONE
-    // control row, so they scroll sideways inside it rather than wrapping into
-    // a second row when a cellar lights up five or six counters at once.
-    <div role="tablist" aria-label="Cellar counters" className="flex flex-nowrap gap-xs">
-      {counters.map((counter) => {
-        const selected = activeFilter === counter.id;
-        return (
-          <button
-            key={counter.id}
-            type="button"
-            role="tab"
-            aria-selected={selected}
-            onClick={() => onSelect(counter.id)}
-            className={cn(
-              "inline-flex min-h-11 shrink-0 items-center gap-xs whitespace-nowrap rounded-pill px-md transition-opacity",
-              // `.glass` sets background/border/box-shadow as unlayered CSS
-              // (see globals.css) so it always wins over Tailwind's layered
-              // bg-*/border-*/shadow-*/ring-* utilities — never combine it
-              // with one of those. Selected state therefore uses a fully
-              // separate (non-glass) class branch, and focus goes through
-              // `outline`, which glass never touches.
-              selected
-                ? "border border-ink bg-ink text-on-inverse focus-ring"
-                : "glass text-ink hover:opacity-80 focus-ring",
-            )}
-          >
-            <span
-              className={cn(
-                "text-[10.5px] font-medium uppercase tracking-[0.14em]",
-                selected ? "text-on-inverse/70" : "text-grey",
-              )}
-            >
-              {counter.label}
-            </span>
-            <span
-              className={cn(
-                // Courier is the ledger voice — data speaks mono, Bodoni is
-                // reserved for display headlines (DESIGN.md type roles).
-                "font-mono text-[16px] font-medium leading-none tabular",
-                selected ? "text-on-inverse" : "text-ink",
-              )}
-            >
-              {counter.value}
-            </span>
-          </button>
-        );
-      })}
-    </div>
+    <select
+      aria-label="Cellar scope"
+      value={activeFilter}
+      onChange={(event) => onSelect(event.target.value as CellarUrlFilter)}
+      // `min-w-0 flex-1` makes this the row's ONLY flexible control: every
+      // other one is `shrink-0`, so the scope select absorbs whatever width
+      // is left and the row cannot overflow while the fixed controls fit.
+      className="h-11 min-w-0 flex-1 truncate rounded-pill border border-edge bg-surface px-sm text-ledger font-medium text-ink hover:bg-wash focus-ring sm:max-w-[220px]"
+    >
+      {counters.map((counter) => (
+        <option key={counter.id} value={counter.id}>
+          {counter.label} · {counter.value}
+        </option>
+      ))}
+    </select>
   );
 }

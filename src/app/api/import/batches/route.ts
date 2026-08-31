@@ -16,6 +16,7 @@ import { fileField, parseMultipart } from "@/lib/api/validation";
 import { confirmImportBatch } from "@/domains/import/batch-service";
 import { validateUploadedCsvFile } from "@/domains/import/upload-validation";
 import {
+  AcknowledgedMissingProducerRowsFieldSchema,
   ApprovedLwinRowsFieldSchema,
   ConfirmBatchSessionFieldsSchema,
   RejectedLwinRowsFieldSchema,
@@ -39,6 +40,9 @@ const ConfirmSchema = z
     rowOverrides: RowOverridesFieldSchema,
     rejectedLwinRows: RejectedLwinRowsFieldSchema,
     approvedLwinRows: ApprovedLwinRowsFieldSchema,
+    // SD-41 — the operator's blank-producer acknowledgement. Optional at
+    // the schema boundary because its ABSENCE is what confirm refuses.
+    acknowledgedMissingProducerRows: AcknowledgedMissingProducerRowsFieldSchema,
   })
   .merge(ConfirmBatchSessionFieldsSchema);
 
@@ -80,8 +84,17 @@ async function postBatches(request: NextRequest) {
 
   const parsed = await parseMultipart(request, ConfirmSchema, { message: "Expected a CSV file upload." });
   if (!parsed.ok) return parsed.response;
-  const { file, sessionId, chunkIndex, chunkTotal, sourceSha256, rowOverrides, rejectedLwinRows, approvedLwinRows } =
-    parsed.data;
+  const {
+    file,
+    sessionId,
+    chunkIndex,
+    chunkTotal,
+    sourceSha256,
+    rowOverrides,
+    rejectedLwinRows,
+    approvedLwinRows,
+    acknowledgedMissingProducerRows,
+  } = parsed.data;
 
   const uploadCheck = validateUploadedCsvFile(file);
   if (!uploadCheck.ok) {
@@ -109,6 +122,7 @@ async function postBatches(request: NextRequest) {
     rowOverrides,
     rejectedLwinRows,
     approvedLwinRows,
+    acknowledgedMissingProducerRows,
     serviceClient,
   });
 

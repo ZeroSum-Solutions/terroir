@@ -7,6 +7,7 @@ import {
 import { StatusChip } from "@/components/status-chip";
 import { metricHref } from "./metric-href";
 import { RecomputePricingRecommendationsButton } from "./recompute-pricing-recommendations-button";
+import { wineTitle } from "@/lib/wine-display-name";
 
 const LABELS: Record<PricingRecommendationClass, string> = {
   discount_to_move: "Discount to move",
@@ -113,7 +114,7 @@ function PricingRow({ row }: { row: PricingPlay }) {
         className="group min-w-0 rounded-sm focus-ring"
       >
         <span className="block truncate font-serif text-[17px] font-medium text-ink group-hover:text-accent">
-          {row.wine.producer}, {row.wine.name}
+          {wineTitle(row.wine.producer, row.wine.name, ", ")}
         </span>
         <span className="mt-2xs block text-[11px] font-light text-grey">
           {row.wine.vintage ?? "NV"}

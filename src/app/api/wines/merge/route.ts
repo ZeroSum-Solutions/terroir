@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireRole } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 export const runtime = "nodejs";
 
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
   if ((source.vintage ?? 0) !== (target.vintage ?? 0)) {
     return Errors.unprocessable(
       "cross_vintage_merge",
-      `${source.vintage ?? "NV"} and ${target.vintage ?? "NV"} are distinct vintages of ${target.producer} ${target.name} — they are already linked as vintage siblings, not duplicates.`,
+      `${source.vintage ?? "NV"} and ${target.vintage ?? "NV"} are distinct vintages of ${target.producer} ${wineDisplayName(target.producer, target.name)} — they are already linked as vintage siblings, not duplicates.`,
     );
   }
   if (source.size_ml !== target.size_ml) {

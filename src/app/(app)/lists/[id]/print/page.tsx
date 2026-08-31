@@ -5,6 +5,7 @@ import { requireMembership } from "@/lib/api/auth";
 import { renderWineListSections } from "@/lib/wine-list/render";
 import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
 import { PrintControls } from "./print-controls";
+import { wineTitle } from "@/lib/wine-display-name";
 
 export const metadata: Metadata = { title: "Print list" };
 
@@ -104,7 +105,7 @@ export default async function WineListPrintPage({
                   <div className="flex items-baseline justify-between gap-md">
                     <div className="min-w-0">
                       <span className="font-serif text-[17px] font-medium text-ink print:text-[14px]">
-                        {wine.producer} {wine.name}
+                        {wineTitle(wine.producer, wine.name)}
                       </span>
                       {wine.vintage && (
                         <span className="ml-xs font-mono text-[12px] text-grey print:text-[11px]">

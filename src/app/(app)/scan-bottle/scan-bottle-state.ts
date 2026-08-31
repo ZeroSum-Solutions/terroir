@@ -37,6 +37,10 @@ export interface BottleScanState {
   /** A failed correction search, shown in place rather than tearing the
       user out of the correcting phase the way `error` does. */
   searchError: string | null;
+  /** SD-10: a failed bin save, shown in place for the same reason. It used
+      to become `error`, whose view is headed "Lookup failed" and whose only
+      exit discards the wine, the section and the bin just typed. */
+  locationError: string | null;
   section: string;
   binLocation: string;
   confirming: boolean;
@@ -54,6 +58,7 @@ export const initialBottleScanState: BottleScanState = {
   searchResults: [],
   searching: false,
   searchError: null,
+  locationError: null,
   section: "",
   binLocation: "",
   confirming: false,
@@ -135,13 +140,13 @@ export function bottleScanReducer(state: BottleScanState, action: BottleScanActi
       return { ...state, phase: "matched" };
 
     case "location-entry-started":
-      return { ...state, phase: "location", section: "", binLocation: "" };
+      return { ...state, phase: "location", section: "", binLocation: "", locationError: null };
 
     case "section-changed":
-      return { ...state, section: action.value };
+      return { ...state, section: action.value, locationError: null };
 
     case "bin-location-changed":
-      return { ...state, binLocation: action.value };
+      return { ...state, binLocation: action.value, locationError: null };
 
     case "location-confirm-started":
       return { ...state, confirming: true };
@@ -152,10 +157,11 @@ export function bottleScanReducer(state: BottleScanState, action: BottleScanActi
         session: [...state.session, action.scan],
         phase: "confirmed",
         confirming: false,
+        locationError: null,
       };
 
     case "location-confirm-failed":
-      return { ...state, error: action.message, phase: "error", confirming: false };
+      return { ...state, locationError: action.message, confirming: false };
 
     case "scan-again":
       return {
@@ -168,6 +174,7 @@ export function bottleScanReducer(state: BottleScanState, action: BottleScanActi
         section: "",
         binLocation: "",
         confirming: false,
+        locationError: null,
       };
 
     case "session-ended":
@@ -185,6 +192,7 @@ export function bottleScanReducer(state: BottleScanState, action: BottleScanActi
         section: "",
         binLocation: "",
         confirming: false,
+        locationError: null,
       };
 
     case "manual-entry-opened":

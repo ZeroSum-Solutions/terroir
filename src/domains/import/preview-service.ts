@@ -15,6 +15,7 @@ import { mapHeader, validateRow, type FieldError, type FieldsInput, type RawRowF
 import { matchLwinBulk, buildLwinQueryVariants, type LwinMatch } from "./lwin-matching";
 import { mergeIntraBatchDuplicates, type IntraBatchDuplicateReason } from "./dedup-key";
 import { LWIN_MATCH_MAX_QUERIES, type CanonicalHeader } from "./constants";
+import { countMissingProducerRows } from "./producer-acknowledgement";
 import type { SourcePresetId } from "./source-presets";
 
 /** Inline row-fix overrides (see ConfirmBatchOptions.rowOverrides in
@@ -277,9 +278,10 @@ export async function buildImportPreview(
     missingCostRows: mergedRows.filter((r) => r.rowState === "valid" && r.costStatus === "missing").length,
     readyToApplyRows: mergedRows.filter((r) => r.resolution === "auto").length,
     pendingResolutionRows: mergedRows.filter((r) => r.resolution === "pending").length,
-    missingProducerRows: mergedRows.filter(
-      (r) => r.rowState === "valid" && r.producerStatus === "missing",
-    ).length,
+    // SD-41: the SAME function confirm gates on, deliberately — the number
+    // the operator acknowledges and the number the server enforces against
+    // must never be able to drift apart.
+    missingProducerRows: countMissingProducerRows(mergedRows),
   };
 
   return { ok: true, rows: mergedRows, summary, detectedSource };

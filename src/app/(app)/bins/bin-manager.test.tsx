@@ -66,6 +66,42 @@ describe("BinManager bottle search", () => {
   });
 });
 
+describe("BinManager unplaced inventory", () => {
+  it("sends unplaced stock to the queue that can place it, not back to itself", async () => {
+    await act(async () =>
+      root.render(
+        <BinManager
+          bins={[]}
+          inventory={inventory}
+          canManage={false}
+          unplacedCount={4}
+        />,
+      ),
+    );
+    const link = container.querySelector<HTMLAnchorElement>("[data-unplaced-link]");
+    expect(link, "the unplaced summary is missing").not.toBeNull();
+    // Was <a id="unplaced" href="#unplaced"> — a link back to itself.
+    expect(link!.getAttribute("href")).toBe("/reconcile-queue");
+    expect(link!.getAttribute("id")).toBeNull();
+    expect(link!.className).toContain("min-h-11");
+    expect(link!.textContent).toContain("4 bottles");
+  });
+
+  it("renders nothing when every bottle is placed", async () => {
+    await act(async () =>
+      root.render(
+        <BinManager
+          bins={[]}
+          inventory={inventory}
+          canManage={false}
+          unplacedCount={0}
+        />,
+      ),
+    );
+    expect(container.querySelector("[data-unplaced-link]")).toBeNull();
+  });
+});
+
 function setInputValue(input: HTMLInputElement, value: string) {
   const setValue = Object.getOwnPropertyDescriptor(
     HTMLInputElement.prototype,

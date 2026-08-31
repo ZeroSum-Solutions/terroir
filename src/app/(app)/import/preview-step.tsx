@@ -21,6 +21,7 @@ import { computeUnresolvedDuplicateChunkContentIndexes } from "@/domains/import/
 import { computePreviewCounts } from "@/domains/import/preview-counts";
 import { describeWaitEstimate, estimateChunkedPhaseWaitSeconds } from "@/domains/import/wait-estimate";
 import { ChunkUploadProgress } from "./chunk-upload-progress";
+import { MissingProducerGate } from "./missing-producer-gate";
 import { MAX_SHOWN_ERROR_ROWS, PreviewErrorRows } from "./preview-error-rows";
 import { MAX_SHOWN_MATCHED_ROWS, PreviewBelowThreshold, PreviewMatchedWines } from "./preview-lwin-rows";
 import { SummaryStat } from "./summary-stat";
@@ -103,7 +104,9 @@ export function PreviewStep({
    * duplicate_chunk_content state, with both actions available again.
    * Omitted on the plain (non-chunked) path. */
   onUndoSkip?: (index: number) => void;
-  onConfirm: () => void;
+  /** SD-41: carries the blank-producer count the operator acknowledged, so
+   * the confirm request can echo it back for the server to re-check. */
+  onConfirm: (acknowledgedMissingProducerRows: number) => void;
   confirming: boolean;
   onBack: () => void;
   /** The server's own message for the most recent failure — including a
@@ -159,14 +162,21 @@ export function PreviewStep({
   // The honest client-side projection of what will actually import — the
   // operator's inline fixes counted in, a skipped chunk's rows counted out.
   // See computePreviewCounts (preview-counts.ts) for the full reasoning.
-  const { fixedCount, canConfirm, effectivePassingValidationRows, effectiveErrorRows } = computePreviewCounts({
-    summary,
-    errorRows,
-    rowOverrides,
-    isRowSkipped,
-    chunkUpload,
-    chunkBreakdown,
-  });
+  const { fixedCount, canConfirm, effectivePassingValidationRows, effectiveErrorRows, effectiveMissingProducerRows } =
+    computePreviewCounts({
+      summary,
+      errorRows,
+      rowOverrides,
+      isRowSkipped,
+      chunkUpload,
+      chunkBreakdown,
+    });
+  // SD-41: unticked by default, every time. Same useState safety as
+  // shownCount above — PreviewStep unmounts before a different file's
+  // preview can replace this one, so there is no stale-acknowledgement
+  // case to reset for.
+  const [producerAcknowledged, setProducerAcknowledged] = useState(false);
+  const producerBlocked = effectiveMissingProducerRows > 0 && !producerAcknowledged;
   const hasFailedChunk = chunkUpload?.some((c) => c.status === "failed") ?? false;
   // Sol round-2 audit finding 3: chunk_content_mismatch is TERMINAL —
   // retrying re-sends this exact chunk's content and fails the same way
@@ -252,20 +262,17 @@ export function PreviewStep({
         The server decides the final ready/needs-resolution split at import — missing costs and
         unmatched wines may still need resolution, and duplicate rows may merge.
       </p>
-      {/* The import path accepts a blank producer on purpose (real exports
-          embed it in the wine name) and always has — which is exactly how
-          1,277 production wines ended up unresolvable to the identity
-          spine, because resolution is producer-first. Nothing prevented a
-          repeat; this at least makes it visible at the boundary that
-          writes it, without rejecting files that are legitimately shaped
-          this way. */}
-      {summary.missingProducerRows > 0 && (
-        <p role="status" className="mt-xs rounded-md bg-risk-wash px-sm py-xs text-body-sm text-risk-ink">
-          {summary.missingProducerRows} row{summary.missingProducerRows === 1 ? " has" : "s have"} no
-          producer. These import, but the wine cannot be matched to the shared catalogue until a
-          producer exists — add a producer/winery column if your export has one.
-        </p>
-      )}
+      {/* SD-41: this used to be a role="status" panel that counted blank
+          producers and warned — a warning nobody had to act on, which is
+          how 1,277 production wines were written unresolvable to the
+          identity spine. It is now a gate: Confirm is disabled until the
+          operator acknowledges, and confirm re-checks server-side. */}
+      <MissingProducerGate
+        missingProducerRows={effectiveMissingProducerRows}
+        acknowledged={producerAcknowledged}
+        onAcknowledge={setProducerAcknowledged}
+        disabled={confirming}
+      />
       {fixedCount > 0 && (
         <p className="mt-2xs text-caption text-grey">
           Includes {fixedCount} row{fixedCount === 1 ? "" : "s"} fixed above — re-checked when you confirm.
@@ -360,8 +367,8 @@ export function PreviewStep({
         {!blocksConfirmButton && (
           <button
             type="button"
-            disabled={!canConfirm || confirming}
-            onClick={onConfirm}
+            disabled={!canConfirm || producerBlocked || confirming}
+            onClick={() => onConfirm(effectiveMissingProducerRows)}
             className="flex min-h-11 flex-1 items-center justify-center gap-xs rounded-pill bg-primary px-lg text-[14px] font-medium text-seal-ink transition-colors hover:bg-primary-hover focus-ring disabled:cursor-not-allowed disabled:opacity-60"
           >
             {confirming ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}

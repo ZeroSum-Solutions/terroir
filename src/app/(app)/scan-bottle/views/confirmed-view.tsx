@@ -2,6 +2,7 @@
 
 import { Camera, Check, List, MapPin } from "lucide-react";
 import type { MatchedWine } from "../scan-bottle-state";
+import { wineTitle } from "@/lib/wine-display-name";
 
 interface ConfirmedViewProps {
   wine: MatchedWine;
@@ -31,7 +32,7 @@ export function ConfirmedView({
             Bottle confirmed
           </h2>
           <p className="mt-xs font-serif text-[17px] font-medium text-ink">
-            {wine.producer} {wine.name}
+            {wineTitle(wine.producer, wine.name)}
             {wine.vintage ? " (" + wine.vintage + ")" : ""}
           </p>
           {(section || binLocation) && (

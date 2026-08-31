@@ -25,6 +25,7 @@ import { SortableSectionButton } from "./components/sortable-section-button";
 import { useSectionReorder } from "./use-section-reorder";
 import { useWineItemReorder } from "./use-wine-item-reorder";
 import { useAddWine } from "./use-add-wine";
+import { useListItemUpdates } from "./use-list-item-updates";
 import type {
   WineListEditorItem,
   WineListEditorSection,
@@ -35,17 +36,25 @@ export type {
   WineListEditorItem,
   WineListEditorSection,
 } from "./wine-list-editor.types";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
+/**
+ * SD-12: `canManage` is the page's `role === "owner" || role === "manager"`,
+ * the same predicate the brand-kit panel already used. Every section, item and
+ * list write behind this editor is `requireRole(["owner","manager"])`, so the
+ * whole editing surface — not just branding — is gated on it. Reading the list
+ * and exporting it need no role and are untouched.
+ */
 export function WineListEditor({
   list,
   sections: initialSections,
   brandKit,
-  canManageBranding,
+  canManage,
 }: {
   list: Omit<WineList, "wine_list_sections">;
   sections: WineListEditorSection[];
   brandKit: BrandKitView | null;
-  canManageBranding: boolean;
+  canManage: boolean;
 }) {
   const router = useRouter();
   const [sections, setSections] = useState(initialSections);
@@ -250,24 +259,15 @@ export function WineListEditor({
     setErrorToast,
   );
 
-  const deleteItem = useCallback(
-    async (itemId: string) => {
-      setSections((prev) =>
-        prev.map((s) => ({
-          ...s,
-          wine_list_items: s.wine_list_items.filter((i) => i.id !== itemId),
-        })),
-      );
-
-      const res = await fetch(`/api/wine-list-items/${itemId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        startTransition(() => router.refresh());
-      }
-    },
-    [router],
-  );
+  // SD-18: the five item PATCHes and the item DELETE used to live here as
+  // near-identical handlers whose only failure branch was router.refresh().
+  // They now share one helper that also says what went wrong.
+  const { deleteItem, updateItemPrice, updateItemPour, updateItemName, updateItemBlurb, updateItemHidden } =
+    useListItemUpdates({
+      setSections,
+      refresh: () => startTransition(() => router.refresh()),
+      onError: setErrorToast,
+    });
 
   const requestDeleteItem = useCallback(function(item: WineListEditorItem) {
     setWineToDelete(item);
@@ -280,128 +280,6 @@ export function WineListEditor({
     setWineToDelete(null);
     try { await deleteItem(target.id); } finally { setDeletingItem(false); }
   }, [wineToDelete, deleteItem]);
-
-  const updateItemPrice = useCallback(
-    async (
-      itemId: string,
-      field: "glass_price" | "bottle_price",
-      value: number | null,
-    ) => {
-      setSections((prev) =>
-        prev.map((s) => ({
-          ...s,
-          wine_list_items: s.wine_list_items.map((i) =>
-            i.id === itemId ? { ...i, [field]: value } : i,
-          ),
-        })),
-      );
-
-      const res = await fetch(`/api/wine-list-items/${itemId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
-      });
-      if (!res.ok) {
-        startTransition(() => router.refresh());
-      }
-    },
-    [router],
-  );
-
-  const updateItemPour = useCallback(
-    async (
-      itemId: string,
-      field: "glass_pour_ml" | "pour_size_mode",
-      value: number | "fixed" | "picker" | null,
-    ) => {
-      setSections((prev) =>
-        prev.map((s) => ({
-          ...s,
-          wine_list_items: s.wine_list_items.map((i) =>
-            i.id === itemId ? { ...i, [field]: value } : i,
-          ),
-        })),
-      );
-
-      const res = await fetch(`/api/wine-list-items/${itemId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
-      });
-      if (!res.ok) {
-        startTransition(() => router.refresh());
-      }
-    },
-    [router],
-  );
-
-  const updateItemName = useCallback(
-    async (itemId: string, value: string | null) => {
-      setSections((prev) =>
-        prev.map((s) => ({
-          ...s,
-          wine_list_items: s.wine_list_items.map((i) =>
-            i.id === itemId ? { ...i, name_override: value } : i,
-          ),
-        })),
-      );
-
-      const res = await fetch(`/api/wine-list-items/${itemId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name_override: value }),
-      });
-      if (!res.ok) {
-        startTransition(() => router.refresh());
-      }
-    },
-    [router],
-  );
-  const updateItemBlurb = useCallback(
-    async (itemId: string, value: string | null) => {
-      setSections((prev) =>
-        prev.map((s) => ({
-          ...s,
-          wine_list_items: s.wine_list_items.map((i) =>
-            i.id === itemId ? { ...i, blurb: value } : i,
-          ),
-        })),
-      );
-
-      const res = await fetch(`/api/wine-list-items/${itemId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blurb: value }),
-      });
-      if (!res.ok) {
-        startTransition(() => router.refresh());
-      }
-    },
-    [router],
-  );
-
-  const updateItemHidden = useCallback(
-    async (itemId: string, value: boolean) => {
-      setSections((prev) =>
-        prev.map((s) => ({
-          ...s,
-          wine_list_items: s.wine_list_items.map((i) =>
-            i.id === itemId ? { ...i, hidden: value } : i,
-          ),
-        })),
-      );
-
-      const res = await fetch(`/api/wine-list-items/${itemId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hidden: value }),
-      });
-      if (!res.ok) {
-        startTransition(() => router.refresh());
-      }
-    },
-    [router],
-  );
 
   const downloadPdf = useCallback(async () => {
     setGeneratingPdf(true);
@@ -479,6 +357,7 @@ export function WineListEditor({
             isPublished={list.is_published}
             slug={list.slug}
             generatingPdf={generatingPdf}
+            canManage={canManage}
             onDownloadPdf={downloadPdf}
             onCopyUrl={copyUrl}
             onPublish={() => setShowPublish(true)}
@@ -496,11 +375,15 @@ export function WineListEditor({
           isPublished={list.is_published}
           slug={list.slug}
           generatingPdf={generatingPdf}
+          canManage={canManage}
           touchSized
           onDownloadPdf={downloadPdf}
           onCopyUrl={copyUrl}
           onPublish={() => setShowPublish(true)}
-          className="flex max-w-full flex-wrap gap-xs"
+          // GLOBAL-01: no `flex-wrap`. A wrapping row is one source container
+          // and one counted row, and two or three rows to the eye — which is
+          // the count the rule is written about.
+          className="flex max-w-full items-center gap-xs"
         />
 
         {sections.length === 0 ? (
@@ -509,14 +392,16 @@ export function WineListEditor({
             <p className="mt-xs text-[14px] text-grey">
               Add a section before adding wines.
             </p>
-            <button
-              type="button"
-              onClick={addSection}
-              disabled={addingSection}
-              className="mt-md min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-50"
-            >
-              Add first section
-            </button>
+            {canManage && (
+              <button
+                type="button"
+                onClick={addSection}
+                disabled={addingSection}
+                className="mt-md min-h-11 rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-50"
+              >
+                Add first section
+              </button>
+            )}
           </section>
         ) : (
           <div>
@@ -556,7 +441,7 @@ export function WineListEditor({
                 onBlur={commitRename}
                 className="mt-xs min-h-11 w-full rounded-pill border border-accent bg-surface px-sm text-[14px] font-medium text-ink outline-none focus-ring"
               />
-            ) : currentSection ? (
+            ) : currentSection && canManage ? (
               <div className="mt-sm grid grid-cols-3 gap-xs">
                 <button
                   type="button"
@@ -587,22 +472,24 @@ export function WineListEditor({
           </div>
         )}
 
-        <div>
-          <h2
-            id="mobile-template-heading"
-            className="text-caption font-medium uppercase text-grey"
-          >
-            Template
-          </h2>
-          <div className="mt-sm">
-            <TemplatePicker
-              current={list.template}
-              onChange={updateTemplate}
-              disabled={isPending}
-              ariaLabelledby="mobile-template-heading"
-            />
+        {canManage && (
+          <div>
+            <h2
+              id="mobile-template-heading"
+              className="text-caption font-medium uppercase text-grey"
+            >
+              Template
+            </h2>
+            <div className="mt-sm">
+              <TemplatePicker
+                current={list.template}
+                onChange={updateTemplate}
+                disabled={isPending}
+                ariaLabelledby="mobile-template-heading"
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Desktop: sidebar + content */}
@@ -637,31 +524,38 @@ export function WineListEditor({
                     onEditCommit={commitRename}
                     onEditCancel={cancelRename}
                     editRef={editInputRef}
+                    canManage={canManage}
                   />
                 ))}
               </SortableContext>
             </DndContext>
-            <button
-              type="button"
-              onClick={addSection}
-              disabled={addingSection}
-              className="flex min-h-11 items-center gap-xs px-sm py-xs text-[13px] text-grey hover:text-ink disabled:opacity-50"
-            >
-              <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-              Add section
-            </button>
+            {canManage && (
+              <button
+                type="button"
+                onClick={addSection}
+                disabled={addingSection}
+                className="flex min-h-11 items-center gap-xs px-sm py-xs text-[13px] text-grey hover:text-ink disabled:opacity-50"
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                Add section
+              </button>
+            )}
           </div>
 
-          <div className="mt-lg text-caption font-medium uppercase text-grey">
-            Template
-          </div>
-          <div className="mt-sm">
-            <TemplatePicker
-              current={list.template}
-              onChange={updateTemplate}
-              disabled={isPending}
-            />
-          </div>
+          {canManage && (
+            <>
+              <div className="mt-lg text-caption font-medium uppercase text-grey">
+                Template
+              </div>
+              <div className="mt-sm">
+                <TemplatePicker
+                  current={list.template}
+                  onChange={updateTemplate}
+                  disabled={isPending}
+                />
+              </div>
+            </>
+          )}
         </aside>
 
         {/* Main content — active section */}
@@ -677,16 +571,18 @@ export function WineListEditor({
                   {currentSection.wine_list_items.length} wines
                 </p>
               </div>
-              <div className="flex gap-sm">
-                <button
-                  type="button"
-                  onClick={() => setShowAddWine(true)}
-                  className="flex min-h-11 min-w-11 items-center gap-xs rounded-pill bg-primary px-sm text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
-                >
-                  <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-                  <span className="hidden sm:inline">Add wine</span>
-                </button>
-              </div>
+              {canManage && (
+                <div className="flex gap-sm">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddWine(true)}
+                    className="flex min-h-11 min-w-11 items-center gap-xs rounded-pill bg-primary px-sm text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
+                  >
+                    <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                    <span className="hidden sm:inline">Add wine</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Wine items */}
@@ -736,6 +632,7 @@ export function WineListEditor({
                         onNameChange={updateItemName}
                         onBlurbChange={updateItemBlurb}
                         onHiddenChange={updateItemHidden}
+                        canManage={canManage}
                       />
                     ))}
                   </div>
@@ -744,24 +641,26 @@ export function WineListEditor({
             )}
 
             {/* Add another wine footer */}
-            <div className="border-t border-dashed border-rule px-lg py-md text-center">
-              <button
-                type="button"
-                onClick={() => setShowAddWine(true)}
-                className="inline-flex min-h-11 items-center text-[13px] text-grey hover:text-ink focus-ring"
-              >
-                <Plus
-                  className="mr-xs inline-block h-3.5 w-3.5"
-                  strokeWidth={2}
-                />
-                Add another wine to {currentSection.name}
-              </button>
-            </div>
+            {canManage && (
+              <div className="border-t border-dashed border-rule px-lg py-md text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowAddWine(true)}
+                  className="inline-flex min-h-11 items-center text-[13px] text-grey hover:text-ink focus-ring"
+                >
+                  <Plus
+                    className="mr-xs inline-block h-3.5 w-3.5"
+                    strokeWidth={2}
+                  />
+                  Add another wine to {currentSection.name}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {canManageBranding && (
+      {canManage && (
         <BrandKitPanel
           listId={list.id}
           initialBrandKit={brandKit}
@@ -789,7 +688,10 @@ export function WineListEditor({
               </div>
               <p className="mt-sm text-[14px] text-grey leading-relaxed">
                 Remove{" "}
-                <strong className="text-ink">{wineToDelete.wines.producer}, {wineToDelete.wines.name}</strong>
+                <strong className="text-ink">
+                  {wineToDelete.wines.producer},{" "}
+                  {wineDisplayName(wineToDelete.wines.producer, wineToDelete.wines.name)}
+                </strong>
                 {wineToDelete.wines.vintage && <span> ({wineToDelete.wines.vintage})</span>}
                 {" "}from this wine list?
               </p>
@@ -865,9 +767,9 @@ export function WineListEditor({
         />
       )}
 
-      {/* Error toast for failed drag-and-drop reorders */}
+      {/* Error toast — failed reorders, and every failed item write (SD-18). */}
       {errorToast && deleteTarget === null && (
-        <div className="fixed bottom-[calc(var(--safe-bottom)+var(--spacing-lg))] left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-pill bg-primary px-lg py-sm text-[13px] font-medium text-seal-ink animate-in fade-in slide-in-from-bottom-2">
+        <div role="alert" className="fixed bottom-[calc(var(--safe-bottom)+var(--spacing-lg))] left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-pill bg-primary px-lg py-sm text-[13px] font-medium text-seal-ink animate-in fade-in slide-in-from-bottom-2">
           {errorToast}
         </div>
       )}

@@ -29,6 +29,7 @@ import {
   checkApprovedLwinRows,
   checkRejectedLwinRows,
 } from "./lwin-overrides";
+import { checkMissingProducerAcknowledgement } from "./producer-acknowledgement";
 
 export { applyLwinApprovalVeto, applyLwinRejections };
 
@@ -86,11 +87,6 @@ const LIVE_BATCH_LOOKUP_LIMIT = 20;
 // already is, with zero additional changes to any of the sites listed
 // above.
 
-
-
-
-
-
 function summarize(rows: PreviewRow[]) {
   return {
     totalRows: rows.length,
@@ -103,12 +99,6 @@ function summarize(rows: PreviewRow[]) {
     pendingResolutionRows: rows.filter((r) => r.resolution === "pending").length,
   };
 }
-
-
-
-
-
-
 
 export type ConfirmBatchOptions = {
   /** P3 §3.2: this chunk belongs to a multi-batch onboarding session. */
@@ -164,6 +154,11 @@ export type ConfirmBatchOptions = {
    * but empty (a state the pre-fix client could never produce) — see the
    * digest-construction comment for why the two need to stay distinct. */
   approvedLwinRows?: Record<string, string>;
+  /** SD-41 — how many producer-less rows the operator was shown and
+   * acknowledged in preview; absent (an unacknowledging caller) is refused
+   * outright when the file has any. producer-acknowledgement.ts carries the
+   * whole argument, including why this is NOT part of content_sha256. */
+  acknowledgedMissingProducerRows?: number;
   /** Merge-integration note (item 5, PR #135): revertImportBatch now takes
    * a service-role client to run its orphan-wine/LWIN cleanup, and
    * confirmImportBatch's own selfRevertAndRetry (below) calls
@@ -294,6 +289,11 @@ export async function confirmImportBatch(
     approvedCheck.approvedByRowNumber,
     hasLwinFullPicture,
   );
+
+  // SD-41 — the blank-producer gate, checked before a single row is
+  // persisted, against confirm's OWN re-derived rows (overrides applied).
+  const producerCheck = checkMissingProducerAcknowledgement(options.acknowledgedMissingProducerRows, rows);
+  if (!producerCheck.ok) return { ok: false, error: producerCheck.error };
 
   // content_sha256 identity, extended for inline row-fix overrides: an
   // override changes the EFFECTIVE content of this confirm, so two

@@ -16,6 +16,8 @@
  *   'mark'           — keep them with is_marked_eightysixed = true
  */
 
+import { wineTitle } from "@/lib/wine-display-name";
+
 type ItemBase = {
   position: number;
   wines: { is_eightysixed: boolean } | null;
@@ -97,4 +99,28 @@ export function renderWineListSections<TSection extends SectionShape>(
       return { ...rest, items } as unknown as Rendered;
     })
     .filter((s) => s.items.length > 0);
+}
+
+/**
+ * The one name a guest sees on a list line — on screen, in print, and in the
+ * PDF.
+ *
+ * BUG-01: those three surfaces each composed `${producer} ${name}` for
+ * themselves, and `name` still contains the producer on 98% of production's
+ * rows — a CSV import wrote it there, and migration `0137` recovered the
+ * producer into its own column while correctly leaving `name` alone. So all
+ * three printed the winery twice. Composing the label here, in the module that
+ * already exists to stop the public rendering rules drifting between exactly
+ * these consumers, is what keeps a fourth surface from getting it wrong on its
+ * own.
+ *
+ * `name_override` always wins and is never rewritten: it is the owner's own
+ * words for this bottle on this list, not a stored column to be repaired.
+ */
+export function wineListItemLabel(item: {
+  name_override: string | null;
+  wines: { producer: string; name: string };
+}): string {
+  const { producer, name } = item.wines;
+  return item.name_override ?? wineTitle(producer, name);
 }

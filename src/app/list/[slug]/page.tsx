@@ -3,7 +3,7 @@ import { WineThumb } from "@/components/wine-thumb";
 import type { Metadata } from "next";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import { renderWineListSections, type EightysixStrategy } from "@/lib/wine-list/render";
+import { renderWineListSections, wineListItemLabel, type EightysixStrategy } from "@/lib/wine-list/render";
 import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
 import {
   getSupabasePublicConfig,
@@ -331,7 +331,7 @@ export default async function PublicWineListPage({
                             is86d && "line-through",
                           )}
                         >
-                          {item.name_override ?? `${wine.producer} ${wine.name}`}
+                          {wineListItemLabel(item)}
                         </span>
                         {is86d && (
                           <span className="ml-xs font-mono text-[11px] uppercase text-grey print:hidden">

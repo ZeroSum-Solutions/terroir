@@ -7,6 +7,7 @@ import { ChevronDown, RotateCcw, Clock, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { metricHref } from "./metric-href";
 import type { SnoozedRow } from "@/domains/cellar/snoozed-alerts";
+import { wineTitle } from "@/lib/wine-display-name";
 
 /**
  * BND-040 follow-up — SnoozedAlertsCard
@@ -19,11 +20,21 @@ import type { SnoozedRow } from "@/domains/cellar/snoozed-alerts";
  * Audit-finding M2: previously, once a sommelier hit Snooze 30d, the
  * alert vanished and there was no way to bring it back early. This
  * closes the gap.
+ *
+ * SD-24: unsnoozing POSTs to the same two owner/manager routes the snooze
+ * does, so the Unsnooze control is rendered only for `canManage`. What is
+ * snoozed stays visible to every member.
  */
 
 export type { SnoozedRow };
 
-export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
+export function SnoozedAlertsCard({
+  snoozed,
+  canManage,
+}: {
+  snoozed: SnoozedRow[];
+  canManage: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
@@ -140,7 +151,7 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
                     href={metricHref("wine", e.wineId)}
                     className="font-serif text-[17px] font-medium text-ink transition-colors hover:text-accent"
                   >
-                    {e.producer}, {e.name}
+                    {wineTitle(e.producer, e.name, ", ")}
                   </Link>
                   {e.vintage && (
                     <span className="ml-xs text-[11px] font-light text-grey">
@@ -171,19 +182,21 @@ export function SnoozedAlertsCard({ snoozed }: { snoozed: SnoozedRow[] }) {
                     <span className="tabular">until {expires}</span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  disabled={isBusy}
-                  onClick={() => onUnsnooze(e.wineId, e.kind)}
-                  className="inline-flex min-h-11 items-center gap-2xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring disabled:opacity-60"
-                >
-                  <RotateCcw
-                    className="h-3 w-3"
-                    strokeWidth={2}
-                    aria-hidden
-                  />
-                  Unsnooze
-                </button>
+                {canManage && (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => onUnsnooze(e.wineId, e.kind)}
+                    className="inline-flex min-h-11 items-center gap-2xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring disabled:opacity-60"
+                  >
+                    <RotateCcw
+                      className="h-3 w-3"
+                      strokeWidth={2}
+                      aria-hidden
+                    />
+                    Unsnooze
+                  </button>
+                )}
               </li>
             );
           })}

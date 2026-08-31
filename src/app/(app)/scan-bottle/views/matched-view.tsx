@@ -2,6 +2,7 @@
 
 import { Check, X } from "lucide-react";
 import type { MatchedWine } from "../scan-bottle-state";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 interface MatchedViewProps {
   wine: MatchedWine;
@@ -25,7 +26,7 @@ export function MatchedView({ wine, onCorrect, onConfirm }: MatchedViewProps) {
           {wine.producer}
         </h2>
         <p className="mt-xs font-serif text-[18px] text-ink md:text-[20px]">
-          {wine.name}
+          {wineDisplayName(wine.producer, wine.name)}
         </p>
         <dl className="mt-md grid grid-cols-2 gap-x-md gap-y-sm text-[13px]">
           {wine.vintage && (
