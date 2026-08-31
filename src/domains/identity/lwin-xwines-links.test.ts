@@ -47,21 +47,28 @@ describe.skipIf(!hasLiveDb)("lwin_xwines_links storage contract (MANDATORY)", { 
   beforeAll(async () => {
     admin = createClient<Database>(supabaseUrl!, serviceRoleKey!, { auth: { persistSession: false } });
 
-    // Real corpus rows, not fabricated ids: both FK targets are global
-    // reference tables that every environment seeds. Descending, so these are
-    // the LAST rows a concurrently running scripts/link-lwin-xwines.ts batch
-    // (which walks lwin_id ascending and upserts every row) would touch — a
-    // local batch mid-run must not clobber this suite's fixtures.
-    const { data: lwins, error: lErr } = await admin
-      .from("lwin_catalog").select("lwin_id").order("lwin_id", { ascending: false }).limit(2);
-    if (lErr || !lwins || lwins.length < 2) throw lErr ?? new Error("lwin_catalog not seeded");
-    lwinIdA = lwins[0].lwin_id;
-    lwinIdB = lwins[1].lwin_id;
-
-    const { data: xw, error: xErr } = await admin
-      .from("xwines_catalog").select("wine_id").order("wine_id").limit(1).single();
-    if (xErr || !xw) throw xErr ?? new Error("xwines_catalog not seeded");
-    xwinesId = xw.wine_id;
+    // Synthetic FK targets, created here and removed in afterAll: CI's local
+    // stack applies migrations but seeds NEITHER corpus (the 211k/100k rows
+    // are a per-machine seed), so leaning on existing rows fails there — this
+    // suite's first CI run proved it. Ids are chosen past both corpora's real
+    // ranges (LWIN tops out ~3.1M; X-Wines ids sit under 1M) so a seeded
+    // machine can't collide, and so a concurrently running local
+    // link-lwin-xwines batch — which walks lwin_id ascending — reaches them
+    // last if at all.
+    lwinIdA = "9999998";
+    lwinIdB = "9999999";
+    xwinesId = 999999901;
+    const { error: lErr } = await admin.from("lwin_catalog").insert([
+      { lwin_id: lwinIdA, display_name: "Test Estate, Contract Cuvee A" },
+      { lwin_id: lwinIdB, display_name: "Test Estate, Contract Cuvee B" },
+    ] as never);
+    if (lErr) throw lErr;
+    const { error: xErr } = await admin.from("xwines_catalog").insert({
+      wine_id: xwinesId,
+      name: "Contract Cuvee A",
+      winery_name: "Test Estate",
+    } as never);
+    if (xErr) throw xErr;
 
     const { data: run, error: runErr } = await admin
       .from("xwines_link_runs")
@@ -100,8 +107,10 @@ describe.skipIf(!hasLiveDb)("lwin_xwines_links storage contract (MANDATORY)", { 
 
   afterAll(async () => {
     if (!admin) return;
-    await admin.from("lwin_xwines_link_tombstones").delete().in("lwin_id", [lwinIdA, lwinIdB]);
-    await admin.from("lwin_xwines_links").delete().in("lwin_id", [lwinIdA, lwinIdB]);
+    // Deleting the synthetic catalog rows cascades away any links/tombstones
+    // hanging off them; the run row has no inbound FK left after that.
+    await admin.from("lwin_catalog").delete().in("lwin_id", [lwinIdA, lwinIdB]);
+    await admin.from("xwines_catalog").delete().eq("wine_id", xwinesId);
     await admin.from("xwines_link_runs").delete().eq("id", runId);
     if (userId) await admin.auth.admin.deleteUser(userId);
   });
