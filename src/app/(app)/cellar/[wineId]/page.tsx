@@ -7,6 +7,10 @@ import {
   type VintageRating,
 } from "@/lib/wine-intelligence/xwines-profile";
 import { resolveWineCorpusProfile } from "@/lib/wine-intelligence/wine-corpus-profile";
+import {
+  fetchLwinReference,
+  resolveWineFacts,
+} from "@/lib/wine-intelligence/wine-reference-facts";
 import { WineDetailView } from "./wine-detail-view";
 
 export const metadata: Metadata = { title: "Wine" };
@@ -20,7 +24,7 @@ type Params = Promise<{ wineId: string }>;
 // One string literal, deliberately: supabase-js infers the row type from the
 // literal, and a concatenated const degrades it to GenericStringError.
 const WINE_COLUMNS =
-  "id, name, producer, vintage, varietal, region, country, size_ml, colour, hero_image_url, tasting_notes, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, rating, rating_source, review_excerpt, canonical_wine_id" as const;
+  "id, name, producer, vintage, varietal, region, country, size_ml, colour, hero_image_url, tasting_notes, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, rating, rating_source, review_excerpt, canonical_wine_id, lwin_id" as const;
 
 // This segment catches every /cellar/<x> that is not a static sibling
 // (config, open, reconcile), so `wineId` is whatever was typed. Rejecting a
@@ -53,7 +57,7 @@ export default async function WineDetailPage({ params }: { params: Params }) {
   if (wineError) throw wineError;
   if (!wine) notFound();
 
-  const [inventoryResult, profile] = await Promise.all([
+  const [inventoryResult, profile, lwin] = await Promise.all([
     supabase
       .from("inventory_items")
       .select("quantity, bin_location, section")
@@ -65,6 +69,10 @@ export default async function WineDetailPage({ params }: { params: Params }) {
       producer: wine.producer,
       name: wine.name,
     }),
+    // Alongside the other two rather than after: it depends only on a column
+    // the wine query already returned, so serialising it would add a round
+    // trip to every wine detail page for nothing.
+    fetchLwinReference(supabase, wine.lwin_id),
   ]);
 
   // Same reasoning as the wine query, with a worse failure mode: a null here
@@ -72,6 +80,12 @@ export default async function WineDetailPage({ params }: { params: Params }) {
   // outage.
   if (inventoryResult.error) throw inventoryResult.error;
   const inventory = inventoryResult.data ?? [];
+
+  const facts = resolveWineFacts({
+    wine,
+    lwin,
+    profile: profile.status === "ok" ? profile.value : null,
+  });
 
   // Only reached when a profile exists, so an unmatched wine costs one query,
   // not two.
@@ -97,6 +111,7 @@ export default async function WineDetailPage({ params }: { params: Params }) {
       wine={wine}
       bottleCount={bottleCount}
       locations={locations}
+      facts={facts}
       profile={profile}
       vintageRatings={vintageRatings}
     />

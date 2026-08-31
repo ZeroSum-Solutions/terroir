@@ -137,7 +137,179 @@ for(const f of commons){
 }
 console.log(`wikimedia commons: ${comHits} title hits`);
 
+
+// ── 'representative' ──────────────────────────────────────────────────────
+//
+// A real photograph of a real wine bottle of the same type and, where
+// possible, the same country, from an unrelated producer. It carries no claim
+// about the wine beyond "red, Italian", and every surface that shows one is
+// required by 0138's column comment to caption it as such — corpus-image.ts
+// renders "Representative bottle — not this wine's label" and degrades the alt
+// text so a screen reader is not told a producer the picture does not show.
+//
+// Only Open Food Facts feeds this pool. The Commons set is two thirds
+// vineyards and cellar doors and would put a hillside on a wine page.
+
+const OFF_TYPE_BY_CATEGORY = [
+  ["en:port-wines", "Dessert/Port"],
+  ["en:fortified-wines", "Dessert/Port"],
+  ["en:dessert-wines", "Dessert"],
+  ["en:sweet-wines", "Dessert"],
+  ["en:champagnes", "Sparkling"],
+  ["en:sparkling-wines", "Sparkling"],
+  ["en:rose-wines", "Rosé"],
+  ["en:white-wines", "White"],
+  ["en:red-wines", "Red"],
+];
+
+const OFF_COUNTRY_BY_TAG = new Map(
+  Object.entries({
+    "en:france": "France",
+    "en:italy": "Italy",
+    "en:spain": "Spain",
+    "en:portugal": "Portugal",
+    "en:germany": "Germany",
+    "en:united-states": "United States",
+    "en:australia": "Australia",
+    "en:chile": "Chile",
+    "en:argentina": "Argentina",
+    "en:south-africa": "South Africa",
+    "en:austria": "Austria",
+    "en:brazil": "Brazil",
+    "en:new-zealand": "New Zealand",
+    "en:canada": "Canada",
+    "en:switzerland": "Switzerland",
+    "en:greece": "Greece",
+    "en:hungary": "Hungary",
+    "en:romania": "Romania",
+    "en:israel": "Israel",
+    "en:uruguay": "Uruguay",
+    "en:mexico": "Mexico",
+    "en:moldova": "Moldova",
+    "en:bulgaria": "Bulgaria",
+    "en:croatia": "Croatia",
+    "en:slovenia": "Slovenia",
+    "en:georgia": "Georgia",
+    "en:lebanon": "Lebanon",
+    "en:china": "China",
+    "en:turkey": "Turkey",
+    "en:united-kingdom": "United Kingdom",
+  }),
+);
+
+/** Most-specific-first: a Port is tagged both en:port-wines and en:red-wines
+ *  and must not be read as a table red. */
+function offType(categories) {
+  const tags = new Set(categories ?? []);
+  for (const [tag, type] of OFF_TYPE_BY_CATEGORY) if (tags.has(tag)) return type;
+  return null;
+}
+function offCountry(tags) {
+  for (const tag of tags ?? []) {
+    const name = OFF_COUNTRY_BY_TAG.get(tag);
+    if (name) return name;
+  }
+  return null;
+}
+
+/**
+ * Deterministic pick: `wine_id % partitionSize` against a key-ordered index.
+ * A wine keeps the same bottle across runs, and the pool spreads evenly
+ * instead of every wine landing on one photograph.
+ *
+ * The partition size must be the WHOLE partition. The SQL original hit this:
+ * a count() window with an order by defaults to RANGE UNBOUNDED PRECEDING ..
+ * CURRENT ROW, making it a RUNNING total, so the first row of every partition
+ * had rn = 0 and n = 1 — and `wine_id % 1 === 0 === rn` matched EVERY wine.
+ * Measured before it was caught: 10,754 French reds, one bottle between them.
+ * Computing the size after grouping, as below, cannot express that bug.
+ */
+function pickFrom(bucket, wineId) {
+  return bucket[wineId % bucket.length];
+}
+
+async function representativePhase() {
+  const pool = [];
+  for (const p of off) {
+    if (!p.image_front_url) continue;
+    const type = offType(p.categories_tags);
+    if (!type) continue;
+    pool.push({
+      key: p.code,
+      type,
+      country: offCountry(p.countries_tags),
+      image_url: p.image_front_url,
+      credit: `Photo © Open Food Facts contributors, CC-BY-SA-3.0 (barcode ${p.code})`,
+    });
+  }
+  pool.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+
+  const byTypeCountry = new Map(), byType = new Map();
+  for (const r of pool) {
+    if (r.country) {
+      const k = `${r.type}\u0000${r.country}`;
+      if (!byTypeCountry.has(k)) byTypeCountry.set(k, []);
+      byTypeCountry.get(k).push(r);
+    }
+    if (!byType.has(r.type)) byType.set(r.type, []);
+    byType.get(r.type).push(r);
+  }
+  console.log(`\nrepresentative pool: ${pool.length} photographs, ` +
+    `${byTypeCountry.size} type+country buckets, ${byType.size} type buckets`);
+
+  // Only rows still without a picture. label/producer always outrank this.
+  let blanks = [];
+  for (let f = 0; ; f += 1000) {
+    const { data, error } = await db.from("xwines_catalog")
+      .select("wine_id,type,country").is("image_url", null).range(f, f + 999);
+    if (error) throw error;
+    blanks = blanks.concat(data);
+    if (data.length < 1000) break;
+  }
+  console.log(`corpus rows still without a picture: ${blanks.length}`);
+
+  const assigned = new Map();
+  let viaCountry = 0, viaType = 0, unmatched = 0;
+  for (const row of blanks) {
+    const bucket = byTypeCountry.get(`${row.type}\u0000${row.country}`);
+    const fallback = byType.get(row.type);
+    const chosen = bucket?.length ? (viaCountry++, pickFrom(bucket, row.wine_id))
+                 : fallback?.length ? (viaType++, pickFrom(fallback, row.wine_id))
+                 : (unmatched++, null);
+    if (!chosen) continue;
+    assigned.set(row.wine_id, {
+      wine_id: row.wine_id, image_url: chosen.image_url, image_kind: "representative",
+      image_source: "openfoodfacts", image_credit: chosen.credit,
+    });
+  }
+  console.log(`  matched on type+country ${viaCountry}, on type alone ${viaType}, ` +
+    `no bottle of that type ${unmatched}`);
+
+  /**
+   * The guard the SQL original needed and did not have.
+   *
+   * Its running-total window collapsed every partition to a single row, and
+   * the symptom was invisible in the row counts — 10,754 French reds were
+   * "assigned a representative bottle", all of them the same one. A count of
+   * assignments can never catch that. A count of DISTINCT photographs can.
+   *
+   * The pool is drawn from whole, so the floor is the number of buckets we
+   * actually used; anything near 1 means the partitioning collapsed again.
+   */
+  const distinct = new Set([...assigned.values()].map((r) => r.image_url)).size;
+  const bucketsUsed = new Set(blanks.map((r) => `${r.type}\u0000${r.country}`)).size;
+  console.log(`  distinct photographs used: ${distinct} across ${bucketsUsed} buckets`);
+  if (assigned.size > 0 && distinct < bucketsUsed) {
+    throw new Error(
+      `representative pick collapsed: ${assigned.size} rows share only ${distinct} ` +
+      `photographs across ${bucketsUsed} buckets. Refusing to write.`,
+    );
+  }
+  return [...assigned.values()];
+}
+
 const rows=[...updates.values()];
+rows.push(...(await representativePhase()));
 const byKind=rows.reduce((a,r)=>((a[r.image_kind]=(a[r.image_kind]??0)+1),a),{});
 console.log(`\nwould write ${rows.length} corpus images:`, byKind);
 if(!APPLY){ console.log("dry run — pass --confirm to write."); process.exit(0); }
