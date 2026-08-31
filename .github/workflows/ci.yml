@@ -56,7 +56,13 @@ concurrency:
 jobs:
   check:
     name: Typecheck / Lint / Test / Schema
-    runs-on: ubuntu-latest
+    # Blacksmith runner (their ubuntu-latest equivalent at 4 vCPU, matching
+    # GitHub's hosted core count on faster hardware). This job is the
+    # docker-heavy one — Supabase image pulls, Playwright install, full
+    # vitest + E2E — and the only gating check, so it moves first; the other
+    # workflows stay on GitHub-hosted until this proves out. Baseline before
+    # the switch: 10m18s on ubuntu-latest (PR #170).
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # 10 min covered the original checks; local Supabase start (docker image
     # pulls) + Playwright browser install + the E2E run add real time on a
     # cold runner, so this needs more headroom than before.
