@@ -248,6 +248,12 @@ export function CellarGridView({
                             fontSize: 12,
                             fontFamily: "var(--font-sans)",
                             fontWeight: 500,
+                            // The count is painted OVER the clickable rect and
+                            // is its sibling, not its child, so without this an
+                            // SVG <text> swallows the click and clicking the
+                            // middle of a full bin — right on the number, the
+                            // obvious target — does nothing at all.
+                            pointerEvents: "none",
                           }}
                         >
                           {total}

@@ -348,7 +348,14 @@ function buildRows(userIds = DRY_USER_IDS) {
       invoice_scan_id: i <= 240 ? scan.id : null,
       quantity: i % 41 === 0 ? 0 : 1 + (i % 6),
       unit_cost: cents(18 + (i % 80) * 2.9),
-      bin_location: `Row ${String.fromCharCode(65 + (i % 8))}${1 + (i % 24)}`,
+      // Bare bin code, inside the 12x16 grid this seed configures, spread
+      // across it rather than clustered on one diagonal.
+      // It used to read `Row A17`: the Grid view keys its cells by bare code
+      // (`A1`), so the "Row " prefix matched nothing and every one of the 192
+      // cells rendered empty for a cellar holding 1,364 bottles. The column
+      // also ran to 24, past the 16 the config declares. The 5 is coprime
+      // with 16 so the columns cycle fully instead of repeating early.
+      bin_location: `${String.fromCharCode(65 + (i % 12))}${1 + ((i * 5) % 16)}`,
       section: sections[i % sections.length],
       format: wine.size_ml === 1500 ? "magnum" : wine.size_ml === 375 ? "half" : "750ml",
       currency: "USD",
