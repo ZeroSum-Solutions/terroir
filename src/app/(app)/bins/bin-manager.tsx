@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { WineThumb } from "@/components/wine-thumb";
 import { Archive, Pencil, Plus, Search, X } from "lucide-react";
 import { IconButton } from "@/components/icon-button";
 import {
@@ -78,7 +79,14 @@ function SearchResults({ matches }: { matches: Match[] }) {
       ) : (
         matches.map((match) => (
           <div key={`${match.wineId}:${match.binId}`} data-bottle-match className="flex items-center justify-between gap-md border-b border-rule px-md py-sm last:border-b-0">
-            <div className="min-w-0">
+            <WineThumb
+              src={match.heroImageUrl}
+              producer={match.producer}
+              name={match.name}
+              colour={match.colour}
+              size={36}
+            />
+            <div className="min-w-0 flex-1">
               <p className="truncate font-serif text-[17px] font-medium text-ink">{match.name}</p>
               <p className="truncate text-[12px] text-grey">{match.producer}</p>
             </div>

@@ -12,6 +12,7 @@ type JoinedWine = {
   name: string;
   producer: string;
   colour: string | null;
+  hero_image_url: string | null;
 };
 
 type JoinedInventory = {
@@ -35,7 +36,7 @@ export default async function BinsPage() {
   const [binResult, unplacedResult] = await Promise.all([
     supabase
       .from("bins")
-      .select("id, code, zone, capacity, priority, inventory_items(wine_id, quantity, wines(id, lineage_id, name, producer, colour))")
+      .select("id, code, zone, capacity, priority, inventory_items(wine_id, quantity, wines(id, lineage_id, name, producer, colour, hero_image_url))")
       .eq("restaurant_id", restaurantId)
       .eq("inventory_items.restaurant_id", restaurantId)
       .is("retired_at", null)
@@ -88,6 +89,7 @@ function flattenInventory(bins: readonly JoinedBin[]): BottleInventoryRow[] {
         name: wine.name,
         producer: wine.producer,
         colour: wine.colour,
+        heroImageUrl: wine.hero_image_url,
         binId: bin.id,
         binCode: bin.code,
         binZone: bin.zone,

@@ -70,6 +70,8 @@ export type WineComparison = {
     producer: string;
     vintage: number | null;
     varietal: string | null;
+    hero_image_url?: string | null;
+    colour?: string | null;
   };
   prices: PriceEntry[];
   cheapest: number;

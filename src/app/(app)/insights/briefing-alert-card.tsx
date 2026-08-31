@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { DrinkWindowTimeline } from "@/components/drink-window-timeline";
 import { getYearsUntilWindowClose } from "@/lib/drink-window/status";
 import type { DrinkWindowAlertRow } from "@/lib/drink-window/alerts";
+import { WineThumb } from "@/components/wine-thumb";
 import { metricHref } from "./metric-href";
 
 /**
@@ -79,6 +80,16 @@ export function BriefingAlertCard({ alert }: { alert: DrinkWindowAlert }) {
       )}
     >
       <div className="flex flex-col gap-md md:flex-row md:items-start md:gap-lg">
+        {/* The bottle itself. This alert asks someone to go and find a
+            specific wine in a cellar; the label is how they will recognise
+            it on the shelf. */}
+        <WineThumb
+          src={alert.hero_image_url}
+          producer={alert.producer}
+          name={alert.name}
+          colour={alert.colour}
+          size={56}
+        />
         <div className="min-w-0 flex-1">
           {/* Fact first — the salutation ("Hey Owner+local") both leaked the
               email local-part and buried the actionable sentence

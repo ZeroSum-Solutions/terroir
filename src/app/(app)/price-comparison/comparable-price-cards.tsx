@@ -1,4 +1,5 @@
 import { ArrowDown } from "lucide-react";
+import { WineThumb } from "@/components/wine-thumb";
 import Link from "next/link";
 import { OverpaidFlagButton } from "@/components/overpaid-flag-button";
 import {
@@ -31,6 +32,13 @@ export function ComparablePriceCards({ wines }: { wines: WineComparison[] }) {
           >
             <div className="mb-sm flex items-start justify-between">
               <div className="flex items-start gap-xs min-w-0 flex-1">
+                <WineThumb
+                  src={comp.wine.hero_image_url}
+                  producer={comp.wine.producer}
+                  name={comp.wine.name}
+                  colour={comp.wine.colour}
+                  size={40}
+                />
                 <Link
                   href={`/cellar?wine=${comp.wine.id}`}
                   aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}

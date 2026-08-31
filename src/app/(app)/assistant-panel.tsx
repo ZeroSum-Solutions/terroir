@@ -15,6 +15,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { MessageCircleQuestion, Search, X } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
+import { WineThumb } from "@/components/wine-thumb";
 import type {
   AssistantCellarWine,
   AssistantCorpusWine,
@@ -334,25 +335,38 @@ function CellarResult({
     <button
       type="button"
       onClick={onOpen}
-      className="w-full rounded-md border border-edge px-md py-sm text-left transition-colors hover:bg-wash focus-ring"
+      className="flex w-full items-start gap-sm rounded-md border border-edge px-md py-sm text-left transition-colors hover:bg-wash focus-ring"
     >
-      <span className="flex items-baseline justify-between gap-sm">
-        <span className="text-control text-ink">
-          {wine.producer ? `${wine.producer} ` : ""}
-          {wine.name}
-          {wine.vintage ? ` ${wine.vintage}` : ""}
-        </span>
-        {wine.price != null ? (
-          <span className="shrink-0 text-body-sm tabular text-ink-soft">
-            ${wine.price.toFixed(0)}
+      {/* The label is the fastest way a sommelier recognises a bottle, so it
+          leads the row. WineThumb rather than a bare <img>: it falls back to
+          the producer's initials tinted by wine colour, which keeps the list
+          even instead of ragged when a wine has no photograph. */}
+      <WineThumb
+        src={wine.imageUrl}
+        producer={wine.producer}
+        name={wine.name}
+        colour={wine.colour}
+        size={44}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline justify-between gap-sm">
+          <span className="text-control text-ink">
+            {wine.producer ? `${wine.producer} ` : ""}
+            {wine.name}
+            {wine.vintage ? ` ${wine.vintage}` : ""}
           </span>
-        ) : null}
-      </span>
-      <span className="mt-2xs flex flex-wrap items-center gap-x-sm text-ledger font-light text-grey">
-        {facts.length > 0 ? <span>{facts.join(" · ")}</span> : null}
-        <Rating avg={wine.ratingAvg} count={wine.ratingCount} />
-        <span className={wine.onHand > 0 ? "text-ready-ink" : "text-risk-ink"}>
-          {wine.onHand > 0 ? `${wine.onHand} on hand` : "none on hand"}
+          {wine.price != null ? (
+            <span className="shrink-0 text-body-sm tabular text-ink-soft">
+              ${wine.price.toFixed(0)}
+            </span>
+          ) : null}
+        </span>
+        <span className="mt-2xs flex flex-wrap items-center gap-x-sm text-ledger font-light text-grey">
+          {facts.length > 0 ? <span>{facts.join(" · ")}</span> : null}
+          <Rating avg={wine.ratingAvg} count={wine.ratingCount} />
+          <span className={wine.onHand > 0 ? "text-ready-ink" : "text-risk-ink"}>
+            {wine.onHand > 0 ? `${wine.onHand} on hand` : "none on hand"}
+          </span>
         </span>
       </span>
     </button>
@@ -362,15 +376,24 @@ function CellarResult({
 function CorpusResult({ wine }: { wine: AssistantCorpusWine }) {
   const facts = [wine.grapes[0], wine.region ?? wine.country, wine.body].filter(Boolean);
   return (
-    <div className="rounded-md border border-edge px-md py-sm">
-      <p className="text-control text-ink">
-        {wine.winery ? `${wine.winery} ` : ""}
-        {wine.name}
-      </p>
-      <p className="mt-2xs flex flex-wrap items-center gap-x-sm text-ledger font-light text-grey">
-        {facts.length > 0 ? <span>{facts.join(" · ")}</span> : null}
-        <Rating avg={wine.ratingAvg} count={wine.ratingCount} />
-      </p>
+    <div className="flex items-start gap-sm rounded-md border border-edge px-md py-sm">
+      <WineThumb
+        src={wine.imageUrl}
+        producer={wine.winery}
+        name={wine.name}
+        colour={wine.type}
+        size={44}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-control text-ink">
+          {wine.winery ? `${wine.winery} ` : ""}
+          {wine.name}
+        </p>
+        <p className="mt-2xs flex flex-wrap items-center gap-x-sm text-ledger font-light text-grey">
+          {facts.length > 0 ? <span>{facts.join(" · ")}</span> : null}
+          <Rating avg={wine.ratingAvg} count={wine.ratingCount} />
+        </p>
+      </div>
     </div>
   );
 }

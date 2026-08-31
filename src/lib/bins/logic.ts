@@ -4,6 +4,8 @@ export type BottleInventoryRow = {
   name: string;
   producer: string;
   colour: string | null;
+  /** Optional: only the surfaces that render a thumbnail supply it. */
+  heroImageUrl?: string | null;
   binId: string | null;
   binCode: string | null;
   binZone: string | null;
@@ -14,6 +16,8 @@ export type BottleMatch = {
   wineId: string;
   name: string;
   producer: string;
+  colour: string | null;
+  heroImageUrl: string | null;
   binId: string;
   binCode: string;
   binZone: string | null;
@@ -63,6 +67,8 @@ export function findBottleMatches(
       name: row.name,
       producer: row.producer,
       binId: row.binId,
+      colour: row.colour,
+      heroImageUrl: row.heroImageUrl ?? null,
       binCode: row.binCode,
       binZone: row.binZone,
       quantity: row.quantity,

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { WineThumb } from "@/components/wine-thumb";
 import Link from "next/link";
 import { ArrowLeft, Wine } from "lucide-react";
 import { getAuthContext } from "@/lib/auth-context";
@@ -24,6 +25,8 @@ type OBRow = {
     producer: string;
     vintage: number | null;
     size_ml: number;
+    hero_image_url: string | null;
+    colour: string | null;
   } | null;
 };
 
@@ -34,7 +37,7 @@ export default async function OpenBottlesPage() {
   const { data: bottles, error: bottlesError } = await supabase
     .from("open_bottles")
     .select(
-      "id, wine_id, opened_at, opened_by, remaining_ml, wines!inner(id, name, producer, vintage, size_ml)",
+      "id, wine_id, opened_at, opened_by, remaining_ml, wines!inner(id, name, producer, vintage, size_ml, hero_image_url, colour)",
     )
     .eq("restaurant_id", restaurantId)
     .is("closed_at", null)
@@ -117,6 +120,13 @@ export default async function OpenBottlesPage() {
                   >
                     <div className="md:hidden">
                       <div className="flex items-start justify-between gap-sm">
+                        <WineThumb
+                          src={wine?.hero_image_url}
+                          producer={wine?.producer}
+                          name={wine?.name}
+                          colour={wine?.colour}
+                          size={40}
+                        />
                         <div className="font-serif text-[17px] font-medium text-ink leading-snug min-w-0">
                           {wine?.producer ?? "Unknown"}{" "}
                           {wine?.name ?? "Unknown"}
@@ -166,7 +176,14 @@ export default async function OpenBottlesPage() {
                       </div>
                     </div>
 
-                    <div className="hidden md:grid md:grid-cols-[1fr_120px_160px_120px_100px] gap-md items-center">
+                    <div className="hidden md:grid md:grid-cols-[40px_1fr_120px_160px_120px_100px] gap-md items-center">
+                      <WineThumb
+                        src={wine?.hero_image_url}
+                        producer={wine?.producer}
+                        name={wine?.name}
+                        colour={wine?.colour}
+                        size={40}
+                      />
                       <div className="min-w-0">
                         <div className="font-serif text-[17px] font-medium text-ink truncate">
                           {wine?.producer ?? "Unknown"}{" "}

@@ -26,6 +26,8 @@ describe("BriefingAlertCard", () => {
     review_excerpt: "Layered and precise.",
     bottle_count: 2,
     bin_location: "A-12",
+    hero_image_url: null,
+    colour: "red",
   };
 
   it("keeps actionable bottle and snooze controls without dead menu actions", () => {

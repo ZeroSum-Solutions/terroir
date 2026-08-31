@@ -1,0 +1,22 @@
+-- Let a published guest menu show the bottle.
+--
+-- 0081 replaced anon's blanket table-level SELECT on `wines` with a
+-- column-level grant, and that list is a CLOSED one: a column added later is
+-- unreadable to anon until it is named here. `hero_image_url` was never in it,
+-- so /list/[slug] — the page whose entire purpose is showing wines to
+-- guests — could render every wine's name, producer, vintage and serving
+-- temperature but not its photograph.
+--
+-- Scope is one column, deliberately. This does NOT restore a table-level
+-- grant; 0081's model (no table-level SELECT, an explicit column list
+-- instead) is intact, and 0074_public_api_grants.sql pins the exact list in
+-- both directions, so the assertion there is updated in the same change
+-- rather than loosened.
+--
+-- Why this column is safe to publish where the neighbouring ones are not:
+-- it is a URL into the public `wine-images` storage bucket, which is already
+-- world-readable by design — the menu's own <img> tags fetch it
+-- unauthenticated. It carries no pricing, no cost, no supplier and no
+-- operational signal. `label_image_url`-style operator uploads, market price
+-- columns and pricing-strategy columns stay unreadable to anon.
+grant select (hero_image_url) on table public.wines to anon;

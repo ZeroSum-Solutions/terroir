@@ -163,7 +163,10 @@ select ok(
     select bool_and(has_column_privilege('anon', 'public.wines', c, 'select'))
     from unnest(array[
       'id', 'name', 'producer', 'vintage', 'varietal', 'region',
-      'serving_temp_min', 'serving_temp_max', 'serving_temp_label', 'is_eightysixed'
+      'serving_temp_min', 'serving_temp_max', 'serving_temp_label', 'is_eightysixed',
+      -- 0142: the published guest menu shows the bottle. A public-bucket
+      -- image URL, carrying no pricing, cost, supplier or operational signal.
+      'hero_image_url'
     ]) as c
   )
   and not exists (
@@ -174,7 +177,8 @@ select ok(
       and not a.attisdropped
       and a.attname not in (
         'id', 'name', 'producer', 'vintage', 'varietal', 'region',
-        'serving_temp_min', 'serving_temp_max', 'serving_temp_label', 'is_eightysixed'
+        'serving_temp_min', 'serving_temp_max', 'serving_temp_label', 'is_eightysixed',
+        'hero_image_url'
       )
       and has_column_privilege('anon', 'public.wines', a.attname, 'select')
   ),

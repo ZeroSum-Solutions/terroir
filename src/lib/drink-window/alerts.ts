@@ -36,6 +36,9 @@ export type DrinkWindowAlertRow = {
   review_excerpt: string | null;
   bottle_count: number;
   bin_location: string | null;
+  /** Carried so the briefing can show the bottle, not just name it. */
+  hero_image_url: string | null;
+  colour: string | null;
 };
 
 /**
@@ -54,7 +57,7 @@ export async function fetchDrinkWindowAlerts(
   const { data: wines, error: wineErr } = await supabase
     .from("wines")
     .select(
-      "id, name, producer, vintage, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt",
+      "id, name, producer, vintage, drink_window_start, drink_window_end, peak_year, rating, rating_source, review_excerpt, hero_image_url, colour",
     )
     .eq("restaurant_id", restaurantId)
     .eq("is_eightysixed", false)
@@ -106,6 +109,8 @@ export async function fetchDrinkWindowAlerts(
       review_excerpt: w.review_excerpt,
       bottle_count: inv.count,
       bin_location: inv.bin,
+      hero_image_url: w.hero_image_url,
+      colour: w.colour,
     });
   }
 
