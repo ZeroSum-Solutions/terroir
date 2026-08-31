@@ -145,7 +145,7 @@ async function searchWines(query: string): Promise<MatchedWine[]> {
 export default function ScanBottlePage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [state, dispatch] = useReducer(bottleScanReducer, initialBottleScanState);
-  const { phase, error, wine, payload, manualCode, searchQuery, searchResults, searching, searchError, section, binLocation, confirming, session } = state;
+  const { phase, error, wine, payload, manualCode, searchQuery, searchResults, searching, searchError, locationError, section, binLocation, confirming, session } = state;
 
   useEffect(() => {
     if (typeof navigator === "undefined") return;
@@ -338,6 +338,7 @@ export default function ScanBottlePage() {
           wine={wine}
           section={section}
           binLocation={binLocation}
+          locationError={locationError}
           onSectionChange={(value) => dispatch({ type: "section-changed", value })}
           onBinLocationChange={(value) => dispatch({ type: "bin-location-changed", value })}
           onSubmit={handleConfirmLocation}

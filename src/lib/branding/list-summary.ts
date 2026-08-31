@@ -1,3 +1,5 @@
+import { wineDisplayName } from "@/lib/wine-display-name";
+
 type SummaryWine = {
   producer: string;
   name: string;
@@ -28,7 +30,7 @@ export function buildWineListSummary(list: SummaryList): string {
 function formatWine(wine: SummaryWine): string {
   return [
     wine.producer,
-    wine.name,
+    wineDisplayName(wine.producer, wine.name),
     wine.vintage,
     wine.varietal,
     wine.region,

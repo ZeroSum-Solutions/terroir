@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Calendar } from "lucide-react";
 import {
   formatLocalDate,
@@ -109,9 +109,36 @@ export default function DateRangeSelector() {
     localToday,
   );
 
+  // The custom editor overlays the band's own caption now that it is anchored
+  // rather than stacked, so it needs the two dismissals every overlay in this
+  // repo has (settings-dropdown.tsx, overflow-menu.tsx): Escape, and a click
+  // outside it. Picking any preset still closes it, as before.
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(
+    function dismissCustomEditor() {
+      if (!showCustom) return;
+      function onPointerDown(event: MouseEvent) {
+        if (!containerRef.current?.contains(event.target as Node)) setShowCustom(false);
+      }
+      function onKeyDown(event: KeyboardEvent) {
+        if (event.key === "Escape") setShowCustom(false);
+      }
+      document.addEventListener("mousedown", onPointerDown);
+      document.addEventListener("keydown", onKeyDown);
+      return function cleanup() {
+        document.removeEventListener("mousedown", onPointerDown);
+        document.removeEventListener("keydown", onKeyDown);
+      };
+    },
+    [showCustom],
+  );
+
   return (
-    <div className="flex flex-wrap items-center gap-xs">
+    // `relative` so the custom editor can hang off the row instead of being a
+    // second row inside it — see the comment on the panel below.
+    <div ref={containerRef} className="relative">
       <div
+        data-date-range-row
         className="flex flex-wrap items-center gap-2xs"
         role="radiogroup"
         aria-label="Date range"
@@ -124,6 +151,7 @@ export default function DateRangeSelector() {
               type="button"
               role="radio"
               aria-checked={isActive}
+              aria-expanded={opt.value === "custom" ? showCustom : undefined}
               onClick={function () {
                 if (opt.value === "custom") {
                   setShowCustom(true);
@@ -146,10 +174,34 @@ export default function DateRangeSelector() {
         })}
       </div>
 
+      {/*
+        GLOBAL-01 — the custom range is a form, and it is not in the row.
+
+        Measured on the running app at 390px (e2e/one-row-rule.test.ts): the six
+        preset pills fit one line, 36…350 of 354px. Picking Custom used to add a
+        SIBLING `flex-wrap` row holding a 130px from field, a 130px to field and
+        Apply — nine controls on three visual lines, at y=674, y=726 and y=778.
+        There is no arrangement of those nine that fits 318px of usable band, so
+        the answer is not a narrower field: it is that they must not be on
+        screen together.
+
+        This is `src/components/overflow-menu.tsx`'s demotion, in the shape a
+        form needs — same anchoring (`absolute top-full mt-xs`, card surface,
+        overlay z-index), opened by the Custom pill that already existed, so the
+        row pays ZERO extra controls for it. Stacked inside the panel the two
+        date fields get the full width and a real label each, which they never
+        had inline.
+      */}
       {showCustom && (
-        <div className="flex flex-wrap items-center gap-xs">
-          <Calendar className="h-4 w-4 shrink-0 text-grey" strokeWidth={1.5} />
-          <label className="sr-only" htmlFor="dr-from">
+        <div
+          data-date-range-custom
+          className="absolute left-0 top-full z-[var(--z-overlay)] mt-xs w-[min(320px,100%)] rounded-card card-surface p-md"
+        >
+          <p className="flex items-center gap-xs text-ledger font-medium text-ink">
+            <Calendar className="h-4 w-4 shrink-0 text-grey" strokeWidth={1.5} aria-hidden />
+            Custom range
+          </p>
+          <label className="mt-sm block text-caption font-medium uppercase text-grey" htmlFor="dr-from">
             From
           </label>
           <input
@@ -162,10 +214,9 @@ export default function DateRangeSelector() {
                 ? draftTo
                 : localToday
             }
-            className="min-h-11 w-[130px] rounded-pill border border-edge bg-surface px-sm text-[12px] text-ink focus-ring"
+            className="mt-2xs h-11 w-full rounded-pill border border-edge bg-surface px-sm text-body-sm text-ink focus-ring"
           />
-          <span className="text-[12px] text-grey">&ndash;</span>
-          <label className="sr-only" htmlFor="dr-to">
+          <label className="mt-sm block text-caption font-medium uppercase text-grey" htmlFor="dr-to">
             To
           </label>
           <input
@@ -175,7 +226,7 @@ export default function DateRangeSelector() {
             onChange={function (e) { setDraftTo(e.target.value); }}
             min={draftFrom || ""}
             max={localToday}
-            className="min-h-11 w-[130px] rounded-pill border border-edge bg-surface px-sm text-[12px] text-ink focus-ring"
+            className="mt-2xs h-11 w-full rounded-pill border border-edge bg-surface px-sm text-body-sm text-ink focus-ring"
           />
           <button
             onClick={function () {
@@ -184,7 +235,7 @@ export default function DateRangeSelector() {
               }
             }}
             disabled={!canApplyCustom}
-            className="min-h-11 rounded-pill bg-primary px-sm text-[12px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+            className="mt-md min-h-11 w-full rounded-pill bg-primary px-sm text-body-sm font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
           >
             Apply
           </button>

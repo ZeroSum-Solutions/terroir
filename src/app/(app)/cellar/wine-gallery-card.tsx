@@ -9,6 +9,7 @@ import {
 } from "@/lib/drink-window/status";
 import { cn } from "@/lib/utils";
 import type { CellarWineRow } from "./types";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 /**
  * The Gallery card — the bottle-forward view of a cellar.
@@ -123,7 +124,7 @@ export function WineGalleryCard({ wine }: { wine: CellarWineRow }) {
           {wine.producer}
         </p>
         <p className="line-clamp-2 font-serif text-body-lg leading-tight text-ink">
-          {wine.name}
+          {wineDisplayName(wine.producer, wine.name)}
         </p>
         {place && (
           <p className="tabular truncate text-ledger text-grey">{place}</p>

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { WineThumb } from "@/components/wine-thumb";
-import { Archive, ChevronDown, Pencil, Plus, Search, X } from "lucide-react";
+import { Archive, ArrowUpRight, ChevronDown, Pencil, Plus, Search, X } from "lucide-react";
 import { IconButton } from "@/components/icon-button";
 import { cn } from "@/lib/utils";
 import {
@@ -34,7 +34,7 @@ export function BinManager({ bins, inventory, canManage, unplacedCount }: Props)
     <>
       <ManagerToolbar query={query} onQueryChange={setQuery} canManage={canManage} onCreate={editor.openCreate} />
       {query.trim() && <SearchResults matches={matches} />}
-      <UnplacedAnchor count={unplacedCount} />
+      <UnplacedInventoryLink count={unplacedCount} />
       {requests.error && <ErrorBanner message={requests.error} dismiss={requests.dismissError} />}
       {editor.creating && (
         <FormPanel title="Create bin">
@@ -50,9 +50,33 @@ function ManagerToolbar({ query, onQueryChange, canManage, onCreate }: { query: 
   return <div className="mb-lg grid gap-sm md:grid-cols-[minmax(0,1fr)_auto]"><SearchBox query={query} onChange={onQueryChange} />{canManage && <button type="button" onClick={onCreate} className="flex h-11 items-center justify-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"><Plus className="h-4 w-4" strokeWidth={2} aria-hidden />Create bin</button>}</div>;
 }
 
-function UnplacedAnchor({ count }: { count: number }) {
+/**
+ * Unplaced stock has no bin, so there is nothing on this page to scroll to —
+ * which is why this used to be `<a id="unplaced" href="#unplaced">`, a link
+ * back to itself that looked tappable and did nothing.
+ *
+ * There is exactly one surface that turns unplaced stock into placed stock:
+ * the reconciliation queue, whose `unplaced` rows carry a "Place in bin"
+ * action. That is also what the product contract requires — top10-evals.yaml
+ * EV-6.4, "no pseudo-bins: unplaced stock appears only in the OPP-5 queue" —
+ * so /bins must not grow an unplaced pseudo-bin of its own, and the honest
+ * affordance is a link out to the queue.
+ */
+function UnplacedInventoryLink({ count }: { count: number }) {
   if (count === 0) return null;
-  return <a id="unplaced" href="#unplaced" className="mb-lg flex min-h-11 items-center justify-between rounded-md border border-rule bg-wash px-md py-sm text-[13px] text-ink"><span className="font-medium">Unplaced inventory</span><span className="tabular text-grey">{count} {count === 1 ? "bottle" : "bottles"}</span></a>;
+  return (
+    <Link
+      href="/reconcile-queue"
+      data-unplaced-link
+      className="group mb-lg flex min-h-11 items-center justify-between gap-md rounded-md border border-rule bg-wash px-md py-sm text-[13px] text-ink no-underline hover:bg-surface focus-ring"
+    >
+      <span className="font-medium">Unplaced inventory</span>
+      <span className="flex shrink-0 items-center gap-xs">
+        <span className="tabular text-grey">{count} {count === 1 ? "bottle" : "bottles"}</span>
+        <ArrowUpRight className="h-3.5 w-3.5 text-grey group-hover:text-accent" aria-hidden />
+      </span>
+    </Link>
+  );
 }
 
 function SearchBox({ query, onChange }: { query: string; onChange: (value: string) => void }) {
@@ -111,6 +135,28 @@ function SearchResults({ matches }: { matches: Match[] }) {
   );
 }
 
+/**
+ * GLOBAL-01 — the two row controls, pinned out of the table's scroll.
+ *
+ * Measured on the running app at 390px (e2e/one-row-rule.test.ts): the table is
+ * 773px wide inside a 352px `overflow-x-auto`, so 421px of every row sits off
+ * screen — and Edit and Retire were entirely inside that part. On the seeded
+ * 23-bin cellar that is 46 buttons a phone cannot reach, behind a sideways
+ * scroll the page gives no hint of, because an `overflow-x-auto` child absorbs
+ * the overflow and `documentElement.scrollWidth` never grows. It is the same
+ * defect /cellar had, with the evidence hidden the same way.
+ *
+ * The table keeps scrolling, deliberately. Six columns of bin data are DATA,
+ * and Devin's rule is about buttons: the honest answer to "Capacity is off
+ * screen" is a scroll, and forcing a data grid into cards to satisfy a rule
+ * about control rows would be applying it where it does not reach. What the
+ * rule does forbid is a CONTROL living behind that scroll — so the actions
+ * column is pinned to the right edge and is in the frame at every width, with
+ * the data still scrolling underneath it.
+ */
+const ACTIONS_CELL =
+  "sticky right-0 z-[1] w-[104px] border-l border-rule px-sm py-sm";
+
 type TableProps = {
   bins: BinViewModel[];
   inventory: BottleInventoryRow[];
@@ -135,7 +181,7 @@ function BinTable(props: TableProps) {
     <div className="overflow-hidden rounded-card card-surface">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-[13px]">
-          <thead><tr className="bg-wash text-[11px] font-medium uppercase tracking-[0.18em] text-grey"><th className="px-md py-sm text-left">Code</th><th className="px-md py-sm text-left">Zone</th><th className="px-md py-sm text-left">Occupancy</th><th className="px-md py-sm text-right">Capacity</th><th className="px-md py-sm text-right">Priority</th>{props.canManage && <th className="w-[104px] px-sm py-sm" />}</tr></thead>
+          <thead><tr className="bg-wash text-[11px] font-medium uppercase tracking-[0.18em] text-grey"><th className="px-md py-sm text-left">Code</th><th className="px-md py-sm text-left">Zone</th><th className="px-md py-sm text-left">Occupancy</th><th className="px-md py-sm text-right">Capacity</th><th className="px-md py-sm text-right">Priority</th>{props.canManage && <th className={cn(ACTIONS_CELL, "bg-wash")} />}</tr></thead>
           <tbody>
             {props.bins.map((bin) => (
               <BinRow
@@ -161,7 +207,7 @@ function BinRow({ bin, inventory, canManage, busy, editingId, draft, onDraftChan
   const wines = inventory.filter((item) => item.binId === bin.id);
   return (
     <>
-      <tr data-bin-row className="border-t border-rule hover:bg-wash">
+      <tr data-bin-row className="group/bin border-t border-rule hover:bg-wash">
         <td className="px-md py-sm font-mono font-medium text-ink">
           <button
             type="button"
@@ -206,7 +252,7 @@ function BinRow({ bin, inventory, canManage, busy, editingId, draft, onDraftChan
         </td>
         <td className="px-md py-sm text-right tabular text-grey">{bin.capacity ?? "—"}</td>
         <td className="px-md py-sm text-right tabular text-grey">{bin.priority}</td>
-        {canManage && <td className="px-sm py-sm"><div className="flex justify-end gap-2xs"><IconButton label={`Edit bin ${bin.code}`} onClick={() => onEdit(bin)} className="rounded-md text-grey hover:bg-wash hover:text-ink focus-ring"><Pencil className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton><IconButton label={`Retire bin ${bin.code}`} onClick={() => onRetire(bin)} disabled={busy} className="rounded-md text-grey hover:bg-risk-wash hover:text-risk-ink disabled:opacity-50"><Archive className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton></div></td>}
+        {canManage && <td className={cn(ACTIONS_CELL, "bg-surface group-hover/bin:bg-wash")}><div className="flex justify-end gap-2xs"><IconButton label={`Edit bin ${bin.code}`} onClick={() => onEdit(bin)} className="rounded-md text-grey hover:bg-wash hover:text-ink focus-ring"><Pencil className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton><IconButton label={`Retire bin ${bin.code}`} onClick={() => onRetire(bin)} disabled={busy} className="rounded-md text-grey hover:bg-risk-wash hover:text-risk-ink disabled:opacity-50"><Archive className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden /></IconButton></div></td>}
       </tr>
       {expanded && wines.length > 0 && (
         <tr data-bin-wines={bin.code} className="border-t border-rule">

@@ -46,6 +46,7 @@ async function renderMobileCard(): Promise<HTMLElement> {
     root.render(
       <WineRow
         item={item}
+        canManage
         onDelete={vi.fn()}
         onPriceChange={vi.fn()}
         onPourChange={vi.fn()}

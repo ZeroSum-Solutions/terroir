@@ -123,7 +123,7 @@ describe("WineListEditor section-delete confirmation", () => {
         list={wineList()}
         sections={sections}
         brandKit={null}
-        canManageBranding={false}
+        canManage
       />,
     );
   }

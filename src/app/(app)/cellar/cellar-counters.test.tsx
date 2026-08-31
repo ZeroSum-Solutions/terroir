@@ -3,7 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   buildCellarCounters,
-  CellarCounters,
+  CellarScopeSelect,
   type CellarCounterAlerts,
 } from "./cellar-counters";
 
@@ -66,7 +66,7 @@ describe("buildCellarCounters", () => {
   });
 });
 
-describe("CellarCounters", () => {
+describe("CellarScopeSelect", () => {
   const roots: Root[] = [];
 
   afterEach(async () => {
@@ -84,7 +84,7 @@ describe("CellarCounters", () => {
     roots.push(root);
     await act(async () => {
       root.render(
-        <CellarCounters
+        <CellarScopeSelect
           counters={counters}
           activeFilter={activeFilter as never}
           onSelect={onSelect as never}
@@ -94,47 +94,52 @@ describe("CellarCounters", () => {
     return container;
   }
 
-  it("renders every counter as a tab with real button semantics and a 44px touch target", async () => {
+  /**
+   * GLOBAL-01. These counters were a strip of pills: 424px of a 354px row at
+   * 390px with four of them, ~670px with six, which is why three of the
+   * cellar's ten controls were on screen and seven were not. One select is
+   * constant-width whatever the data — and it still shows every number.
+   */
+  it("renders one control carrying every counter and its count", async () => {
     const container = await mount("all", vi.fn());
-    expect(container.querySelector('[role="tablist"]')?.getAttribute("aria-label")).toBe(
-      "Cellar counters",
-    );
-    const tabs = [...container.querySelectorAll('[role="tab"]')];
-    expect(tabs).toHaveLength(4); // all, open, out, drink-now (low is 0 → hidden)
-    for (const tab of tabs) {
-      expect(tab.tagName).toBe("BUTTON");
-      expect(tab.getAttribute("type")).toBe("button");
-      expect(tab.className).toContain("min-h-11");
-    }
+    const selects = [...container.querySelectorAll("select")];
+    expect(selects).toHaveLength(1);
+    expect(selects[0].getAttribute("aria-label")).toBe("Cellar scope");
+    expect(selects[0].className).toContain("h-11");
+
+    const options = [...selects[0].querySelectorAll("option")];
+    expect(options.map((option) => option.value)).toEqual([
+      "all",
+      "open",
+      "out",
+      "drink-now",
+    ]); // low is 0 → suppressed
+    expect(options[0].textContent).toContain("1,364");
+    expect(options[3].textContent).toContain("Drink now");
+    expect(options[3].textContent).toContain("147");
   });
 
-  it("marks the active filter's tab as selected and others as not", async () => {
+  it("shows the active filter as the selected value", async () => {
     const container = await mount("out", vi.fn());
-    const tabs = [...container.querySelectorAll('[role="tab"]')];
-    const selected = tabs.filter((tab) => tab.getAttribute("aria-selected") === "true");
-    expect(selected).toHaveLength(1);
-    expect(selected[0].textContent).toContain("86'd");
+    const select = container.querySelector("select")!;
+    expect(select.value).toBe("out");
   });
 
-  it("tapping a counter calls onSelect with that counter's filter id", async () => {
+  it("choosing a scope calls onSelect with that counter's filter id", async () => {
     const onSelect = vi.fn();
     const container = await mount("all", onSelect);
-    const openTab = [...container.querySelectorAll('[role="tab"]')].find((tab) =>
-      tab.textContent?.includes("Open"),
-    )!;
-    await act(async () => openTab.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    await act(async () => {
+      select.value = "open";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
     expect(onSelect).toHaveBeenCalledExactlyOnceWith("open");
   });
 
-  it("uses the theme accent outline focus color on the active tab, matching the inactive tabs (residuals audit — was beige)", async () => {
+  it("uses the theme accent outline focus color, not a ring utility", async () => {
     const container = await mount("all", vi.fn());
-    const tabs = [...container.querySelectorAll('[role="tab"]')];
-    const selected = tabs.find((tab) => tab.getAttribute("aria-selected") === "true")!;
-    const unselected = tabs.find((tab) => tab.getAttribute("aria-selected") === "false")!;
-    for (const tab of [selected, unselected]) {
-      const classes = tab.className.split(/\s+/);
-      expect(classes).toContain("focus-ring");
-      expect(tab.className).not.toMatch(/focus(-visible)?:(ring|outline)/);
-    }
+    const select = container.querySelector("select")!;
+    expect(select.className.split(/\s+/)).toContain("focus-ring");
+    expect(select.className).not.toMatch(/focus(-visible)?:(ring|outline)/);
   });
 });

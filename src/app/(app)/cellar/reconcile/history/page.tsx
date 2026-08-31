@@ -14,6 +14,7 @@ import {
   type DayGroup,
   type ReconEvent,
 } from "./history-data";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -283,7 +284,7 @@ export default async function ReconcileHistoryPage() {
                                         </span>
                                         <span className="text-grey group-hover:text-accent">
                                           {" "}
-                                          {event.wines.name}
+                                          {wineDisplayName(event.wines.producer, event.wines.name)}
                                           {event.wines.vintage
                                             ? ` ${event.wines.vintage}`
                                             : ""}
@@ -319,7 +320,8 @@ export default async function ReconcileHistoryPage() {
                                     className="group rounded-sm focus-ring"
                                   >
                                     <div className="truncate text-[13px] font-medium text-ink group-hover:text-accent">
-                                      {event.wines.producer} {event.wines.name}
+                                      {event.wines.producer}{" "}
+                                      {wineDisplayName(event.wines.producer, event.wines.name)}
                                     </div>
                                     {event.wines.vintage && (
                                       <div className="font-mono text-[11px] text-grey">

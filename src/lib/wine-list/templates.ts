@@ -40,7 +40,7 @@ function formatPrice(n: number | null): string {
 
 function renderItem(item: ItemData, template: "classic" | "modern" | "minimal"): string {
   const w = item.wines;
-  const name = escapeHtml(item.name_override ?? `${w.producer} ${w.name}`);
+  const name = escapeHtml(wineListItemLabel(item));
   const vintage = w.vintage ? ` ${w.vintage}` : "";
   const region = w.region ? escapeHtml(w.region) : "";
   const glass = formatPrice(item.glass_price);
@@ -214,3 +214,4 @@ export function renderTemplate(
   }
 }
 import { fontStack, type MenuTheme } from "@/lib/branding/theme";
+import { wineListItemLabel } from "./render";

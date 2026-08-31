@@ -15,6 +15,10 @@ import {
   X,
 } from "lucide-react";
 import { ActionDialog } from "@/components/action-dialog";
+import {
+  OverflowMenu,
+  type OverflowMenuItem,
+} from "@/components/overflow-menu";
 import { RouteDataEmpty } from "@/components/route-data-state";
 import { StatusChip } from "@/components/status-chip";
 import { TimeAgo } from "@/components/time-ago";
@@ -22,25 +26,77 @@ import type { WineListWithCount } from "@/lib/wine-list/types";
 import { CreateListModal } from "./create-list-modal";
 import { useWineListActions } from "./use-wine-list-actions";
 
+/**
+ * SD-12 — every write behind this page is `requireRole(["owner","manager"])`
+ * (create, rename/archive/restore, delete, clone), while the page itself is
+ * membership-only. Staff used to get the whole armed card footer and learn it
+ * was refused only from the 403. `canManage` now gates exactly the controls
+ * the API refuses; Copy link, Open and Show archived need no role and stay.
+ */
 export function WineListLanding({
   lists,
   archivedLists = [],
   showArchived = false,
+  canManage,
 }: {
   lists: WineListWithCount[];
   archivedLists?: WineListWithCount[];
   showArchived?: boolean;
+  canManage: boolean;
 }) {
   const router = useRouter();
   const actions = useWineListActions();
   const { deleteTarget } = actions;
 
+  /**
+   * GLOBAL-01 — the card footer's three management actions, demoted.
+   *
+   * Measured on the running app at 390px (e2e/one-row-rule.test.ts): an
+   * archived AND published list showed five controls — Copy link 99px, Open
+   * 79px, Clone 81px, Restore 44px, Delete 44px — and the fifth painted at
+   * x=[373…417] on a 390px screen, 27px of it past the right edge with no
+   * scroll anywhere to reach it. The grid also sizes cards from 280px
+   * (`minmax(280px,1fr)`), so those five never fitted a narrow desktop card
+   * either; the constraining box here is the CARD, not the viewport, which is
+   * why this is not a breakpoint swap.
+   *
+   * Copy link and Open are the everyday actions and stay in the footer.
+   * Clone, Archive/Restore and Delete are management, and go behind the one
+   * 44px trigger `src/components/overflow-menu.tsx` exists to be: the row pays
+   * one control instead of three. SD-12's role gating is unchanged — a staff
+   * member gets no items, and an empty OverflowMenu renders nothing at all.
+   */
+  const manageActions = (list: WineListWithCount): OverflowMenuItem[] => {
+    if (!canManage) return [];
+    const items: OverflowMenuItem[] = [
+      {
+        label: "Clone",
+        Icon: Files,
+        onSelect: () => actions.cloneList(list),
+        disabled: actions.isCloning(list.id),
+      },
+      {
+        label: list.archived ? "Restore" : "Archive",
+        Icon: list.archived ? ArchiveRestore : Archive,
+        onSelect: () => actions.toggleArchive(list),
+        disabled: actions.isArchiving(list.id),
+      },
+    ];
+    // BND-159: delete is offered only once a list is archived.
+    if (list.archived) {
+      items.push({
+        label: "Permanently delete",
+        Icon: Trash2,
+        onSelect: () => actions.requestDeleteList(list),
+        disabled: actions.isDeleting(list.id),
+      });
+    }
+    return items;
+  };
+
   const renderCard = (list: WineListWithCount) => {
     const justCopied = actions.copiedListId === list.id;
     const showCopyAction = list.is_published && list.slug;
-    const isDeleting = actions.isDeleting(list.id);
-    const isArchiving = actions.isArchiving(list.id);
-    const isCloning = actions.isCloning(list.id);
     return (
       <div
         key={list.id}
@@ -101,8 +157,11 @@ export function WineListLanding({
             )}
           </div>
         </button>
-        <div className="flex items-center justify-between gap-xs border-t border-rule px-md py-sm">
-          <div className="flex items-center gap-xs">
+        <div
+          data-list-card-actions={list.id}
+          className="flex items-center justify-between gap-xs border-t border-rule px-md py-sm"
+        >
+          <div className="flex min-w-0 items-center gap-xs">
             {showCopyAction && (
               <>
                 <button
@@ -142,49 +201,11 @@ export function WineListLanding({
                 </a>
               </>
             )}
-            {/* Clone button — available for all lists */}
-            <button
-              type="button"
-              onClick={() => actions.cloneList(list)}
-              disabled={isCloning}
-              aria-label={`Clone ${list.name}`}
-              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-rule bg-canvas px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring disabled:opacity-60"
-            >
-              <Files className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              Clone
-            </button>
           </div>
-          <div className="flex items-center gap-xs">
-            <button
-              type="button"
-              onClick={() => actions.toggleArchive(list)}
-              disabled={isArchiving}
-              aria-label={
-                list.archived
-                  ? `Restore ${list.name}`
-                  : `Archive ${list.name}`
-              }
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-rule bg-canvas text-grey hover:bg-wash hover:text-ink focus-ring disabled:opacity-60"
-            >
-              {list.archived ? (
-                <ArchiveRestore className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              ) : (
-                <Archive className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              )}
-            </button>
-            {/* BND-159: Delete button only shown for archived lists */}
-            {list.archived && (
-              <button
-                type="button"
-                onClick={() => actions.requestDeleteList(list)}
-                disabled={isDeleting}
-                aria-label={`Permanently delete ${list.name}`}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-pill border border-rule bg-canvas text-grey hover:bg-risk-wash hover:text-risk-ink focus-ring disabled:opacity-60"
-              >
-                <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              </button>
-            )}
-          </div>
+          <OverflowMenu
+            label={`More actions for ${list.name}`}
+            items={manageActions(list)}
+          />
         </div>
       </div>
     );
@@ -213,14 +234,16 @@ export function WineListLanding({
               {showArchived ? "Hide archived" : `Show archived (${archivedLists.length})`}
             </a>
           )}
-          <button
-            type="button"
-            onClick={actions.openCreateModal}
-            className="flex h-11 items-center gap-sm self-start rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring md:self-auto"
-          >
-            <Plus className="h-4 w-4" strokeWidth={2} />
-            New wine list
-          </button>
+          {canManage && (
+            <button
+              type="button"
+              onClick={actions.openCreateModal}
+              className="flex h-11 items-center gap-sm self-start rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring md:self-auto"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2} />
+              New wine list
+            </button>
+          )}
         </div>
       </header>
 
@@ -244,17 +267,23 @@ export function WineListLanding({
       {noListsAtAll ? (
         <RouteDataEmpty
           icon={<ListOrdered className="h-6 w-6" strokeWidth={1.5} />}
-          title="Create your first wine list"
-          description="Your guests will thank you."
+          title={canManage ? "Create your first wine list" : "No wine lists yet"}
+          description={
+            canManage
+              ? "Your guests will thank you."
+              : "A manager creates the lists; they will show up here."
+          }
           action={
-            <button
-              type="button"
-              onClick={actions.openCreateModal}
-              className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
-            >
-              <Plus className="h-4 w-4" strokeWidth={2} />
-              New wine list
-            </button>
+            canManage ? (
+              <button
+                type="button"
+                onClick={actions.openCreateModal}
+                className="inline-flex h-11 items-center gap-sm rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
+              >
+                <Plus className="h-4 w-4" strokeWidth={2} />
+                New wine list
+              </button>
+            ) : undefined
           }
         />
       ) : (
@@ -263,15 +292,17 @@ export function WineListLanding({
           {lists.length > 0 && (
             <div className="grid gap-md md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
               {lists.map(renderCard)}
-              <button
-                type="button"
-                onClick={actions.openCreateModal}
-                className="flex flex-col items-center justify-center gap-sm rounded-card border border-dashed border-rule-strong p-xl text-center text-grey transition-colors hover:border-accent hover:text-accent"
-              >
-                <Plus className="h-5 w-5" strokeWidth={2} />
-                <span className="text-[14px] font-medium">Create a new list</span>
-                <span className="text-[12px]">Start from scratch or a template</span>
-              </button>
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={actions.openCreateModal}
+                  className="flex flex-col items-center justify-center gap-sm rounded-card border border-dashed border-rule-strong p-xl text-center text-grey transition-colors hover:border-accent hover:text-accent"
+                >
+                  <Plus className="h-5 w-5" strokeWidth={2} />
+                  <span className="text-[14px] font-medium">Create a new list</span>
+                  <span className="text-[12px]">Start from scratch or a template</span>
+                </button>
+              )}
             </div>
           )}
 

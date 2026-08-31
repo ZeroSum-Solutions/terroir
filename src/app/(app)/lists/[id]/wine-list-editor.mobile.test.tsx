@@ -99,7 +99,7 @@ function editorProps(
     list: completeListFixture(),
     sections: [section()],
     brandKit: null,
-    canManageBranding: true,
+    canManage: true,
     ...overrides,
   };
 }
@@ -194,7 +194,10 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-it("keeps every header action labelled in the mobile-only rail", () => {
+// GLOBAL-01. This rail rendered all six actions as `flex-wrap` pills: 592px of
+// controls in a 354px row, two visual lines at 390px (three when published).
+// components/list-actions.test.tsx covers what the overflow menu now holds.
+it("keeps the phone rail to two labelled actions plus one overflow control", () => {
   document.body.innerHTML = renderToStaticMarkup(
     <WineListEditor {...editorProps()} />,
   );
@@ -203,19 +206,16 @@ it("keeps every header action labelled in the mobile-only rail", () => {
   )!;
 
   expect(mobile.className).toContain("md:hidden");
-  for (const name of [
-    "Download PDF",
-    "Toast Export",
-    "CSV",
-    "Preview",
-    "Print",
-    "Publish",
-  ]) {
-    const action = [...mobile.querySelectorAll<HTMLElement>("button,a")].find(
+  const row = mobile.querySelector<HTMLElement>("[data-list-control-row]")!;
+  expect(row.className).not.toContain("flex-wrap");
+  for (const name of ["Preview", "Publish"]) {
+    const action = [...row.querySelectorAll<HTMLElement>("button,a")].find(
       (node) => node.textContent?.trim() === name,
     )!;
     expect(action.className).toContain("min-h-11");
   }
+  const more = row.querySelector<HTMLElement>('[aria-label="More list actions"]')!;
+  expect(more.className).toContain("h-11");
 });
 
 it("shows section add, rename, delete, and template actions in the mobile-only controls", () => {

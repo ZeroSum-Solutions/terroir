@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { wineDisplayName } from "./wine-display-name";
+import { wineDisplayName, wineTitle } from "./wine-display-name";
 
 describe("wineDisplayName", () => {
   describe("BUG-01 — the exact strings Devin photographed", () => {
@@ -88,5 +88,39 @@ describe("wineDisplayName", () => {
       expect(wineDisplayName("Domaine Jean Grivot", "Jean Grivot Domaine Nuits"))
         .toBe("Jean Grivot Domaine Nuits");
     });
+  });
+});
+
+describe("wineTitle — BUG-02, the separator with no producer", () => {
+  it("emits no leading comma when the producer is empty", () => {
+    // The exact string Devin photographed in the list builder.
+    expect(wineTitle("", "Benjamin Leroux Vosne-Romanée", ", "))
+      .toBe("Benjamin Leroux Vosne-Romanée");
+  });
+
+  it("emits no leading space either — the quieter half of the same bug", () => {
+    expect(wineTitle("", "Maison Orme Central Otago Pinot"))
+      .toBe("Maison Orme Central Otago Pinot");
+  });
+
+  it("still joins normally when there IS a producer, and de-duplicates it", () => {
+    expect(wineTitle("Bruno Giacosa", "Bruno Giacosa Barbaresco Asili", ", "))
+      .toBe("Bruno Giacosa, Barbaresco Asili");
+    expect(wineTitle("Esporão", "Esporão Reserva Tinto"))
+      .toBe("Esporão Reserva Tinto");
+  });
+
+  it("treats a whitespace-only producer as absent", () => {
+    expect(wineTitle("   ", "Vosne-Romanée", ", ")).toBe("Vosne-Romanée");
+  });
+
+  it("keeps the producer when the name is nothing but the producer", () => {
+    expect(wineTitle("Château Margaux", "Château Margaux", ", "))
+      .toBe("Château Margaux, Château Margaux");
+  });
+
+  it("falls back to the producer alone when there is no name", () => {
+    expect(wineTitle("Vietti", "", ", ")).toBe("Vietti");
+    expect(wineTitle("Vietti", null)).toBe("Vietti");
   });
 });

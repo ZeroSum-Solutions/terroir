@@ -59,7 +59,55 @@ describe("computePreviewCounts", () => {
       canConfirm: true,
       effectivePassingValidationRows: 4,
       effectiveErrorRows: 2,
+      effectiveMissingProducerRows: 0,
     });
+  });
+
+  // SD-41: the number the operator acknowledges has to be the number
+  // confirm will independently re-derive, and confirm re-derives WITH the
+  // operator's inline fixes applied. A fix that leaves the producer blank
+  // therefore adds to it — otherwise the checkbox would under-claim and the
+  // server would reject the confirm as stale.
+  it("counts a row fixed into validity WITHOUT a producer toward the blank-producer acknowledgement", () => {
+    const blankProducerErrorRow: ErrorRowEntry = {
+      rowNumber: 1,
+      errors: [{ field: "name", message: "Name is required." }],
+      rawText: { ...BLANK_ROW },
+    };
+    const counts = computePreviewCounts({
+      summary: summary({ validRows: 4, errorRows: 1, missingProducerRows: 2 }),
+      errorRows: [blankProducerErrorRow],
+      rowOverrides: { 1: FIXES },
+      chunkUpload: null,
+      chunkBreakdown: undefined,
+    });
+    expect(counts.fixedCount).toBe(1);
+    expect(counts.effectiveMissingProducerRows).toBe(3);
+  });
+
+  it("does not count a fix that supplies a producer", () => {
+    const counts = computePreviewCounts({
+      summary: summary({ validRows: 4, errorRows: 1, missingProducerRows: 2 }),
+      errorRows: [errorRow(1)],
+      rowOverrides: { 1: FIXES },
+      chunkUpload: null,
+      chunkBreakdown: undefined,
+    });
+    expect(counts.effectiveMissingProducerRows).toBe(2);
+  });
+
+  it("subtracts a skipped chunk's blank-producer rows — they are never sent", () => {
+    const counts = computePreviewCounts({
+      summary: summary({ validRows: 10, missingProducerRows: 6 }),
+      errorRows: [],
+      rowOverrides: {},
+      chunkUpload: [chunkState(1, "confirmed"), chunkState(2, "skipped")],
+      chunkBreakdown: [
+        { index: 1, summary: summary({ validRows: 5, missingProducerRows: 2 }) },
+        { index: 2, summary: summary({ validRows: 5, missingProducerRows: 4 }) },
+      ],
+    });
+    expect(counts.effectiveMissingProducerRows).toBe(2);
   });
 
   it("moves a row the operator edited into validity from errors to passing", () => {

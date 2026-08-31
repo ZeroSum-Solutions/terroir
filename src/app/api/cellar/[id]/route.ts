@@ -5,6 +5,7 @@ import { z } from "zod";
 import { Errors } from "@/lib/api/errors";
 import { withApiHandler } from "@/lib/api/handler";
 import { parseJson, parseParams } from "@/lib/api/validation";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 export const runtime = "nodejs";
 
@@ -118,7 +119,7 @@ export async function DELETE(
     if (pourCount != null && pourCount > 0) {
       return Errors.conflict(
         "wine_has_pours",
-        `Cannot delete "${wine.producer} ${wine.name}" — it has ${pourCount} pour event${pourCount === 1 ? "" : "s"}.`,
+        `Cannot delete "${wine.producer} ${wineDisplayName(wine.producer, wine.name)}" — it has ${pourCount} pour event${pourCount === 1 ? "" : "s"}.`,
       );
     }
 
@@ -135,7 +136,7 @@ export async function DELETE(
     if (invCount != null && invCount > 0) {
       return Errors.conflict(
         "wine_has_inventory",
-        `Cannot delete "${wine.producer} ${wine.name}" — it has ${invCount} inventory item${invCount === 1 ? "" : "s"}. 86 the wine instead.`,
+        `Cannot delete "${wine.producer} ${wineDisplayName(wine.producer, wine.name)}" — it has ${invCount} inventory item${invCount === 1 ? "" : "s"}. 86 the wine instead.`,
       );
     }
 
@@ -152,7 +153,7 @@ export async function DELETE(
     if (wliCount != null && wliCount > 0) {
       return Errors.conflict(
         "wine_on_lists",
-        `Cannot delete "${wine.producer} ${wine.name}" — it appears on ${wliCount} wine list${wliCount === 1 ? "" : "s"}. Remove it from lists first.`,
+        `Cannot delete "${wine.producer} ${wineDisplayName(wine.producer, wine.name)}" — it appears on ${wliCount} wine list${wliCount === 1 ? "" : "s"}. Remove it from lists first.`,
       );
     }
 
@@ -170,7 +171,7 @@ export async function DELETE(
     if (scanRefs && scanRefs.length > 0) {
       return Errors.conflict(
         "wine_from_scan",
-        `Cannot delete "${wine.producer} ${wine.name}" — it was imported via ${scanRefs.length} invoice scan${scanRefs.length === 1 ? "" : "s"}. Remove the scan record first.`,
+        `Cannot delete "${wine.producer} ${wineDisplayName(wine.producer, wine.name)}" — it was imported via ${scanRefs.length} invoice scan${scanRefs.length === 1 ? "" : "s"}. Remove the scan record first.`,
       );
     }
 

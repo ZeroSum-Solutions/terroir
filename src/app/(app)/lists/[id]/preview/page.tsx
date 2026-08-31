@@ -5,7 +5,11 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, EyeOff } from "lucide-react";
 import { requireMembership } from "@/lib/api/auth";
-import { renderWineListSections } from "@/lib/wine-list/render";
+import {
+  renderWineListSections,
+  wineListItemLabel,
+  type EightysixStrategy,
+} from "@/lib/wine-list/render";
 import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
 
 export const metadata: Metadata = { title: "Preview list" };
@@ -19,6 +23,7 @@ type PublicWineItem = {
   bottle_price: number | null;
   tasting_note: string | null;
   blurb: string | null;
+  name_override: string | null;
   hidden: boolean;
   wines: {
     name: string;
@@ -39,6 +44,22 @@ type PublicWineItem = {
  * regardless of publish status. Hidden items are shown with a visual
  * warning so the editor can see what guests won't. Only authenticated
  * members of the owning restaurant can access the preview.
+ *
+ * BND-173: the preview must honour the restaurant's `eightysix_strategy`,
+ * the same way /list/[slug] and /list/[slug]/print do. It did not — it
+ * called renderWineListSections() with no options, so the default 'hide'
+ * applied unconditionally and a restaurant set to 'mark' saw a preview
+ * missing every 86'd wine its live menu still shows. "This is how guests
+ * will see the list" was then false for exactly the restaurants that had
+ * changed the setting.
+ *
+ * BUG-01: the line label goes through wineListItemLabel() — the same helper
+ * the published menu, the print menu and the PDF use. Composing
+ * `${producer} ${name}` here printed the winery twice on the 98% of rows
+ * whose `name` still carries its producer, and ignored `name_override`
+ * entirely, so an operator's own words for a bottle showed on the live menu
+ * and not in the preview of it. A preview of the guest menu is a fourth
+ * consumer of the guest menu's rendering rules, not a fourth copy of them.
  */
 export default async function WineListPreviewPage({
   params,
@@ -61,7 +82,7 @@ export default async function WineListPreviewPage({
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, is_published, slug, template, restaurant_id, restaurants(name), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, wines!wine_list_items_wine_id_fkey(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed, hero_image_url)))",
+      "name, is_published, slug, template, restaurant_id, restaurants(name, eightysix_strategy), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, name_override, hidden, wines!wine_list_items_wine_id_fkey(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed, hero_image_url)))",
     )
     .eq("id", id)
     .eq("restaurant_id", restaurantId)
@@ -69,13 +90,18 @@ export default async function WineListPreviewPage({
 
   if (error || !list) notFound();
 
-  const restaurantName =
-    (list.restaurants as { name: string } | null)?.name ?? "";
+  const restaurant =
+    list.restaurants as { name: string; eightysix_strategy: string } | null;
+  const restaurantName = restaurant?.name ?? "";
+  const eightysixStrategy: EightysixStrategy =
+    restaurant?.eightysix_strategy === "mark" ? "mark" : "hide";
 
   // Unlike the public list, preview INCLUDES hidden items so the
-  // editor can see what the public will miss.
+  // editor can see what the public will miss. 86'd wines, by contrast,
+  // follow the restaurant's own strategy — that IS what guests see.
   const sections = renderWineListSections(
     (list.wine_list_sections ?? []) as unknown as WineListSectionEmbed<PublicWineItem>[],
+    { eightysixStrategy },
   );
 
   return (
@@ -144,10 +170,12 @@ export default async function WineListPreviewPage({
             {section.items.map((item) => {
               const wine = item.wines;
               const isHidden = item.hidden;
+              const is86d = item.is_marked_eightysixed;
               return (
                 <div
                   key={item.id}
-                  className={`border-b border-rule/50 py-sm last:border-b-0${isHidden ? " bg-risk-wash/10" : ""}`}
+                  data-eightysixed={is86d ? "true" : undefined}
+                  className={`border-b border-rule/50 py-sm last:border-b-0${isHidden ? " bg-risk-wash/10" : ""}${is86d ? " opacity-50" : ""}`}
                 >
                   {/* BND-171: hidden item warning for editor */}
                   {isHidden && (
@@ -166,9 +194,14 @@ export default async function WineListPreviewPage({
                       className="self-start print:hidden"
                     />
                     <div className="min-w-0 flex-1">
-                      <span className={`font-serif text-[17px] font-medium${isHidden ? " text-grey line-through" : " text-ink"}`}>
-                        {wine.producer} {wine.name}
+                      <span className={`font-serif text-[17px] font-medium${isHidden || is86d ? " line-through" : ""}${isHidden ? " text-grey" : " text-ink"}`}>
+                        {wineListItemLabel(item)}
                       </span>
+                      {is86d && (
+                        <span className="ml-xs text-caption uppercase text-grey">
+                          Unavailable
+                        </span>
+                      )}
                       {wine.vintage && (
                         <span className="ml-xs font-mono text-[12px] text-grey">
                           {wine.vintage}

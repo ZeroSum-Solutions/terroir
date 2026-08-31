@@ -9,6 +9,7 @@ import type {
   VoiceWineItem,
 } from "@/lib/wine-intelligence/voice-resolve-types";
 import type { VoiceFilterPayload } from "@/lib/wine-intelligence/voice-filter-intent";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 const AUTO_STOP_MS = 15_000;
 const MIME_TYPES = ["audio/webm;codecs=opus", "audio/mp4"];
@@ -70,7 +71,9 @@ export function VoiceCellarControl({
   const applyResult = useCallback(
     (result: VoiceResolveResponse) => {
       if (result.kind === "resolved") {
-        setNotice(`Found ${result.item.producer} ${result.item.name}.`);
+        setNotice(
+          `Found ${result.item.producer} ${wineDisplayName(result.item.producer, result.item.name)}.`,
+        );
         onResolve(result.item.itemId);
       } else if (result.kind === "ambiguous") {
         setAmbiguity({
@@ -230,7 +233,9 @@ export function VoiceCellarControl({
           candidates={ambiguity.candidates}
           onChoose={(candidate) => {
             setAmbiguity(null);
-            setNotice(`Found ${candidate.producer} ${candidate.name}.`);
+            setNotice(
+              `Found ${candidate.producer} ${wineDisplayName(candidate.producer, candidate.name)}.`,
+            );
             onResolve(candidate.itemId);
           }}
           onClose={() => setAmbiguity(null)}
@@ -295,7 +300,7 @@ function VoiceDisambiguationSheet({
               className="min-h-11 rounded-card card-surface px-md py-sm text-left hover:bg-wash focus-ring"
             >
               <span className="block text-[14px] font-medium text-ink">
-                {candidate.producer} · {candidate.name}
+                {candidate.producer} · {wineDisplayName(candidate.producer, candidate.name)}
               </span>
               {candidate.locations.length > 0 && (
                 <span className="mt-2xs block text-[11.5px] text-grey">

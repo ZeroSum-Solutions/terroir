@@ -8,6 +8,7 @@ import {
   pickMostRecent,
 } from "./price-comparison-helpers";
 import type { WineComparison } from "./price-comparison-helpers";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 // BND-140/BND-138: desktop table for wines seen from only one distributor —
 // no spread/savings columns since there's nothing to compare against.
@@ -43,7 +44,7 @@ export function SingleSourcePriceTable({ wines }: { wines: WineComparison[] }) {
                   <div className="flex items-start gap-xs">
                     <Link
                       href={`/cellar?wine=${comp.wine.id}`}
-                      aria-label={`View ${comp.wine.producer} ${comp.wine.name} in cellar`}
+                      aria-label={`View ${comp.wine.producer} ${wineDisplayName(comp.wine.producer, comp.wine.name)} in cellar`}
                       className="group inline-block min-w-0 rounded-md focus-ring"
                     >
                       <span className="font-serif text-body-lg font-medium text-ink group-hover:text-accent">
@@ -51,7 +52,7 @@ export function SingleSourcePriceTable({ wines }: { wines: WineComparison[] }) {
                       </span>
                       <span className="font-serif text-body-lg text-grey group-hover:text-accent">
                         {" "}
-                        {comp.wine.name}
+                        {wineDisplayName(comp.wine.producer, comp.wine.name)}
                         {comp.wine.vintage ? ` ${comp.wine.vintage}` : ""}
                       </span>
                     </Link>

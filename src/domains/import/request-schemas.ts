@@ -32,6 +32,20 @@ export const CreateSessionBodySchema = z.object({
   declaredChunkTotal: z.coerce.number().int().positive().optional(),
 });
 
+// SD-41 — the operator's blank-producer acknowledgement, arriving as a
+// multipart form field (so a string, hence z.coerce, exactly like the
+// session fields below). OPTIONAL here on purpose: absence is meaningful
+// and is the thing checkMissingProducerAcknowledgement refuses, so it must
+// reach the domain as `undefined` rather than being defaulted to a number
+// at the request boundary. Bounded by MAX_ROWS — no file can legitimately
+// have more producer-less rows than it has rows.
+export const AcknowledgedMissingProducerRowsFieldSchema = z.coerce
+  .number()
+  .int()
+  .min(0)
+  .max(MAX_ROWS)
+  .optional();
+
 export const ConfirmBatchSessionFieldsSchema = z.object({
   sessionId: z.string().uuid().optional(),
   chunkIndex: z.coerce.number().int().positive().optional(),

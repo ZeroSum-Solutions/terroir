@@ -10,6 +10,7 @@ import {
 import type { LineageWine } from "@/lib/lineage/rollups";
 import { findDuplicateSuspects } from "@/lib/lineage/rollups";
 import type { Database, Json } from "@/types/database";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 type Inventory = Database["public"]["Tables"]["inventory_items"]["Row"];
 type Scan = Database["public"]["Tables"]["invoice_scans"]["Row"];
@@ -92,7 +93,7 @@ function ambiguousSources(lineage: LineageWine[], claimed: Set<string>) {
     .map<QueueSourceInput>((wine) => ({
       subjectTable: "wines",
       subjectId: wine.id,
-      title: `${wine.producer} ${wine.name} ${wine.vintage ?? "NV"}`,
+      title: `${wine.producer} ${wineDisplayName(wine.producer, wine.name)} ${wine.vintage ?? "NV"}`,
       detail: "Stocked wine has no confirmed lineage",
       units: wine.quantity,
       unitCost: wine.unitCost ?? 0,
@@ -112,7 +113,9 @@ function unplacedSources(
       return {
         subjectTable: "inventory_items",
         subjectId: item.id,
-        title: wine ? `${wine.producer} ${wine.name}` : "Unplaced inventory",
+        title: wine
+          ? `${wine.producer} ${wineDisplayName(wine.producer, wine.name)}`
+          : "Unplaced inventory",
         detail: "Inventory has no bin",
         units: item.quantity,
         unitCost: item.unit_cost,
@@ -126,7 +129,7 @@ function unplacedSources(
 function candidates(wines: Wine[]): WineMatchCandidate[] {
   return wines.map((wine) => ({
     wineId: wine.id,
-    title: `${wine.producer} ${wine.name} ${wine.vintage ?? "NV"}`,
+    title: `${wine.producer} ${wineDisplayName(wine.producer, wine.name)} ${wine.vintage ?? "NV"}`,
     lwin: wine.lwin_id,
     producer: wine.producer,
     cuvee: wine.name,

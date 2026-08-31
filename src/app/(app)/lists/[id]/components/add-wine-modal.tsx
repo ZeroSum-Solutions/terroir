@@ -8,6 +8,7 @@ import { sectionIdForColour } from "@/domains/wine-lists/section-for-colour";
 import { listSectionNames, type AddWineRequest } from "../use-add-wine";
 import { AddWinePricing } from "./add-wine-pricing";
 import type { LwinWine, PricingSuggestion, SearchWine } from "./add-wine-modal.types";
+import { wineTitle } from "@/lib/wine-display-name";
 
 interface AddWineModalProps {
   sections: { id: string; name: string }[];
@@ -393,7 +394,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                       />
                       <div className="min-w-0 flex-1">
                         <div className="font-serif text-[17px] text-ink">
-                          {wine.producer}, {wine.name}
+                          {wineTitle(wine.producer, wine.name, ", ")}
                         </div>
                         <div className="mt-2xs flex items-center gap-xs text-[12px] text-grey">
                           <span className="font-mono text-grey">
@@ -466,7 +467,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
           <div className="min-h-0 overflow-y-auto overscroll-contain px-lg py-md">
             <div className="rounded-md border border-rule bg-wash px-md py-sm">
               <div className="font-serif text-[17px] font-medium text-ink">
-                {selected.producer}, {selected.name}
+                {wineTitle(selected.producer, selected.name, ", ")}
               </div>
               <div className="mt-2xs text-[12px] text-grey">
                 {selected.vintage ?? "NV"}

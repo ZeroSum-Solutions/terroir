@@ -10,6 +10,7 @@ import { getYearsUntilWindowClose } from "@/lib/drink-window/status";
 import type { DrinkWindowAlertRow } from "@/lib/drink-window/alerts";
 import { WineThumb } from "@/components/wine-thumb";
 import { metricHref } from "./metric-href";
+import { wineTitle } from "@/lib/wine-display-name";
 
 /**
  * BND-039 — BriefingAlertCard
@@ -25,13 +26,23 @@ import { metricHref } from "./metric-href";
  * Actions:
  *   • View bottles → deep-link to /cellar?wine={id} (Cellar opens drawer)
  *   • Snooze 30 days → POST /api/wines/{id}/snooze-alert + refresh
+ *
+ * SD-24: that POST is `requireRole(["owner", "manager"])`, so the button is
+ * rendered only for `canManage`. Reading the alert is membership-only and is
+ * unchanged — the same split /reconcile-queue and /bins already make.
  */
 
 // Type re-export for back-compat. The canonical shape lives in
 // @/lib/drink-window/alerts (DrinkWindowAlertRow) and is the same here.
 export type DrinkWindowAlert = DrinkWindowAlertRow;
 
-export function BriefingAlertCard({ alert }: { alert: DrinkWindowAlert }) {
+export function BriefingAlertCard({
+  alert,
+  canManage,
+}: {
+  alert: DrinkWindowAlert;
+  canManage: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -97,7 +108,7 @@ export function BriefingAlertCard({ alert }: { alert: DrinkWindowAlert }) {
           <h3 className="font-serif text-[18px] text-ink md:text-[20px]">
             <span className="tabular">{alert.bottle_count}</span> bottle{alert.bottle_count === 1 ? "" : "s"} of{" "}
             <em className="font-medium italic">
-              {alert.producer}, {alert.name}
+              {wineTitle(alert.producer, alert.name, ", ")}
               {alert.vintage ? ` ${alert.vintage}` : ""}
             </em>{" "}
             {alert.bottle_count === 1 ? "is" : "are"} entering {alert.bottle_count === 1 ? "its" : "their"} final drinking window.
@@ -134,17 +145,19 @@ export function BriefingAlertCard({ alert }: { alert: DrinkWindowAlert }) {
               View {alert.bottle_count} bottle{alert.bottle_count === 1 ? "" : "s"}
               <ChevronRight className="h-4 w-4" strokeWidth={2} aria-hidden />
             </Link>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onSnooze}
-              className={cn(
-                "inline-flex min-h-11 items-center gap-xs rounded-pill px-md text-[13px] font-medium text-grey hover:bg-wash focus-ring disabled:opacity-60",
-              )}
-            >
-              <X className="h-4 w-4" strokeWidth={2} aria-hidden />
-              {busy ? "Snoozing…" : "Snooze 30 days"}
-            </button>
+            {canManage && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onSnooze}
+                className={cn(
+                  "inline-flex min-h-11 items-center gap-xs rounded-pill px-md text-[13px] font-medium text-grey hover:bg-wash focus-ring disabled:opacity-60",
+                )}
+              >
+                <X className="h-4 w-4" strokeWidth={2} aria-hidden />
+                {busy ? "Snoozing…" : "Snooze 30 days"}
+              </button>
+            )}
           </div>
 
           {errorMsg && (

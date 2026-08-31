@@ -102,6 +102,26 @@ describe("without a reference match", () => {
     expect(el.textContent).toContain("6 on hand");
     expect(headings(el)).toContain("In your cellar");
   });
+
+  // BUG-01's other half. The same CSV import left 321 production wines — 23%
+  // of that cellar — with an EMPTY producer, and `0137` deliberately left them
+  // empty rather than guess. Naming that blank left a hole in the sentence:
+  // "No reference entry matched  closely enough to trust".
+  it("names the bottle instead of a hole when the wine has no producer", async () => {
+    const el = await render({ ...BASE, wine: { ...WINE, producer: "" } });
+    expect(el.textContent).toContain(
+      "No reference entry matched this wine closely enough to trust",
+    );
+    expect(el.textContent).not.toContain("matched  closely");
+    expect(el.textContent).not.toContain("matched closely");
+  });
+
+  it("still names the producer when there is one", async () => {
+    const el = await render(BASE);
+    expect(el.textContent).toContain(
+      "No reference entry matched Penfolds closely enough to trust",
+    );
+  });
 });
 
 describe("corpus imagery in the hero", () => {

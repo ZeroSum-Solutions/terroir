@@ -46,6 +46,7 @@ import {
   distributorSpendShare,
   summarizeDistributorMetrics,
 } from "./distributor-metrics";
+import { wineTitle } from "@/lib/wine-display-name";
 
 type NullableDateRange = { range?: string; from?: string; to?: string };
 type SearchParams = Promise<NullableDateRange>;
@@ -134,7 +135,7 @@ export default async function DashboardPage({
       return null;
     }),
   ]);
-  const canEnrich = userRole === "owner" || userRole === "manager";
+  const canManage = userRole === "owner" || userRole === "manager";
 
   // ── Build scan query, conditionally filtering by date range ─────────
   let scanQuery = supabase
@@ -398,7 +399,7 @@ export default async function DashboardPage({
           sections (yield, health, plays) follow it. */}
 
       {/* Drink-window watch */}
-      {(drinkWindowAlerts.length > 0 || canEnrich) && (
+      {(drinkWindowAlerts.length > 0 || canManage) && (
         <section className="mb-xl md:mb-3xl" aria-labelledby="dw-watch-heading">
           <div className="mb-md flex flex-wrap items-baseline justify-between gap-sm">
             <h2
@@ -429,7 +430,7 @@ export default async function DashboardPage({
             <div className="flex flex-col gap-md">
               {visibleDrinkWindowAlerts.map(function (alert) {
                 return (
-                  <BriefingAlertCard key={alert.wine_id} alert={alert} />
+                  <BriefingAlertCard key={alert.wine_id} alert={alert} canManage={canManage} />
                 );
               })}
               {drinkWindowAlerts.length > visibleDrinkWindowAlerts.length && (
@@ -442,7 +443,7 @@ export default async function DashboardPage({
               )}
             </div>
           )}
-          {canEnrich && (
+          {canManage && (
             <div className="mt-md flex flex-col items-start gap-md md:flex-row md:items-start">
               <EnrichCellarButton />
               <RefreshRetailButton />
@@ -485,11 +486,8 @@ export default async function DashboardPage({
                         className={`hover:bg-wash ${i > 0 ? "border-t border-rule" : ""}`}
                       >
                         <td className="px-sm py-sm">
-                          <Link
-                            href={metricHref("wine", w.wine_id)}
-                            className="font-serif text-[17px] font-medium text-ink hover:text-accent transition-colors"
-                          >
-                            {w.producer} {w.name}
+                          <Link href={metricHref("wine", w.wine_id)} className="font-serif text-[17px] font-medium text-ink hover:text-accent transition-colors">
+                            {wineTitle(w.producer, w.name)}
                           </Link>
                           {w.bin_location && (
                             <div className="mt-0.5 text-[11px] font-light text-grey">
@@ -532,12 +530,12 @@ export default async function DashboardPage({
       <CellarHealthPanel
         summary={cellarHealthSummary}
         unscored={cellarHealthUnscored}
-        canRecompute={canEnrich}
+        canRecompute={canManage}
       />
       {pricingRecommendations !== null && (
         <PricingPlaysSection
           recommendations={pricingRecommendations}
-          canRecompute={canEnrich}
+          canRecompute={canManage}
           recomputeBlockedReason={
             (cellarHealthRows ?? []).length === 0
               ? "Needs cellar health data — recompute cellar health first."
@@ -560,7 +558,7 @@ export default async function DashboardPage({
               {pricingAlerts.length} alert{pricingAlerts.length === 1 ? "" : "s"}
             </span>
           </div>
-          <PricingReviewCard alerts={pricingAlerts} />
+          <PricingReviewCard alerts={pricingAlerts} canManage={canManage} />
         </section>
       )}
 
@@ -570,7 +568,7 @@ export default async function DashboardPage({
           <h2 id="snoozed-heading" className="sr-only">
             Snoozed alerts
           </h2>
-          <SnoozedAlertsCard snoozed={snoozedRows} />
+          <SnoozedAlertsCard snoozed={snoozedRows} canManage={canManage} />
         </section>
       )}
 
@@ -926,19 +924,19 @@ function buildTodayExceptions(
     ...drinkWindowAlerts.map((alert) => ({
       wineId: alert.wine_id,
       kind: "drink-window" as const,
-      title: `${alert.producer} ${alert.name}${alert.vintage ? ` ${alert.vintage}` : ""}`,
+      title: `${wineTitle(alert.producer, alert.name)}${alert.vintage ? ` ${alert.vintage}` : ""}`,
       detail: `${alert.bottle_count} bottle${alert.bottle_count === 1 ? "" : "s"} · window ends ${alert.drink_window_end ?? "soon"}`,
     })),
     ...pastDrinkWindowWines.map((wine) => ({
       wineId: wine.wine_id,
       kind: "past-window" as const,
-      title: `${wine.producer} ${wine.name}${wine.vintage ? ` ${wine.vintage}` : ""}`,
+      title: `${wineTitle(wine.producer, wine.name)}${wine.vintage ? ` ${wine.vintage}` : ""}`,
       detail: `${wine.bottle_count} bottle${wine.bottle_count === 1 ? "" : "s"} · ended ${wine.drink_window_end ?? "earlier"}`,
     })),
     ...pricingAlerts.map((alert) => ({
       wineId: alert.wine_id,
       kind: "pricing" as const,
-      title: `${alert.producer} ${alert.name}${alert.vintage ? ` ${alert.vintage}` : ""}`,
+      title: `${wineTitle(alert.producer, alert.name)}${alert.vintage ? ` ${alert.vintage}` : ""}`,
       detail: "Bottle or glass pricing is outside its target",
     })),
   ];

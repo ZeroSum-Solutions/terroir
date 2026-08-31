@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CellarWineRow } from "./types";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 /**
  * OPP-1 (wave 0, EV-1.1) — lineage grouping. Wines sharing a lineage
@@ -125,7 +126,7 @@ export function LineageBlockList({
                   {block.producer}
                 </span>
                 <span className="block truncate font-serif text-[17px] font-medium text-ink">
-                  {block.name}
+                  {wineDisplayName(block.producer, block.name)}
                 </span>
               </span>
               <span

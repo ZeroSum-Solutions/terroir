@@ -5,6 +5,7 @@ import { Field } from "@/components/field";
 import { ML_PER_OZ } from "@/lib/units";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
+import { wineTitle } from "@/lib/wine-display-name";
 
 type PourItem = OpenBottleRow;
 
@@ -73,7 +74,7 @@ export function PourPickerModal({ item, defaultOz, onCancel, onConfirm }: Props)
     >
       <div className="w-full max-w-[420px] rounded-card card-surface p-lg">
         <h2 id={headingId} className="font-serif text-[18px] font-medium text-ink">
-          {item.producer} {item.name}
+          {wineTitle(item.producer, item.name)}
         </h2>
         <p className="mt-xs text-[12px] text-grey">Pick a pour size</p>
 

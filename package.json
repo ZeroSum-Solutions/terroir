@@ -38,7 +38,11 @@
     "atlas:geo": "tsx scripts/build-atlas-geo.ts",
     "supabase:seed:local": "node scripts/seed-local-supabase.mjs",
     "supabase:seed:local:apply": "node scripts/seed-local-supabase.mjs --confirm",
-    "supabase:seed:local:teardown": "node scripts/seed-local-supabase.mjs --teardown --confirm"
+    "supabase:seed:local:teardown": "node scripts/seed-local-supabase.mjs --teardown --confirm",
+    "prodshape:plan": "scripts/local/prodshape.sh",
+    "prodshape:seed": "scripts/local/prodshape.sh --confirm",
+    "prodshape:check": "scripts/local/prodshape.sh --check",
+    "prodshape:teardown": "scripts/local/prodshape.sh --teardown --confirm"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

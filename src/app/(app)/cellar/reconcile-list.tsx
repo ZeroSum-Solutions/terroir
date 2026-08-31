@@ -10,7 +10,7 @@ import {
 } from "@/lib/reconciliation/variance";
 import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
-import { wineDisplayName } from "@/lib/wine-display-name";
+import { wineTitle } from "@/lib/wine-display-name";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 
 type ReconcileItem = OpenBottleRow;
@@ -181,7 +181,7 @@ function ReconcileRow({
               href={`/cellar?wine=${item.wine_id}`}
               className="flex min-h-11 items-center rounded-md font-serif text-[17px] font-medium text-ink leading-snug transition-colors hover:text-accent focus-ring"
             >
-              {item.producer} {wineDisplayName(item.producer, item.name)}
+              {wineTitle(item.producer, item.name)}
               {item.vintage !== null && (
                 <span className="ml-xs font-sans text-[12px] font-light text-grey">
                   {item.vintage}

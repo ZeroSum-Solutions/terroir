@@ -17,6 +17,14 @@ export type PreviewCounts = {
   canConfirm: boolean;
   effectivePassingValidationRows: number;
   effectiveErrorRows: number;
+  /** SD-41: how many rows will actually IMPORT with no producer — the
+   * number the operator acknowledges and confirm gates on. Derived exactly
+   * like effectivePassingValidationRows (an inline fix counted in, a
+   * skipped chunk counted out) rather than read off `summary`, because
+   * confirm re-derives its own count WITH the operator's overrides applied
+   * and would otherwise disagree with what the checkbox claims. See
+   * producer-acknowledgement.ts. */
+  effectiveMissingProducerRows: number;
 };
 
 export function computePreviewCounts({
@@ -53,13 +61,18 @@ export function computePreviewCounts({
   // chunk's rows were never sent, and never will be, so counting a
   // client-side "fix" toward "Passing validation"/the "row(s) fixed"
   // caption below would inflate what's actually going to import.
-  const fixedRowNumbers = new Set(
-    errorRows
-      .filter((row) => !isRowSkipped?.(row.rowNumber))
-      .filter((row) => validateFields({ ...row.rawText, ...rowOverrides[row.rowNumber] }).state === "valid")
-      .map((row) => row.rowNumber),
-  );
-  const fixedCount = fixedRowNumbers.size;
+  const fixedRows = errorRows
+    .filter((row) => !isRowSkipped?.(row.rowNumber))
+    .map((row) => validateFields({ ...row.rawText, ...rowOverrides[row.rowNumber] }))
+    .filter((result) => result.state === "valid");
+  const fixedCount = fixedRows.length;
+  // SD-41: a row the operator fixed into validity is a row that will now
+  // IMPORT — so if the fix left the producer blank, it joins the count
+  // confirm gates on. validateFields already decides that (ValidRow.
+  // producerMissing), which is the same predicate the server uses.
+  const fixedMissingProducerCount = fixedRows.filter(
+    (result) => result.state === "valid" && result.producerMissing,
+  ).length;
   const canConfirm = summary.validRows > 0 || fixedCount > 0;
   // finding 5: the summary stat tiles below used to render `summary`
   // verbatim — the ORIGINAL server-computed counts, frozen at preview
@@ -103,10 +116,15 @@ export function computePreviewCounts({
   // handling: this is a live re-derivation from the CURRENT chunkUpload
   // state on every render, so a chunk leaving "skipped" (handleUndoSkip)
   // simply drops out of this sum on the next render, restoring the count.
-  const skippedValidRowCount = (chunkUpload ?? [])
-    .filter((c) => c.status === "skipped")
-    .reduce((sum, c) => sum + (chunkBreakdown?.find((cb) => cb.index === c.index)?.summary.validRows ?? 0), 0);
-  const effectivePassingValidationRows = summary.validRows + fixedCount - skippedValidRowCount;
+  const skippedChunks = (chunkUpload ?? []).filter((c) => c.status === "skipped");
+  const skippedSum = (key: "validRows" | "missingProducerRows") =>
+    skippedChunks.reduce((sum, c) => sum + (chunkBreakdown?.find((cb) => cb.index === c.index)?.summary[key] ?? 0), 0);
+  const effectivePassingValidationRows = summary.validRows + fixedCount - skippedSum("validRows");
   const effectiveErrorRows = summary.errorRows - fixedCount;
-  return { fixedCount, canConfirm, effectivePassingValidationRows, effectiveErrorRows };
+  // SD-41: same three terms as effectivePassingValidationRows, for exactly
+  // the same reasons — a skipped chunk's rows are never sent, so its blank
+  // producers are not something to acknowledge.
+  const effectiveMissingProducerRows =
+    summary.missingProducerRows + fixedMissingProducerCount - skippedSum("missingProducerRows");
+  return { fixedCount, canConfirm, effectivePassingValidationRows, effectiveErrorRows, effectiveMissingProducerRows };
 }

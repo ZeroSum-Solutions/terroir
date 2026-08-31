@@ -137,14 +137,54 @@ describe("bottleScanReducer", () => {
     expect(next.confirming).toBe(false);
   });
 
-  it("location-confirm-failed goes to error and clears confirming, leaving the session alone", () => {
+  /**
+   * SD-10 — a failed bin save used to switch to the `error` phase, whose view
+   * is headed "Lookup failed" (a different failure entirely) and whose only
+   * way out is "Try again" → `scan-again`, which throws away the wine, the
+   * section and the bin the operator had just typed. The failure is now shown
+   * in place, exactly the way `searchError` is during `correcting`.
+   */
+  it("location-confirm-failed reports in place and keeps the typed bin", () => {
     const scan = { wine: wine(), section: "Red Room", binLocation: "A-1" };
-    const seeded: BottleScanState = { ...initialBottleScanState, confirming: true, session: [scan] };
-    const next = bottleScanReducer(seeded, { type: "location-confirm-failed", message: "failed" });
-    expect(next.phase).toBe("error");
-    expect(next.error).toBe("failed");
+    const seeded: BottleScanState = {
+      ...initialBottleScanState,
+      phase: "location",
+      wine: wine(),
+      section: "Red Room",
+      binLocation: "A-1",
+      confirming: true,
+      session: [scan],
+    };
+    const next = bottleScanReducer(seeded, { type: "location-confirm-failed", message: "Bin already full." });
+    expect(next.phase).toBe("location");
+    expect(next.locationError).toBe("Bin already full.");
+    expect(next.error).toBeNull();
     expect(next.confirming).toBe(false);
+    expect(next.wine).toEqual(wine());
+    expect(next.section).toBe("Red Room");
+    expect(next.binLocation).toBe("A-1");
     expect(next.session).toEqual([scan]);
+  });
+
+  it("editing either location field clears a stale save error", () => {
+    const seeded: BottleScanState = {
+      ...initialBottleScanState,
+      phase: "location",
+      locationError: "Bin already full.",
+    };
+    expect(bottleScanReducer(seeded, { type: "section-changed", value: "Cave" }).locationError).toBeNull();
+    expect(bottleScanReducer(seeded, { type: "bin-location-changed", value: "B-2" }).locationError).toBeNull();
+  });
+
+  it("starting a new location entry and a successful save both clear the error", () => {
+    const seeded: BottleScanState = {
+      ...initialBottleScanState,
+      phase: "location",
+      locationError: "Bin already full.",
+    };
+    expect(bottleScanReducer(seeded, { type: "location-entry-started" }).locationError).toBeNull();
+    const scan = { wine: wine(), section: "Red Room", binLocation: "A-1" };
+    expect(bottleScanReducer(seeded, { type: "location-confirmed", scan }).locationError).toBeNull();
   });
 
   it("scan-again resets the capture form but preserves the session", () => {

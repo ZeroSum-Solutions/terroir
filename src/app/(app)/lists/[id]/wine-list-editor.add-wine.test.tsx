@@ -110,7 +110,7 @@ function editorProps(): React.ComponentProps<typeof WineListEditor> {
     },
     sections: [section("section-sparkling", "Sparkling"), section("section-red", "Red")],
     brandKit: null,
-    canManageBranding: false,
+    canManage: true,
   };
 }
 

@@ -11,6 +11,7 @@ import {
 } from "@/lib/pricing/status";
 import type { PricingAlertRow } from "@/lib/pricing/alerts";
 import { metricHref } from "./metric-href";
+import { wineTitle } from "@/lib/wine-display-name";
 
 /**
  * BND-040 — PricingReviewCard
@@ -24,9 +25,19 @@ import { metricHref } from "./metric-href";
  *   • Per-row reason: small print "tight margin · drink window closes 4 yrs"
  *   • Actions: View bottles deep-link, Quick adjust → list editor, Snooze 30d
  *   • No "$X opportunity" framing — fine dining is calm
+ *
+ * SD-24: Snooze POSTs to /api/wines/{id}/dismiss-pricing-alert, which is
+ * `requireRole(["owner", "manager"])`. The control is rendered only for
+ * `canManage`; the review itself stays readable for every member.
  */
 
-export function PricingReviewCard({ alerts }: { alerts: PricingAlertRow[] }) {
+export function PricingReviewCard({
+  alerts,
+  canManage,
+}: {
+  alerts: PricingAlertRow[];
+  canManage: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -98,6 +109,7 @@ export function PricingReviewCard({ alerts }: { alerts: PricingAlertRow[] }) {
             key={alert.wine_list_item_id}
             alert={alert}
             busy={busy[alert.wine_id] ?? false}
+            canManage={canManage}
             onSnooze={() => onSnooze(alert.wine_id)}
           />
         ))}
@@ -126,10 +138,12 @@ export function PricingReviewCard({ alerts }: { alerts: PricingAlertRow[] }) {
 function PricingReviewRow({
   alert,
   busy,
+  canManage,
   onSnooze,
 }: {
   alert: PricingAlertRow;
   busy: boolean;
+  canManage: boolean;
   onSnooze: () => void;
 }) {
   // Build the reason string from status fields. Multiple triggers
@@ -159,7 +173,7 @@ function PricingReviewRow({
     >
       <div className="min-w-0 flex-1">
         <span className="font-serif text-[17px] font-medium text-ink">
-          {alert.producer}, {alert.name}
+          {wineTitle(alert.producer, alert.name, ", ")}
         </span>
         {alert.vintage && (
           <span className="ml-xs text-[11px] font-light text-grey">
@@ -181,15 +195,21 @@ function PricingReviewRow({
           Review
           <ChevronRight className="h-3 w-3" strokeWidth={2} aria-hidden />
         </Link>
-        <button
-          type="button"
-          onClick={onSnooze}
-          disabled={busy}
-          aria-label="Snooze 30 days"
-          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-pill text-grey hover:bg-wash focus-ring disabled:opacity-60"
-        >
-          <X className="h-3 w-3" strokeWidth={2} aria-hidden />
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            onClick={onSnooze}
+            disabled={busy}
+            aria-label="Snooze 30 days"
+            // 30x30 before this — the one control in the app under the 44px
+            // floor by design rather than by accident, and the one that
+            // dismisses an alert: a mis-tap costs the sommelier that alert for
+            // 30 days. Layout only; the SD-24 role gate above is untouched.
+            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:bg-wash focus-ring disabled:opacity-60"
+          >
+            <X className="h-3 w-3" strokeWidth={2} aria-hidden />
+          </button>
+        )}
       </div>
     </li>
   );

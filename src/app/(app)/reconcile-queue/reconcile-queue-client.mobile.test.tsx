@@ -38,7 +38,7 @@ describe("ReconcileQueueClient mobile rendering", () => {
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    await act(async () => root.render(<ReconcileQueueClient />));
+    await act(async () => root.render(<ReconcileQueueClient canManage />));
 
     await vi.waitFor(() => {
       expect(container.querySelectorAll("[data-queue-row]")).toHaveLength(25);

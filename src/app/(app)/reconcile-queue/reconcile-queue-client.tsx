@@ -8,14 +8,14 @@ import type { QueueResponse } from "./types";
 
 const QUEUE_PAGE_SIZE = 25;
 
-export function ReconcileQueueClient() {
+export function ReconcileQueueClient({ canManage }: { canManage: boolean }) {
   const queue = useQueueData();
   if (queue.loading) return <QueueLoading />;
   if (queue.error || !queue.data) return <QueueError message={queue.error ?? "Queue unavailable."} retry={queue.reload} />;
-  return <LoadedQueue data={queue.data} reload={queue.reload} />;
+  return <LoadedQueue data={queue.data} reload={queue.reload} canManage={canManage} />;
 }
 
-function LoadedQueue({ data, reload }: { data: QueueResponse; reload: () => Promise<void> }) {
+function LoadedQueue({ data, reload, canManage }: { data: QueueResponse; reload: () => Promise<void>; canManage: boolean }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [binByIssue, setBinByIssue] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -49,7 +49,7 @@ function LoadedQueue({ data, reload }: { data: QueueResponse; reload: () => Prom
     const id = data.latest_batch?.id;
     if (id) void mutate("/api/reconcile-queue/undo", { batch_id: id }, "Latest batch undone");
   };
-  return <QueueView data={data} rows={rows} ready={ready} selected={selected} selectedRows={selectedRows} binByIssue={binByIssue} busy={busy} message={message} mutationError={mutationError} accept={accept} undo={undo} setSelected={setSelected} setBinByIssue={setBinByIssue} />;
+  return <QueueView data={data} rows={rows} ready={ready} selected={selected} selectedRows={selectedRows} binByIssue={binByIssue} busy={busy} message={message} mutationError={mutationError} canManage={canManage} accept={accept} undo={undo} setSelected={setSelected} setBinByIssue={setBinByIssue} />;
 }
 
 type QueueViewProps = {
@@ -62,6 +62,7 @@ type QueueViewProps = {
   busy: boolean;
   message: string | null;
   mutationError: string | null;
+  canManage: boolean;
   accept: () => void;
   undo: () => void;
   setSelected: React.Dispatch<React.SetStateAction<Set<string>>>;
@@ -69,7 +70,7 @@ type QueueViewProps = {
 };
 
 function QueueView(props: QueueViewProps) {
-  const { data, rows, ready, selectedRows, selected, binByIssue, busy } = props;
+  const { data, rows, ready, selectedRows, selected, binByIssue, busy, canManage } = props;
   const paginationKey = rows.map((row) => row.id).join("\u0000");
   const [pagination, setPagination] = useState({
     key: paginationKey,
@@ -80,7 +81,7 @@ function QueueView(props: QueueViewProps) {
   const visibleRows = rows.slice(0, visibleCount);
   return (
     <>
-      <QueueHeader summary={data.summary} latestBatch={data.latest_batch} busy={busy} undo={props.undo} />
+      <QueueHeader summary={data.summary} latestBatch={canManage ? data.latest_batch : null} busy={busy} undo={props.undo} />
       {(props.message || props.mutationError) && <StatusBanner message={props.message} error={props.mutationError} />}
       {rows.length === 0 ? <QueueEmpty /> : (
         <div className="overflow-hidden rounded-card card-surface">
@@ -92,6 +93,7 @@ function QueueView(props: QueueViewProps) {
             binId={binByIssue[row.id]}
             checked={selected.has(row.id)}
             disabled={busy}
+            canManage={canManage}
             onBinChange={(binId) => props.setBinByIssue((current) => ({ ...current, [row.id]: binId }))}
             onToggle={() => props.setSelected((current) => toggleId(current, row.id))}
           />
@@ -113,7 +115,7 @@ function QueueView(props: QueueViewProps) {
           {visibleRows.length} of {rows.length}
         </button>
       )}
-      {rows.length > 0 && (
+      {canManage && rows.length > 0 && (
         <BulkRail
           busy={busy}
           selectedCount={selectedRows.length}
@@ -174,13 +176,26 @@ function QueueHeader({ summary, latestBatch, busy, undo }: { summary: QueueRespo
   );
 }
 
+/**
+ * GLOBAL-01 — the bulk rail, minus the count it was already saying twice.
+ *
+ * Measured on the running app at 390px against the production-shaped tenant
+ * (e2e/one-row-rule.test.ts): "Select actionable (51)" 147px + "51 selected"
+ * 56px + "Accept 51 items" 146px is 349px of content plus 24px of gaps against
+ * 354px of rail, so the accept button wrapped onto a second line. The demo
+ * tenant's shorter labels happened to fit, which is why nothing had noticed.
+ *
+ * The read-out was the control to lose: "Accept 51 items" already states the
+ * selected count, on the button that acts on it, so the standalone span was
+ * the same number a second time. Two controls, 305px, one line — and the label
+ * only grows one digit at a time from here.
+ */
 function BulkRail({ busy, selectedCount, readyCount, allReadySelected, accept, toggleAll }: { busy: boolean; selectedCount: number; readyCount: number; allReadySelected: boolean; accept: () => void; toggleAll: () => void }) {
   return (
-    <div className="glass sticky bottom-[calc(var(--chrome-tabbar-total)+var(--spacing-xs))] z-[var(--z-sticky)] mt-md flex flex-wrap items-center justify-between gap-sm rounded-lg px-sm py-sm md:bottom-md md:px-md">
+    <div data-bulk-rail className="glass sticky bottom-[calc(var(--chrome-tabbar-total)+var(--spacing-xs))] z-[var(--z-sticky)] mt-md flex flex-wrap items-center justify-between gap-sm rounded-lg px-sm py-sm md:bottom-md md:px-md">
       <button type="button" onClick={toggleAll} disabled={busy || readyCount === 0} className="h-11 rounded-pill px-sm text-[13px] font-medium text-grey hover:bg-wash focus-ring disabled:opacity-40">
         {allReadySelected ? "Clear actionable" : `Select actionable (${readyCount})`}
       </button>
-      <span className="text-[12px] tabular text-grey">{selectedCount} selected</span>
       <button type="button" onClick={accept} disabled={busy || selectedCount === 0} className="flex h-11 items-center gap-xs rounded-pill bg-primary px-md text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-45">
         {busy ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={1.75} aria-hidden /> : <Check className="h-4 w-4" strokeWidth={2} aria-hidden />}
         Accept {selectedCount} item{selectedCount === 1 ? "" : "s"}

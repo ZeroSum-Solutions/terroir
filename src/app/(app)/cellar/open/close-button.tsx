@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { XCircle } from "lucide-react";
+import { readApiError } from "@/lib/api/client-error";
+import { useToast } from "@/lib/toast";
 
 interface Props {
   bottleId: string;
@@ -15,11 +17,17 @@ interface Props {
  * Shows a two-step confirmation to prevent accidental discards.
  * First click: "Close bottle" → "Confirm discard?"
  * Second click: calls POST /api/open-bottles/[id]/close, refreshes the page.
+ *
+ * SD-06: a refused close used to be console.error'd and the confirm state
+ * reset — the bottle stayed open, the page did not move, and nothing said
+ * why. The failure now reaches the operator through the same toast every
+ * other cellar mutation uses (see cellar-list.tsx).
  */
 export function CloseBottleButton({ bottleId, remainingOz }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const toast = useToast();
 
   const handleClose = () => {
     if (!confirming) {
@@ -37,12 +45,16 @@ export function CloseBottleButton({ bottleId, remainingOz }: Props) {
         if (res.ok) {
           router.refresh();
         } else {
-          const body = await res.json().catch(() => ({}));
-          console.error("Close bottle failed:", body);
+          const body = await res.json().catch(() => null);
+          toast.error(
+            readApiError(body, `Couldn't close the bottle (${res.status}).`).message,
+          );
           setConfirming(false);
         }
       } catch (err) {
-        console.error("Close bottle error:", err);
+        toast.error(
+          err instanceof Error ? err.message : "Couldn't close the bottle.",
+        );
         setConfirming(false);
       }
     });

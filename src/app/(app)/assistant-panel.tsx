@@ -21,6 +21,7 @@ import type {
   AssistantCorpusWine,
   AssistantResponse,
 } from "@/lib/wine-intelligence/assistant-types";
+import { wineTitle } from "@/lib/wine-display-name";
 
 const EXAMPLES = [
   "a bold red that pairs with beef",
@@ -351,8 +352,7 @@ function CellarResult({
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline justify-between gap-sm">
           <span className="text-control text-ink">
-            {wine.producer ? `${wine.producer} ` : ""}
-            {wine.name}
+            {wineTitle(wine.producer, wine.name)}
             {wine.vintage ? ` ${wine.vintage}` : ""}
           </span>
           {wine.price != null ? (

@@ -151,8 +151,20 @@ red. Correct their drift in place if you correct it at all; do not relocate them
   ("Bérêche & Fils" vs the catalog's "Bereche et Fils") — and an unrepaired row
   is the correct outcome there, because a wrong producer is worse than a
   missing one.
-  **The import path still accepts a blank producer without warning**, which is
-  how this happened; nothing yet prevents a repeat.
+  **The import path now GATES a blank producer instead of silently accepting
+  one (SD-41).** It still accepts it — a real Binwise/BevSpot/CellarTracker
+  export legitimately has no producer column, and rejecting those rows would
+  reject the file — but confirm refuses unless the request carries an explicit
+  `acknowledgedMissingProducerRows` count that is at least the count confirm
+  re-derives for itself. The preview's old `role="status"` warning is now a
+  checkbox that disables Confirm until ticked. The enforcement lives in
+  `src/domains/import/producer-acknowledgement.ts` (which also records why
+  rejecting the row, and why write-time recovery via
+  `src/lib/wine-intelligence/producer-from-name.ts`, were both rejected), is
+  called from `confirmImportBatch` before a single row is persisted, and is
+  deliberately NOT part of `content_sha256`. **This changed the import UX: an
+  operator importing a producer-less file must now tick a box.** What a
+  successful import *produces* is unchanged — same rows, same `producer: ""`.
   **Do not expect a local checkout to match those production numbers, and do not
   read this as a closed incident.** `0137` is a *repair*, not a guard: it fixes
   rows that already exist and does nothing to the code path that creates them. Any
@@ -162,7 +174,8 @@ red. Correct their drift in place if you correct it at all; do not relocate them
   `producer`, a null `colour`, and a null `hero_image_url`**, alongside the
   250-wine `LOCAL SEED - Osteria Scala` demo set. If your local numbers look like
   the pre-`0137` production ones, that is the expected outcome, not a broken
-  checkout — and it is the standing argument for an import-time guard.
+  checkout — it is the data the import-time guard above was built for, and it
+  is still there: the guard stops the NEXT one, it repairs nothing.
   **The CSV import path (`apply_import_batch_chunk`) is still unresolved by
   design** — the P2 plan (§9/§12) puts that call in P3's TypeScript caller, once
   per batch of unique variants, before the per-row loop. The import dedup key is

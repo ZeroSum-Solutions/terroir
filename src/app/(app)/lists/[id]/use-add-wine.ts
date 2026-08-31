@@ -6,6 +6,7 @@ import type {
   WineListEditorItem,
   WineListEditorSection,
 } from "./wine-list-editor.types";
+import { wineTitle } from "@/lib/wine-display-name";
 
 /**
  * LIST-06 — adding a wine to a list did not register.
@@ -206,7 +207,7 @@ export function useAddWine({
 
       const nameOf = (id: string) =>
         sections.find((section) => section.id === id)?.name ?? "this section";
-      const wineName = `${request.wine.producer}, ${request.wine.name}`.replace(
+      const wineName = `${wineTitle(request.wine.producer, request.wine.name, ", ")}`.replace(
         /^, /,
         "",
       );

@@ -9,8 +9,9 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
-import { wineDisplayName } from "@/lib/wine-display-name";
+import { wineTitle } from "@/lib/wine-display-name";
 import { PriceStepper } from "./price-stepper";
+import { NameEdit, NameEditField } from "./wine-row-name";
 
 type Wine = {
   id: string;
@@ -56,6 +57,8 @@ type PourValue = number | "fixed" | "picker" | null;
 
 interface SortableWineRowProps {
   item: ListItem;
+  /** SD-12: every control below writes through an owner/manager-only route. */
+  canManage: boolean;
   onDelete: (id: string) => void;
   onPriceChange: (id: string, field: "glass_price" | "bottle_price", value: number | null) => void;
   onPourChange: (id: string, field: PourField, value: PourValue) => void;
@@ -66,6 +69,7 @@ interface SortableWineRowProps {
 
 interface WineRowProps {
   item: ListItem;
+  canManage: boolean;
   onDelete: (id: string) => void;
   onPriceChange: (id: string, field: "glass_price" | "bottle_price", value: number | null) => void;
   onPourChange: (id: string, field: PourField, value: PourValue) => void;
@@ -73,97 +77,6 @@ interface WineRowProps {
   onBlurbChange: (id: string, value: string | null) => void;
   onHiddenChange: (id: string, value: boolean) => void;
   dragHandleProps?: Record<string, unknown>;
-}
-
-/**
- * BND-169: inline click-to-edit for the list item's display name.
- * When name_override is set, it replaces the wine name on the public
- * list. When null, the original wine name is used.
- */
-function NameEditField({
-  item,
-  onNameChange,
-  onDone,
-}: {
-  item: ListItem;
-  onNameChange: (id: string, value: string | null) => void;
-  onDone: () => void;
-}) {
-  const [draft, setDraft] = useState(item.name_override ?? "");
-
-  const commit = () => {
-    onDone();
-    const trimmed = draft.trim();
-    if (trimmed === "" || trimmed === item.wines.name) {
-      // Blank or matching original → clear override (use wine name)
-      onNameChange(item.id, null);
-    } else {
-      onNameChange(item.id, trimmed);
-    }
-  };
-
-  return (
-    <input
-      autoFocus
-      type="text"
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") commit();
-        if (e.key === "Escape") onDone();
-      }}
-      placeholder={item.wines.name}
-      aria-label={`Display name for ${item.wines.name}`}
-      className="min-h-11 w-full rounded-md border-2 border-mark bg-surface px-xs py-2xs font-serif text-[17px] font-medium text-ink focus-ring"
-    />
-  );
-}
-
-function NameEdit({
-  item,
-  onNameChange,
-}: {
-  item: ListItem;
-  onNameChange: (id: string, value: string | null) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-
-  if (!editing) {
-    const displayName =
-      item.name_override ??
-      `${item.wines.producer}, ${wineDisplayName(item.wines.producer, item.wines.name)}`;
-    const isOverridden = item.name_override != null;
-    return (
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className={cn(
-          "min-h-11 rounded-md border border-transparent px-xs py-2xs text-left transition-colors hover:border-rule hover:bg-surface",
-          "font-serif text-[17px] font-medium",
-          isOverridden ? "text-accent italic" : "text-ink",
-        )}
-        title={isOverridden ? "Custom display name (click to edit)" : "Click to set a custom display name"}
-      >
-        {isOverridden ? (
-          <>
-            <span className="line-through text-grey mr-xs text-[12px]">{item.wines.name}</span>
-            {displayName}
-          </>
-        ) : (
-          displayName
-        )}
-      </button>
-    );
-  }
-
-  return (
-    <NameEditField
-      item={item}
-      onNameChange={onNameChange}
-      onDone={() => setEditing(false)}
-    />
-  );
 }
 
 /**
@@ -250,6 +163,7 @@ function PourConfigRow({
 
 export function WineRow({
   item,
+  canManage,
   onDelete,
   onPriceChange,
   onPourChange,
@@ -268,11 +182,11 @@ export function WineRow({
       <div className="group hidden border-b border-rule transition-colors last:border-b-0 hover:bg-wash md:block">
       <div className="grid grid-cols-[28px_40px_1fr_136px_136px_36px] items-center px-lg py-sm">
         <div
-          aria-label="Drag to reorder"
+          aria-label={canManage ? "Drag to reorder" : undefined}
           className="flex min-h-11 min-w-11 cursor-grab items-center justify-center text-grey opacity-0 transition-opacity group-hover:opacity-100"
-          {...dragHandleProps}
+          {...(canManage ? dragHandleProps : {})}
         >
-          <GripVertical className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+          {canManage && <GripVertical className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />}
         </div>
         <WineThumb
           src={wine.hero_image_url}
@@ -282,7 +196,7 @@ export function WineRow({
           size={32}
         />
         <div>
-          <NameEdit item={item} onNameChange={onNameChange} />
+          <NameEdit item={item} onNameChange={onNameChange} canManage={canManage} />
           <div className="mt-2xs flex items-center gap-xs text-[12px] text-grey">
             <span className="font-mono text-grey">
               {wine.vintage ?? "NV"}
@@ -312,6 +226,7 @@ export function WineRow({
           suggested={item.suggested_glass_price}
           label={`glass price for ${wine.name}`}
           onChange={(v) => onPriceChange(item.id, "glass_price", v)}
+          readOnly={!canManage}
           muted
         />
         <PriceStepper
@@ -319,17 +234,23 @@ export function WineRow({
           suggested={item.suggested_bottle_price}
           label={`bottle price for ${wine.name}`}
           onChange={(v) => onPriceChange(item.id, "bottle_price", v)}
+          readOnly={!canManage}
         />
-        <button
-          type="button"
-          aria-label={`Remove ${item.wines.name}`}
-          onClick={() => onDelete(item.id)}
-          className="flex h-11 w-11 items-center justify-center rounded-pill text-grey opacity-0 transition-opacity hover:bg-risk-wash hover:text-risk-ink group-hover:opacity-100"
-        >
-          <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            aria-label={`Remove ${item.wines.name}`}
+            onClick={() => onDelete(item.id)}
+            className="flex h-11 w-11 items-center justify-center rounded-pill text-grey opacity-0 transition-opacity hover:bg-risk-wash hover:text-risk-ink group-hover:opacity-100"
+          >
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+          </button>
+        )}
       </div>
-      {/* Desktop pour-config sub-row (offset to match the wine-name column). */}
+      {/* Desktop pour-config sub-row (offset to match the wine-name column).
+          SD-12: pour size, the guest note and the hide toggle are all item
+          PATCHes, so the whole sub-row is owner/manager. */}
+      {canManage && (
       <div className="hidden border-t border-rule/40 bg-wash/30 px-lg pb-sm pt-xs md:grid md:grid-cols-[28px_40px_1fr]">
         {/* Two spacers, one per leading column above (drag handle, thumbnail),
             so this sub-row stays aligned under the wine's name. */}
@@ -362,6 +283,7 @@ export function WineRow({
           </div>
         </div>
       </div>
+      )}
       </div>
 
       {/* Mobile card */}
@@ -389,7 +311,7 @@ export function WineRow({
                 )}
               >
                 {item.name_override ??
-                  `${wine.producer}, ${wineDisplayName(wine.producer, wine.name)}`}
+                  `${wineTitle(wine.producer, wine.name, ", ")}`}
               </div>
               <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-grey">
                 <span className="rounded-pill bg-surface-sunken px-sm py-2xs font-mono text-[11px] text-ink-soft">
@@ -409,12 +331,16 @@ export function WineRow({
               )}
             </div>
           </Link>
-          <IconButton label={`Rename ${item.wines.name}`} onClick={() => setRenaming(true)} className="shrink-0 rounded-pill text-grey hover:text-accent">
-            <Pencil className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-          </IconButton>
-          <IconButton label={`Remove ${item.wines.name}`} onClick={() => onDelete(item.id)} className="shrink-0 rounded-pill text-grey hover:bg-risk-wash hover:text-risk-ink">
-            <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-          </IconButton>
+          {canManage && (
+            <>
+              <IconButton label={`Rename ${item.wines.name}`} onClick={() => setRenaming(true)} className="shrink-0 rounded-pill text-grey hover:text-accent">
+                <Pencil className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              </IconButton>
+              <IconButton label={`Remove ${item.wines.name}`} onClick={() => onDelete(item.id)} className="shrink-0 rounded-pill text-grey hover:bg-risk-wash hover:text-risk-ink">
+                <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+              </IconButton>
+            </>
+          )}
         </div>
         {renaming && (
           <div className="mt-sm">
@@ -432,6 +358,7 @@ export function WineRow({
                 suggested={item.suggested_glass_price}
                 label={`glass price for ${wine.name}`}
                 onChange={(v) => onPriceChange(item.id, "glass_price", v)}
+                readOnly={!canManage}
                 muted
               />
             </div>
@@ -446,20 +373,24 @@ export function WineRow({
                 suggested={item.suggested_bottle_price}
                 label={`bottle price for ${wine.name}`}
                 onChange={(v) => onPriceChange(item.id, "bottle_price", v)}
+                readOnly={!canManage}
               />
             </div>
           </div>
         </div>
         {/* BND-038: mobile pour-config block. */}
-        <div className="mt-sm border-t border-rule/50 pt-sm">
-          <div className="text-caption uppercase text-grey">
-            Pour
+        {canManage && (
+          <div className="mt-sm border-t border-rule/50 pt-sm">
+            <div className="text-caption uppercase text-grey">
+              Pour
+            </div>
+            <div className="mt-xs">
+              <PourConfigRow item={item} onPourChange={onPourChange} />
+            </div>
           </div>
-          <div className="mt-xs">
-            <PourConfigRow item={item} onPourChange={onPourChange} />
-          </div>
-        </div>
+        )}
         {/* BND-170/171: blurb + hide toggle (mobile) */}
+        {canManage && (
         <div className="mt-sm border-t border-rule/50 pt-sm">
           <div className="text-caption uppercase text-grey">
             Note
@@ -484,6 +415,7 @@ export function WineRow({
             {item.hidden ? "Hidden from list" : "Visible on list"}
           </button>
         </div>
+        )}
       </div>
     </>
   );
@@ -491,6 +423,7 @@ export function WineRow({
 
 export function SortableWineRow({
   item,
+  canManage,
   onDelete,
   onPriceChange,
   onPourChange,
@@ -519,6 +452,7 @@ export function SortableWineRow({
     <div ref={setNodeRef} style={style}>
       <WineRow
         item={item}
+        canManage={canManage}
         onDelete={onDelete}
         onPriceChange={onPriceChange}
         onPourChange={onPourChange}

@@ -7,6 +7,7 @@ import { RouteDataEmpty } from "@/components/route-data-state";
 import { ML_PER_OZ } from "@/lib/units";
 import { cn } from "@/lib/utils";
 import { CloseBottleButton } from "./close-button";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -129,7 +130,7 @@ export default async function OpenBottlesPage() {
                         />
                         <div className="font-serif text-[17px] font-medium text-ink leading-snug min-w-0">
                           {wine?.producer ?? "Unknown"}{" "}
-                          {wine?.name ?? "Unknown"}
+                          {wine ? wineDisplayName(wine.producer, wine.name) : "Unknown"}
                           {wine?.vintage != null && (
                             <span className="font-sans font-light text-grey ml-xs">
                               {wine.vintage}
@@ -187,7 +188,7 @@ export default async function OpenBottlesPage() {
                       <div className="min-w-0">
                         <div className="font-serif text-[17px] font-medium text-ink truncate">
                           {wine?.producer ?? "Unknown"}{" "}
-                          {wine?.name ?? "Unknown"}
+                          {wine ? wineDisplayName(wine.producer, wine.name) : "Unknown"}
                         </div>
                         {wine?.vintage != null && (
                           <div className="text-[12px] text-grey tabular">

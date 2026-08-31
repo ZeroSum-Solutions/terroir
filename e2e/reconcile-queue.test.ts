@@ -123,6 +123,43 @@ test.describe("@opp-5 reconciliation queue", () => {
     expect(omit(afterUndo, "updated_at")).toEqual(omit(scanBefore, "updated_at"));
     expect(Date.parse(afterUndo.updated_at as string)).toBeGreaterThan(Date.parse(scanBefore.updated_at as string));
   });
+
+  // Accept and undo are owner/manager only — both POST routes call
+  // requireRole(["owner", "manager"]) — but the page made no auth call at
+  // all, so a staff member saw an enabled bulk rail, an enabled undo button,
+  // a checkbox on every actionable row and a bin picker, and learned none of
+  // it worked only from the 403 that came back after the POST. The server
+  // side was correct then and is unchanged; this asserts the affordance now
+  // says the same thing the API does.
+  test("EV-5.5: staff see the queue but none of the controls the API refuses", async ({ page }) => {
+    const admin = adminClient();
+    await admin.from("memberships").update({ role: "staff" }).eq("id", membership.id);
+    try {
+      await login(page);
+      await page.goto("/reconcile-queue");
+      await expect(page.locator("[data-queue-row]").first()).toBeVisible();
+
+      await expect(page.getByRole("button", { name: /^Accept \d+ item/ })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Undo latest batch" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /^Select actionable/ })).toHaveCount(0);
+      await expect(page.locator("[data-queue-row] input[type=checkbox]")).toHaveCount(0);
+      await expect(page.locator("[data-queue-row] select")).toHaveCount(0);
+
+      // Server-side authorization is unchanged, and must stay that way: the
+      // hidden control is a truthfulness fix, not the access control.
+      const refused = await page.request.post("/api/reconcile-queue/accept", {
+        data: [{
+          action_type: "dismiss",
+          subject_table: "inventory_items",
+          subject_id: "00000000-0000-4000-8000-000000000001",
+          patch: {},
+        }],
+      });
+      expect(refused.status()).toBe(403);
+    } finally {
+      await admin.from("memberships").update({ role: membership.role }).eq("id", membership.id);
+    }
+  });
 });
 
 function adminClient(): Admin {

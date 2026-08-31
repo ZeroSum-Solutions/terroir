@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import { renderWineListSections, type EightysixStrategy } from "@/lib/wine-list/render";
+import { renderWineListSections, wineListItemLabel, type EightysixStrategy } from "@/lib/wine-list/render";
 import type { WineListSectionEmbed } from "@/lib/wine-list/shapes";
 import {
   getSupabasePublicConfig,
@@ -227,7 +227,7 @@ export default async function PrintWineListPage({
                               is86d && "line-through",
                             )}
                           >
-                            {item.name_override ?? `${wine.producer} ${wine.name}`}
+                            {wineListItemLabel(item)}
                           </span>
                           {is86d && (
                             <span className="ml-xs font-mono text-[12px] uppercase text-gray-400 print:no-print">

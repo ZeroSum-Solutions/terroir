@@ -42,6 +42,14 @@ export type ConfirmChunkedSessionParams = {
    * above). localizeApprovedLwinRows (below) translates each chunk's own
    * slice into that chunk's own local row numbers. */
   approvedLwinRows?: ApprovedLwinRows;
+  /** SD-41: the WHOLE file's acknowledged blank-producer count. Sent
+   * verbatim with every chunk — deliberately NOT localized like the three
+   * row-keyed fields above, because it is a file-level fact and each
+   * chunk's own server-side count is necessarily a subset of it, which is
+   * exactly what the guard's >= comparison needs. OPTIONAL, like the
+   * fields above: omitting it means "this caller acknowledged nothing",
+   * which the server refuses for any file that has blank producers. */
+  acknowledgedMissingProducerRows?: number;
   onSessionId: (sessionId: string) => void;
   onProgress: (upload: ChunkUploadState[]) => void;
 };
@@ -68,6 +76,7 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
     rowOverrides,
     rejectedLwinRows,
     approvedLwinRows,
+    acknowledgedMissingProducerRows,
     onSessionId,
     onProgress,
   } = params;
@@ -169,6 +178,9 @@ export async function confirmChunkedSession(params: ConfirmChunkedSessionParams)
       // confirm needs to fail closed correctly for THIS chunk's rows.
       const localApproved = localizeApprovedLwinRows(approvedLwinRows, chunk);
       form.append("approvedLwinRows", JSON.stringify(localApproved));
+    }
+    if (acknowledgedMissingProducerRows !== undefined) {
+      form.append("acknowledgedMissingProducerRows", String(acknowledgedMissingProducerRows));
     }
 
     try {

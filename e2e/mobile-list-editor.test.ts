@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { expectRowFitsInFrame, measureRowFit } from "./one-row-rule";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -66,14 +67,11 @@ test.describe("mobile wine-list editor", () => {
     await expect(mobile.getByRole("button", { name: /Delete/ })).toBeVisible();
     await expect(mobile.getByText("Template", { exact: true })).toBeVisible();
 
-    for (const label of [
-      "Download PDF",
-      "Toast Export",
-      "CSV",
-      "Preview",
-      "Print",
-      "Publish",
-    ]) {
+    // GLOBAL-01 — the row keeps the two actions a phone is used for; the rest
+    // are one tap deeper, behind the overflow control, because six pills did
+    // not fit on one line at 390px. Reachability is what this test is about,
+    // and reachability is unchanged.
+    for (const label of ["Preview", "Publish"]) {
       const action = mobile
         .getByRole("button", { name: label, exact: true })
         .or(mobile.getByRole("link", { name: label, exact: true }))
@@ -81,6 +79,19 @@ test.describe("mobile wine-list editor", () => {
       await expect(action).toBeVisible();
       expect(await controlHeight(action)).toBeGreaterThanOrEqual(44);
     }
+
+    const more = mobile.getByRole("button", { name: "More list actions" });
+    await expect(more).toBeVisible();
+    expect(await controlHeight(more)).toBeGreaterThanOrEqual(44);
+    await more.click();
+    const menu = page.getByRole("menu", { name: "More list actions" });
+    for (const label of ["Download PDF", "Toast Export", "CSV", "Print"]) {
+      const item = menu.getByRole("menuitem", { name: label, exact: true });
+      await expect(item).toBeVisible();
+      expect(await controlHeight(item)).toBeGreaterThanOrEqual(44);
+    }
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
 
     for (const control of [
       mobile.getByRole("button", { name: "Add section" }),
@@ -97,6 +108,31 @@ test.describe("mobile wine-list editor", () => {
       ),
     ).toBe(true);
   });
+
+  /**
+   * GLOBAL-01, the same rule the cellar is held to (e2e/cellar-control-row.test.ts).
+   *
+   * The static ratchet cannot see this row: `scripts/check-control-rows.mjs`
+   * counts SOURCE containers, and `ListActions` is ONE container with
+   * `flex-wrap`, so seven pills spilling onto three lines at 390px count as a
+   * single row. The eye counts three. `measureRowFit` counts what the eye
+   * counts, and also checks that nothing is clipped or hidden behind a
+   * sideways scroll.
+   */
+  for (const [label, width, height] of [
+    ["desktop", 1440, 900],
+    ["phone", 390, 844],
+  ] as const) {
+    test(`${label}: every list action fits on one line in the frame`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await loginWithLocalFixture(page);
+      await page.goto(`/lists/${listId}`);
+      await page.locator("[data-list-control-row]:visible").first().waitFor();
+
+      const fit = await measureRowFit(page, "[data-list-control-row]");
+      expectRowFitsInFrame(fit, `/lists/[id] actions at ${width}px`);
+    });
+  }
 
   test("add-wine modal stays inside the visual viewport and owns scrolling", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });

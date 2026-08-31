@@ -185,6 +185,59 @@ describe("POST /api/import/batches", () => {
     );
   });
 
+  // SD-41 — the blank-producer acknowledgement is a multipart field, so it
+  // arrives as a STRING and must reach the domain as a number. Its ABSENCE
+  // must also survive the boundary as `undefined`, never a defaulted 0:
+  // "this caller acknowledged nothing" is precisely what confirm refuses.
+  it("coerces the acknowledgedMissingProducerRows field to a number and forwards it", async () => {
+    allow();
+    mockConfirmImportBatch.mockResolvedValue({
+      ok: true,
+      alreadyExists: false,
+      batchId: "batch-1",
+      totalRows: 1,
+      summary: { totalRows: 1 },
+    });
+    const response = await POST(
+      multipartRequest(new File(["wine name,quantity\nA.F. Gros Richebourg,1"], "cellar.csv", { type: "text/csv" }), {
+        acknowledgedMissingProducerRows: "3",
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(mockConfirmImportBatch).toHaveBeenCalledWith(
+      expect.anything(),
+      "restaurant-a",
+      "user-a",
+      "cellar.csv",
+      expect.any(Buffer),
+      expect.objectContaining({ acknowledgedMissingProducerRows: 3 }),
+    );
+  });
+
+  it("forwards acknowledgedMissingProducerRows as undefined when the field is absent", async () => {
+    allow();
+    mockConfirmImportBatch.mockResolvedValue({
+      ok: true,
+      alreadyExists: false,
+      batchId: "batch-1",
+      totalRows: 1,
+      summary: { totalRows: 1 },
+    });
+    await POST(multipartRequest(new File(["producer,name,quantity\nA,B,1"], "cellar.csv", { type: "text/csv" })));
+    expect(mockConfirmImportBatch.mock.calls[0][5]).toMatchObject({ acknowledgedMissingProducerRows: undefined });
+  });
+
+  it("rejects a negative acknowledgedMissingProducerRows before calling confirmImportBatch", async () => {
+    allow();
+    const response = await POST(
+      multipartRequest(new File(["producer,name,quantity\nA,B,1"], "cellar.csv", { type: "text/csv" }), {
+        acknowledgedMissingProducerRows: "-1",
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(mockConfirmImportBatch).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed JSON in rowOverrides before calling confirmImportBatch", async () => {
     allow();
     const response = await POST(

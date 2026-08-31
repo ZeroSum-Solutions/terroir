@@ -4,6 +4,7 @@ import {
   type LineageWine,
 } from "../lineage/rollups";
 import type { QueueSourceInput } from "./types";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 export type DuplicateSourceOptions = {
   /** Latest added_at cost for the whole suspect group, resolved by the caller. */
@@ -27,7 +28,7 @@ function toSource(
   return {
     subjectTable: "wine_lineages",
     subjectId: subjectId(suspect),
-    title: `${representative.producer} ${representative.name} ${vintage}`,
+    title: `${representative.producer} ${wineDisplayName(representative.producer, representative.name)} ${vintage}`,
     detail: `${members.length} records share lineage, vintage, and ${suspect.sizeMl}ml format`,
     units: members.reduce((sum, wine) => sum + wine.quantity, 0),
     unitCost,

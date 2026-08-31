@@ -32,7 +32,7 @@ describe("BriefingAlertCard", () => {
 
   it("keeps actionable bottle and snooze controls without dead menu actions", () => {
     document.body.innerHTML = renderToStaticMarkup(
-      <BriefingAlertCard alert={baseAlert} />,
+      <BriefingAlertCard alert={baseAlert} canManage />,
     );
 
     expect(document.body.textContent).toContain("View 2 bottles");
@@ -53,7 +53,7 @@ describe("BriefingAlertCard", () => {
 
   it("leads with the fact — no salutation, no account-derived name", () => {
     document.body.innerHTML = renderToStaticMarkup(
-      <BriefingAlertCard alert={baseAlert} />,
+      <BriefingAlertCard alert={baseAlert} canManage />,
     );
 
     expect(document.body.textContent).not.toContain("Hey ");
@@ -64,12 +64,12 @@ describe("BriefingAlertCard", () => {
 
   it("shows the source when known and hides the line entirely when not", () => {
     document.body.innerHTML = renderToStaticMarkup(
-      <BriefingAlertCard alert={baseAlert} />,
+      <BriefingAlertCard alert={baseAlert} canManage />,
     );
     expect(document.body.textContent).toContain("Source: Vinous (Galloni)");
 
     document.body.innerHTML = renderToStaticMarkup(
-      <BriefingAlertCard alert={{ ...baseAlert, rating_source: null, rating: null }} />,
+      <BriefingAlertCard alert={{ ...baseAlert, rating_source: null, rating: null }} canManage />,
     );
     expect(document.body.textContent).not.toContain("Source:");
     expect(document.body.textContent).not.toContain("Unknown");
@@ -80,6 +80,7 @@ describe("BriefingAlertCard", () => {
     document.body.innerHTML = renderToStaticMarkup(
       <BriefingAlertCard
         alert={{ ...baseAlert, drink_window_end: thisYear }}
+        canManage
       />,
     );
     expect(document.body.textContent).toContain("Final year of the optimal window");
@@ -89,6 +90,7 @@ describe("BriefingAlertCard", () => {
     document.body.innerHTML = renderToStaticMarkup(
       <BriefingAlertCard
         alert={{ ...baseAlert, drink_window_end: null }}
+        canManage
       />,
     );
     expect(document.body.textContent).not.toContain("remaining");

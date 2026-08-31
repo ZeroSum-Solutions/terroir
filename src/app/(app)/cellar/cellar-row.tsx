@@ -14,6 +14,37 @@ import { wineDisplayName } from "@/lib/wine-display-name";
 export const LEDGER_COLS =
   "lg:grid-cols-[minmax(0,1fr)_60px_minmax(110px,170px)_150px_100px_52px]";
 
+/**
+ * SD-40 — WHY BOTH TREES STAY IN THE DOM. Measured 2026-08-31, do not
+ * re-derive.
+ *
+ * Every row renders its content twice: the `lg:hidden` phone stack below and
+ * the `hidden … lg:grid` ledger row after it. Both are always in the DOM, so
+ * a 50-row `/cellar` emits 100 `<img>` for 50 rows. That number is real and
+ * confirmed against the live HTML. The COST it was assumed to carry is not:
+ *
+ *   - "50 unnecessary image requests on first paint" — REFUTED. Both copies
+ *     of a row carry the BYTE-IDENTICAL src (WineThumb passes `unoptimized`,
+ *     so no width lands in the URL, and the two only differ in CSS size).
+ *     Measured: 100 <img>, 50 unique URLs. The browser fetches each once.
+ *   - In production the cost is ZERO images. The demo seed tenant is the
+ *     only place with a photograph on every wine; the production-shaped
+ *     tenant renders **0 `<img>` for the same 50 rows**, because production
+ *     wines have no hero_image_url — itself a downstream symptom of SD-41.
+ *   - What the duplication actually costs: ~1.3 KB of markup per row,
+ *     ~65 KB per 50-row page uncompressed, 5.5% of the page — but it is
+ *     near-identical repeated text, so gzipped it is **3.3 KB, 3.8%**.
+ *
+ * Against that: eight test files reach into this row's structure, five of
+ * them e2e (`taxonomy`, `lineage`, `cellar-health`, `pour-flow`,
+ * `mobile-wine-detail`), and two of those carry comments explicitly built
+ * around "CellarRow renders the name twice" and select by `data-cellar-row`
+ * to work around it. Collapsing to one tree means a responsive rewrite of
+ * both layouts plus that spec surface, to save 3.3 KB on the wire and no
+ * image requests at all. The cure is worse than the disease. LEFT AS IS,
+ * deliberately.
+ */
+
 /** Drag-handle wiring a draggable wrapper hands down to CellarRow. */
 export type CellarRowDragHandle = {
   attributes: Record<string, unknown>;

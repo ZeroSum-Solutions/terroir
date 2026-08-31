@@ -38,6 +38,7 @@ export async function confirmSingleFileImport({
   rowOverrides,
   rejectedLwinRows,
   previewRows,
+  acknowledgedMissingProducerRows,
 }: {
   file: File;
   rowOverrides: RowOverrides;
@@ -45,6 +46,13 @@ export async function confirmSingleFileImport({
   /** The rows the operator was actually shown, or null when preview never
    * produced any (the chunked path owns its own confirm). */
   previewRows: PreviewRow[] | null;
+  /** SD-41: the blank-producer count the operator acknowledged in preview.
+   * ALWAYS sent, including 0 — a client that shows the gate is a client the
+   * server can hold to it, and omitting the field is exactly the state
+   * checkMissingProducerAcknowledgement refuses. Optional only so a caller
+   * that predates the gate still type-checks — it is then refused server
+   * side, which is the point. */
+  acknowledgedMissingProducerRows?: number;
 }): Promise<SingleFileConfirmResult> {
   const form = new FormData();
   form.append("file", file);
@@ -71,6 +79,9 @@ export async function confirmSingleFileImport({
   if (previewRows) {
     const approvedLwinRows = buildApprovedLwinRows(matchedRowsFromPreviewRows(previewRows));
     form.append("approvedLwinRows", JSON.stringify(approvedLwinRows));
+  }
+  if (acknowledgedMissingProducerRows !== undefined) {
+    form.append("acknowledgedMissingProducerRows", String(acknowledgedMissingProducerRows));
   }
   const response = await fetch("/api/import/batches", { method: "POST", body: form });
   const body = await response.json();

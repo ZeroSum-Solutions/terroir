@@ -33,6 +33,7 @@ export function PriceStepper({
   suggested,
   label,
   muted,
+  readOnly,
   onChange,
 }: {
   /** The stored price. Null means "not set". */
@@ -42,6 +43,12 @@ export function PriceStepper({
   /** Names this control for assistive tech, e.g. "glass price for Barolo". */
   label: string;
   muted?: boolean;
+  /**
+   * SD-12 — PATCH /api/wine-list-items/{id} is owner/manager only. A staff
+   * member still needs to read the price, so the control collapses to the
+   * number rather than disappearing.
+   */
+  readOnly?: boolean;
   onChange: (value: number | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -49,6 +56,19 @@ export function PriceStepper({
 
   const isSuggestion = value == null && suggested != null;
   const effective = value ?? suggested ?? null;
+
+  if (readOnly) {
+    return (
+      <div
+        className={cn(
+          "min-h-11 px-2xs py-sm text-right tabular text-control",
+          isSuggestion ? "italic text-grey" : muted ? "text-grey" : "text-ink",
+        )}
+      >
+        {formatPrice(effective)}
+      </div>
+    );
+  }
 
   const commit = () => {
     setEditing(false);
