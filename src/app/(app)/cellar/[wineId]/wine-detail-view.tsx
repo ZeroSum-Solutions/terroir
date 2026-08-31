@@ -7,6 +7,7 @@ import type {
   CorpusRead,
   TasteAxis,
   VintageRating,
+  XWinesImageKind,
   XWinesProfile,
 } from "@/lib/wine-intelligence/xwines-profile";
 
@@ -49,6 +50,17 @@ const HERO_GLOW = {
     "radial-gradient(60% 55% at 22% 42%, color-mix(in oklab, var(--t-mark) 22%, transparent) 0%, transparent 70%)",
 } as const;
 
+// A corpus photograph is only sometimes a photograph of THIS wine (0138), so
+// showing one silently would put a stranger's Chianti under this bottle's
+// name. Every kind but "label" is captioned with what it actually is, and the
+// alt text degrades the same way — a screen reader must not be told the row's
+// producer over a picture of somebody else's.
+const CORPUS_IMAGE_NOTE: Record<XWinesImageKind, string> = {
+  label: "Reference label for this wine",
+  producer: "A bottle from this producer — not this cuvée",
+  representative: "Representative bottle — not this wine's label",
+};
+
 export function WineDetailView({
   wine,
   bottleCount,
@@ -60,6 +72,15 @@ export function WineDetailView({
   // but says so in its own words below rather than borrowing "no match".
   const profile = profileRead.status === "ok" ? profileRead.value : null;
   const vintageRatings = ratingsRead.status === "ok" ? ratingsRead.value : [];
+
+  // The tenant's own photograph always outranks the corpus's: they uploaded it
+  // of the bottle they actually hold. The corpus only fills a hole.
+  const corpusImage = wine.hero_image_url === null ? (profile?.image ?? null) : null;
+  const heroSrc = wine.hero_image_url ?? corpusImage?.url ?? null;
+  const heroAlt =
+    corpusImage === null || corpusImage.kind === "label"
+      ? `${wine.producer} ${wine.name}`
+      : CORPUS_IMAGE_NOTE[corpusImage.kind];
 
   const facets = [wine.country, wine.region, profile?.type ?? null, wine.varietal].filter(
     (value): value is string => Boolean(value),
@@ -91,16 +112,16 @@ export function WineDetailView({
           className="relative mt-md grid gap-xl rounded-card py-2xl md:grid-cols-[minmax(0,300px)_minmax(0,1fr)] md:gap-2xl md:py-3xl"
           style={HERO_GLOW}
         >
-          <div className="flex items-center justify-center">
-            {wine.hero_image_url ? (
+          <div className="flex flex-col items-center justify-center gap-sm">
+            {heroSrc !== null ? (
               /* unoptimized, as every other hero_image_url render does
                  (wine-detail-drawer, WineThumb): the URL is an absolute
                  Supabase Storage one and next.config.ts declares no
                  images.remotePatterns, so the optimizer would refuse it and
                  the page would throw for any wine that HAS a picture. */
               <Image
-                src={wine.hero_image_url}
-                alt={`${wine.producer} ${wine.name}`}
+                src={heroSrc}
+                alt={heroAlt}
                 width={300}
                 height={480}
                 priority
@@ -118,6 +139,14 @@ export function WineDetailView({
                   className="rounded-pill"
                 />
               </div>
+            )}
+            {corpusImage !== null && (
+              <p className="max-w-[240px] text-center text-caption text-grey md:max-w-full">
+                {CORPUS_IMAGE_NOTE[corpusImage.kind]}
+                {corpusImage.credit !== null && (
+                  <span className="block">{corpusImage.credit}</span>
+                )}
+              </p>
             )}
           </div>
 

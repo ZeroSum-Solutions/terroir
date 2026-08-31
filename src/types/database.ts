@@ -1990,6 +1990,10 @@ export type Database = {
           grapes: string[]
           harmonize: string[]
           has_non_vintage: boolean
+          image_credit: string | null
+          image_kind: string | null
+          image_source: string | null
+          image_url: string | null
           name: string
           rating_avg: number | null
           rating_count: number
@@ -2012,6 +2016,10 @@ export type Database = {
           grapes?: string[]
           harmonize?: string[]
           has_non_vintage?: boolean
+          image_credit?: string | null
+          image_kind?: string | null
+          image_source?: string | null
+          image_url?: string | null
           name: string
           rating_avg?: number | null
           rating_count?: number
@@ -2034,6 +2042,10 @@ export type Database = {
           grapes?: string[]
           harmonize?: string[]
           has_non_vintage?: boolean
+          image_credit?: string | null
+          image_kind?: string | null
+          image_source?: string | null
+          image_url?: string | null
           name?: string
           rating_avg?: number | null
           rating_count?: number

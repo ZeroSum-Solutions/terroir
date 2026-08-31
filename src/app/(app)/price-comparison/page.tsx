@@ -48,7 +48,7 @@ export default async function PriceComparisonPage({
   const { data: items, error: itemsError } = await supabase
     .from("inventory_items")
     .select(
-      "unit_cost, quantity, wine_id, wines(id, name, producer, vintage, varietal, retail_median, retail_min, retail_max, enrichment_metadata, overpaid_flag), invoice_scan_id, invoice_scans(distributor_name, invoice_date)",
+      "unit_cost, quantity, wine_id, wines(id, name, producer, vintage, varietal, retail_median, retail_min, retail_max, enrichment_metadata, overpaid_flag, hero_image_url, colour), invoice_scan_id, invoice_scans(distributor_name, invoice_date)",
     )
     .eq("restaurant_id", rid);
 
@@ -72,6 +72,7 @@ export default async function PriceComparisonPage({
   for (const item of items ?? []) {
     const wine = item.wines as {
       id: string; name: string; producer: string; vintage: number | null; varietal: string | null;
+      hero_image_url: string | null; colour: string | null;
       retail_median: number | null; retail_min: number | null; retail_max: number | null;
       enrichment_metadata: Record<string, unknown> | null;
       overpaid_flag: boolean | null;
@@ -92,6 +93,8 @@ export default async function PriceComparisonPage({
           producer: wine.producer,
           vintage: wine.vintage,
           varietal: wine.varietal,
+          hero_image_url: wine.hero_image_url,
+          colour: wine.colour,
         },
         prices: [],
         cheapest: 0,

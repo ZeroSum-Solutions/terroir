@@ -3,7 +3,7 @@
 -- rolled-back transaction so nothing persists).
 begin;
 
-select plan(15);
+select plan(16);
 
 -- RLS enabled on every new table.
 select ok(
@@ -43,6 +43,20 @@ select ok(
   not has_table_privilege('authenticated', 'public.canonical_wines', 'update')
     and not has_table_privilege('authenticated', 'public.canonical_wines', 'delete'),
   'authenticated has no update/delete on canonical_wines — mutation is function-only'
+);
+
+-- A column-level grant is a CLOSED LIST: every column added to
+-- canonical_wines after 0097 is unreadable until it is named in a grant.
+-- Asserting one representative column (producer_norm, above) does not catch
+-- that — 0132 added xwines_wine_id/xwines_match_score without extending the
+-- grant, this test kept passing, and resolveXWinesProfile's trusted-link
+-- read failed with 42501 for every authenticated caller until 0141. Assert
+-- the columns the application actually selects, so the next added column
+-- fails here rather than silently in a product surface.
+select ok(
+  has_column_privilege('authenticated', 'public.canonical_wines', 'xwines_wine_id', 'select')
+    and has_column_privilege('authenticated', 'public.canonical_wines', 'xwines_match_score', 'select'),
+  'authenticated can select the xwines link columns resolveXWinesProfile reads'
 );
 
 -- D4 (round-2 critic finding): created_by_restaurant_id/created_by_user_id

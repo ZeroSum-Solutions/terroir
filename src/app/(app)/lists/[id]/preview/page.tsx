@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { WineThumb } from "@/components/wine-thumb";
 import { NextResponse } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
@@ -29,6 +30,7 @@ type PublicWineItem = {
     serving_temp_max: number | null;
     serving_temp_label: string | null;
     is_eightysixed: boolean;
+    hero_image_url: string | null;
   } | null;
 };
 
@@ -59,7 +61,7 @@ export default async function WineListPreviewPage({
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, is_published, slug, template, restaurant_id, restaurants(name), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, wines!wine_list_items_wine_id_fkey(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
+      "name, is_published, slug, template, restaurant_id, restaurants(name), wine_list_sections(id, name, position, wine_list_items(id, position, glass_price, bottle_price, tasting_note, blurb, hidden, wines!wine_list_items_wine_id_fkey(name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed, hero_image_url)))",
     )
     .eq("id", id)
     .eq("restaurant_id", restaurantId)
@@ -155,7 +157,15 @@ export default async function WineListPreviewPage({
                     </div>
                   )}
                   <div className="flex items-baseline justify-between gap-md">
-                    <div className="min-w-0">
+                    <WineThumb
+                      src={wine.hero_image_url}
+                      producer={wine.producer}
+                      name={wine.name}
+                      colour={null}
+                      size={44}
+                      className="self-start print:hidden"
+                    />
+                    <div className="min-w-0 flex-1">
                       <span className={`font-serif text-[17px] font-medium${isHidden ? " text-grey line-through" : " text-ink"}`}>
                         {wine.producer} {wine.name}
                       </span>

@@ -44,9 +44,22 @@ merge_source as (
 ),
 -- Legitimately-excluded constraints go here, one row per (child_table,
 -- conname), with a comment explaining why the substring heuristic below
--- would be wrong to require for that specific constraint. Empty today.
+-- would be wrong to require for that specific constraint.
+--
+-- producer_backfill_audit.wine_id (0137): repointing it at the surviving
+-- wine would be a BUG, not the fix this test normally asks for. The row
+-- records the producer value that wine X carried before 0137's LWIN
+-- backfill overwrote it, and exists so 0137's down can put it back.
+-- merge_wines hard-deletes the losing wine (`delete from public.wines
+-- where id = p_source_wine_id`), and the FK is ON DELETE CASCADE, so the
+-- loser's audit rows go with it — correct, because a pre-backfill
+-- producer for a wine that no longer exists is not restorable to
+-- anything. Carrying it over to the survivor would make 0137's down
+-- write the LOSER's old producer onto a DIFFERENT wine, silently
+-- corrupting the survivor's identity. Cascade is the intended behaviour
+-- here, so there is nothing for merge_wines to learn.
 allowlist (child_table, conname) as (
-  values (null::text, null::text)
+  values ('producer_backfill_audit'::text, 'producer_backfill_audit_wine_id_fkey'::text)
 ),
 uncovered as (
   select f.child_table, f.parent_table, f.conname

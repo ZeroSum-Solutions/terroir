@@ -8,6 +8,7 @@ interface CorrectingViewProps {
   onSearchChange: (query: string) => void;
   searching: boolean;
   searchResults: MatchedWine[];
+  searchError: string | null;
   onSelect: (wine: MatchedWine) => void;
   onCancel: () => void;
 }
@@ -17,6 +18,7 @@ export function CorrectingView({
   onSearchChange,
   searching,
   searchResults,
+  searchError,
   onSelect,
   onCancel,
 }: CorrectingViewProps) {
@@ -44,6 +46,12 @@ export function CorrectingView({
 
       {searching && (
         <p className="px-md text-[13px] text-grey">Searching...</p>
+      )}
+
+      {!searching && searchError && (
+        <p role="alert" className="px-md text-body-sm text-risk-ink">
+          {searchError}
+        </p>
       )}
 
       {!searching && searchResults.length > 0 && (
@@ -76,6 +84,7 @@ export function CorrectingView({
       )}
 
       {!searching &&
+        !searchError &&
         searchQuery.length >= 2 &&
         searchResults.length === 0 && (
           <p className="px-md text-[13px] text-grey">

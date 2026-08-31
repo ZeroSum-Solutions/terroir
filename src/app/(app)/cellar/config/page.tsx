@@ -20,8 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
-
-type Section = { id: string; name: string };
+import { normalizeSections, type CellarSection as Section } from "../sections";
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -32,18 +31,6 @@ function arrayMove<T>(array: T[], from: number, to: number): T[] {
   const [item] = result.splice(from, 1);
   result.splice(to, 0, item);
   return result;
-}
-
-// Legacy cellar_config rows store `labels.sections` as plain name strings
-// (still written by grid-label callers). Normalize those into the
-// {id, name} shape this page edits, using the name itself as a stable id
-// so re-fetches don't reshuffle React keys or drag order.
-function normalizeSections(raw: unknown[]): Section[] {
-  return raw.map((entry) =>
-    typeof entry === "string"
-      ? { id: entry, name: entry }
-      : (entry as Section),
-  );
 }
 
 export default function CellarConfigPage() {

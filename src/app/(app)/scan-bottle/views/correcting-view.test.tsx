@@ -40,6 +40,7 @@ describe("CorrectingView", () => {
           onSearchChange={vi.fn()}
           searching
           searchResults={[]}
+          searchError={null}
           onSelect={vi.fn()}
           onCancel={vi.fn()}
         />,
@@ -56,6 +57,7 @@ describe("CorrectingView", () => {
           onSearchChange={vi.fn()}
           searching={false}
           searchResults={[]}
+          searchError={null}
           onSelect={vi.fn()}
           onCancel={vi.fn()}
         />,
@@ -73,6 +75,7 @@ describe("CorrectingView", () => {
           onSearchChange={vi.fn()}
           searching={false}
           searchResults={[wine()]}
+          searchError={null}
           onSelect={onSelect}
           onCancel={vi.fn()}
         />,
@@ -84,6 +87,25 @@ describe("CorrectingView", () => {
     expect(onSelect).toHaveBeenCalledWith(wine());
   });
 
+  it("surfaces a failed search instead of reporting no results", async () => {
+    await act(async () => {
+      root.render(
+        <CorrectingView
+          searchQuery="esporao"
+          onSearchChange={vi.fn()}
+          searching={false}
+          searchResults={[]}
+          searchError="Search failed (500)"
+          onSelect={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+    });
+    const alert = container.querySelector('[role="alert"]') as HTMLElement;
+    expect(alert.textContent).toContain("Search failed (500)");
+    expect(container.textContent).not.toContain("No wines found");
+  });
+
   it("reports Cancel", async () => {
     const onCancel = vi.fn();
     await act(async () => {
@@ -93,6 +115,7 @@ describe("CorrectingView", () => {
           onSearchChange={vi.fn()}
           searching={false}
           searchResults={[]}
+          searchError={null}
           onSelect={vi.fn()}
           onCancel={onCancel}
         />,

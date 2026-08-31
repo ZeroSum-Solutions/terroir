@@ -320,9 +320,10 @@ describe("checked-in API contract gate", () => {
       // Excel import added POST /api/import/convert — 106 + 1 = 107.
       // Keeping a bottle scan's own photo added
       // POST /api/wines/[id]/label-photo — 107 + 1 = 108.
-      discoveredOperationCount: 108,
+      // SCAN-10's grounded lane added GET /api/assistant — 108 + 1 = 109.
+      discoveredOperationCount: 109,
       plannedOperationCount: 15,
-      classificationCount: 108,
+      classificationCount: 109,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,

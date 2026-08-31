@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 91,
+    "extensionDiscoveredCount": 92,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -306,6 +306,12 @@
     }
   ],
   "discoveredClassifications": [
+    {
+      "operationId": "api:GET:/api/assistant",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
     {
       "operationId": "api:GET:/api/bins",
       "classification": "extension",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { WineThumb } from "@/components/wine-thumb";
 import { GripVertical, MoreHorizontal, Trash2 } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -19,6 +20,8 @@ type Wine = {
   serving_temp_min?: number | null;
   serving_temp_max?: number | null;
   serving_temp_label?: string | null;
+  hero_image_url?: string | null;
+  colour?: string | null;
 };
 
 type ListItem = {
@@ -300,7 +303,7 @@ export function WineRow({
     <>
       {/* Desktop row — grid + compact pour-config sub-row stacked below. */}
       <div className="group hidden border-b border-rule transition-colors last:border-b-0 hover:bg-wash md:block">
-      <div className="grid grid-cols-[28px_1fr_80px_80px_36px] items-center px-lg py-sm">
+      <div className="grid grid-cols-[28px_40px_1fr_80px_80px_36px] items-center px-lg py-sm">
         <div
           aria-label="Drag to reorder"
           className="flex min-h-11 min-w-11 cursor-grab items-center justify-center text-grey opacity-0 transition-opacity group-hover:opacity-100"
@@ -308,6 +311,13 @@ export function WineRow({
         >
           <GripVertical className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
         </div>
+        <WineThumb
+          src={wine.hero_image_url}
+          producer={wine.producer}
+          name={wine.name}
+          colour={wine.colour}
+          size={32}
+        />
         <div>
           <NameEdit item={item} onNameChange={onNameChange} />
           <div className="mt-2xs flex items-center gap-xs text-[12px] text-grey">
@@ -353,7 +363,10 @@ export function WineRow({
         </button>
       </div>
       {/* Desktop pour-config sub-row (offset to match the wine-name column). */}
-      <div className="hidden border-t border-rule/40 bg-wash/30 px-lg pb-sm pt-xs md:grid md:grid-cols-[28px_1fr]">
+      <div className="hidden border-t border-rule/40 bg-wash/30 px-lg pb-sm pt-xs md:grid md:grid-cols-[28px_40px_1fr]">
+        {/* Two spacers, one per leading column above (drag handle, thumbnail),
+            so this sub-row stays aligned under the wine's name. */}
+        <div />
         <div />
         <div className="min-w-0 space-y-xs">
           <PourConfigRow item={item} onPourChange={onPourChange} />
@@ -386,7 +399,14 @@ export function WineRow({
 
       {/* Mobile card */}
       <div className="border-b border-rule px-md py-md last:border-b-0 md:hidden">
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-sm">
+          <WineThumb
+            src={wine.hero_image_url}
+            producer={wine.producer}
+            name={wine.name}
+            colour={wine.colour}
+            size={40}
+          />
           <div className="min-w-0 flex-1">
             <NameEdit item={item} onNameChange={onNameChange} />
             <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-grey">

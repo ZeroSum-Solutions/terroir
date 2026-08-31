@@ -72,7 +72,7 @@ describe("OpenBottlesPage", () => {
     const selection = mocks.select.mock.calls[0]?.[0] as string;
     expect(selection).not.toMatch(/remaining_ml,\s*size_ml/);
     expect(selection).toContain(
-      "wines!inner(id, name, producer, vintage, size_ml)",
+      "wines!inner(id, name, producer, vintage, size_ml, hero_image_url, colour)",
     );
   });
 });

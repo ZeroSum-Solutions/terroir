@@ -2,9 +2,20 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 93,
-  "discoveredOperationCount": 108,
+  "routeFileCount": 94,
+  "discoveredOperationCount": 109,
   "discoveredOperations": [
+    {
+      "operationId": "api:GET:/api/assistant",
+      "method": "GET",
+      "path": "/api/assistant",
+      "source": {
+        "file": "src/app/api/assistant/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
+        "moduleSpecifier": null
+      }
+    },
     {
       "operationId": "api:GET:/api/bins",
       "method": "GET",

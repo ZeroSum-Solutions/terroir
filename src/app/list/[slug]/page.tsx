@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { WineThumb } from "@/components/wine-thumb";
 import type { Metadata } from "next";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
@@ -134,7 +135,7 @@ export default async function PublicWineListPage({
   const { data: list, error } = await supabase
     .from("wine_lists")
     .select(
-      "name, template, theme, updated_at, restaurant_id, show_bin_codes, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, updated_at, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines!wine_list_items_wine_id_fkey(id, name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed)))",
+      "name, template, theme, updated_at, restaurant_id, show_bin_codes, restaurants(name, eightysix_strategy, logo_url), wine_list_sections(id, name, position, wine_list_items(id, position, updated_at, glass_price, bottle_price, tasting_note, blurb, hidden, name_override, wines!wine_list_items_wine_id_fkey(id, name, producer, vintage, varietal, region, serving_temp_min, serving_temp_max, serving_temp_label, is_eightysixed, hero_image_url)))",
     )
     .eq("slug", slug)
     .eq("is_published", true)
@@ -171,6 +172,7 @@ export default async function PublicWineListPage({
       serving_temp_max: number | null;
       serving_temp_label: string | null;
       is_eightysixed: boolean;
+      hero_image_url: string | null;
     } | null;
   };
   // DEBT-013: shared WineListSectionEmbed<TItem> generic.
@@ -311,7 +313,18 @@ export default async function PublicWineListPage({
                     )}
                   >
                     <div className="flex items-baseline justify-between gap-md">
-                      <div className="min-w-0">
+                      {/* print:hidden — a guest menu on screen is sold by the
+                          bottle; a printed one is set in type, and a page of
+                          halftone thumbnails is not what a restaurant prints. */}
+                      <WineThumb
+                        src={wine.hero_image_url}
+                        producer={wine.producer}
+                        name={wine.name}
+                        colour={null}
+                        size={44}
+                        className="self-start print:hidden"
+                      />
+                      <div className="min-w-0 flex-1">
                         <span
                           className={cn(
                             "font-serif text-[17px] font-medium text-ink print:text-black",

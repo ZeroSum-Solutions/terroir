@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/auth-context";
 import { RestaurantProvider } from "@/lib/context/restaurant";
 import { SettingsDropdown } from "./settings-dropdown";
+import { AssistantPanel } from "./assistant-panel";
 import { DesktopNavLinks, MobileNavLinks } from "./nav-links";
 import { Fab } from "./fab";
 import { ToastWrapper } from "./toast-wrapper";
@@ -51,6 +52,10 @@ export default async function AppLayout({
           <span className="hidden text-[12px] font-light tabular text-grey md:inline">
             {user.email}
           </span>
+          {/* In the header, not the FAB: the FAB is mobile-only and hidden on
+              /scan, /login and /atlas, and the assistant is useful on all of
+              them. The header renders on every authenticated page. */}
+          <AssistantPanel />
           <SettingsDropdown />
         </div>
       </header>

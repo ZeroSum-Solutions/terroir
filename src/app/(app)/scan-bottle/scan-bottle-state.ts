@@ -34,6 +34,9 @@ export interface BottleScanState {
   searchQuery: string;
   searchResults: MatchedWine[];
   searching: boolean;
+  /** A failed correction search, shown in place rather than tearing the
+      user out of the correcting phase the way `error` does. */
+  searchError: string | null;
   section: string;
   binLocation: string;
   confirming: boolean;
@@ -50,6 +53,7 @@ export const initialBottleScanState: BottleScanState = {
   searchQuery: "",
   searchResults: [],
   searching: false,
+  searchError: null,
   section: "",
   binLocation: "",
   confirming: false,
@@ -65,6 +69,7 @@ export type BottleScanAction =
   | { type: "correct-search-query-changed"; query: string }
   | { type: "correct-search-started" }
   | { type: "correct-search-completed"; results: MatchedWine[] }
+  | { type: "correct-search-failed"; message: string }
   | { type: "correct-wine-selected"; wine: MatchedWine }
   | { type: "correction-started" }
   | { type: "correction-cancelled" }
@@ -108,20 +113,23 @@ export function bottleScanReducer(state: BottleScanState, action: BottleScanActi
 
     case "correct-search-query-changed":
       return action.query.length < 2
-        ? { ...state, searchQuery: action.query, searchResults: [] }
-        : { ...state, searchQuery: action.query };
+        ? { ...state, searchQuery: action.query, searchResults: [], searchError: null }
+        : { ...state, searchQuery: action.query, searchError: null };
 
     case "correct-search-started":
-      return { ...state, searching: true };
+      return { ...state, searching: true, searchError: null };
 
     case "correct-search-completed":
-      return { ...state, searchResults: action.results, searching: false };
+      return { ...state, searchResults: action.results, searching: false, searchError: null };
+
+    case "correct-search-failed":
+      return { ...state, searchResults: [], searching: false, searchError: action.message };
 
     case "correct-wine-selected":
       return { ...state, wine: action.wine, phase: "matched", error: null };
 
     case "correction-started":
-      return { ...state, phase: "correcting", searchQuery: "", searchResults: [] };
+      return { ...state, phase: "correcting", searchQuery: "", searchResults: [], searchError: null };
 
     case "correction-cancelled":
       return { ...state, phase: "matched" };

@@ -117,21 +117,35 @@ async function lookupWine(payload: string): Promise<MatchedWine> {
   return (await res.json()) as MatchedWine;
 }
 
+/**
+ * `/api/wines/search` answers with a bare array on the projection in
+ * src/app/api/wines/search/route.ts — which does not include `country`, so a
+ * corrected wine carries none until it is re-read from the wine record.
+ */
+type WineSearchResult = Omit<MatchedWine, "country">;
+
 async function searchWines(query: string): Promise<MatchedWine[]> {
   if (query.length < 2) return [];
-  const url = "/api/wines?q=" + encodeURIComponent(query) + "&limit=8";
-  const res = await fetch(url);
-  if (!res.ok) return [];
-  const data = (await res.json()) as
-    | { wines?: MatchedWine[] }
-    | MatchedWine[];
-  return Array.isArray(data) ? data : data.wines ?? [];
+  const res = await fetch("/api/wines/search?q=" + encodeURIComponent(query));
+  if (!res.ok) {
+    // A swallowed non-ok here is indistinguishable from "no such wine": this
+    // call used to hit a route that does not exist and reported an empty
+    // cellar for every query, silently, for as long as it was wrong.
+    throw new Error(
+      readApiError(
+        await res.json().catch(() => null),
+        "Search failed (" + res.status + ")",
+      ).message,
+    );
+  }
+  const wines = (await res.json()) as WineSearchResult[];
+  return wines.map((wine) => ({ ...wine, country: null }));
 }
 
 export default function ScanBottlePage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [state, dispatch] = useReducer(bottleScanReducer, initialBottleScanState);
-  const { phase, error, wine, payload, manualCode, searchQuery, searchResults, searching, section, binLocation, confirming, session } = state;
+  const { phase, error, wine, payload, manualCode, searchQuery, searchResults, searching, searchError, section, binLocation, confirming, session } = state;
 
   useEffect(() => {
     if (typeof navigator === "undefined") return;
@@ -177,8 +191,15 @@ export default function ScanBottlePage() {
       return;
     }
     dispatch({ type: "correct-search-started" });
-    const results = await searchWines(q);
-    dispatch({ type: "correct-search-completed", results });
+    try {
+      const results = await searchWines(q);
+      dispatch({ type: "correct-search-completed", results });
+    } catch (err) {
+      dispatch({
+        type: "correct-search-failed",
+        message: err instanceof Error ? err.message : "Search failed.",
+      });
+    }
   }, []);
 
   const handleCorrectSelect = useCallback((w: MatchedWine) => {
@@ -306,6 +327,7 @@ export default function ScanBottlePage() {
           onSearchChange={handleCorrectSearch}
           searching={searching}
           searchResults={searchResults}
+          searchError={searchError}
           onSelect={handleCorrectSelect}
           onCancel={() => dispatch({ type: "correction-cancelled" })}
         />

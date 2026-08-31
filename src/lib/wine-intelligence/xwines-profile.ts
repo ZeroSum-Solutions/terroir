@@ -150,6 +150,64 @@ export function acidityAxis(acidity: string | null): TasteAxis | null {
   return { low: "Soft", high: "Acidic", position, label: `${acidity} acidity` };
 }
 
+// ── Imagery ────────────────────────────────────────────────────────────────
+//
+// 0138 gave the corpus four image columns and, with them, a rule this module
+// has to carry rather than flatten: the picture is not always of this wine.
+// There is no open collection of 100,646 wine labels, so what the corpus holds
+// is three different strengths of claim, and `kind` is the only thing that
+// tells them apart. A caller that renders the URL without reading the kind
+// will present a stranger's Chianti as this bottle's label.
+
+/** The corpus's own vocabulary, mirrored from 0138's check constraint. */
+const IMAGE_KINDS = ["label", "producer", "representative"] as const;
+
+export type XWinesImageKind = (typeof IMAGE_KINDS)[number];
+
+export type XWinesImage = {
+  url: string;
+  /**
+   * "label" — this wine's own label. "producer" — a real bottle from this
+   * producer, a different cuvée. "representative" — a real bottle of the same
+   * type and country from an UNRELATED producer, which says nothing about this
+   * wine. Only "label" may be shown without saying what it is.
+   */
+  kind: XWinesImageKind;
+  /** 'xwines' | 'openfoodfacts' | 'wikimedia-commons'. */
+  source: string;
+  /** The attribution line the source asked for; null where it states none. */
+  credit: string | null;
+};
+
+function isImageKind(value: string): value is XWinesImageKind {
+  return (IMAGE_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * The image, or nothing.
+ *
+ * An unrecognised kind returns null rather than defaulting to one. Defaulting
+ * down to "representative" would hide a real label; defaulting up to "label"
+ * would assert one. 0138's check constraint means this can only fire if the
+ * vocabulary grew without this file, and dropping the picture is the correct
+ * behaviour for a claim this code cannot read.
+ */
+export function toImage(row: {
+  image_url: string | null;
+  image_kind: string | null;
+  image_source: string | null;
+  image_credit: string | null;
+}): XWinesImage | null {
+  if (row.image_url === null || row.image_kind === null || row.image_source === null) return null;
+  if (!isImageKind(row.image_kind)) return null;
+  return {
+    url: row.image_url,
+    kind: row.image_kind,
+    source: row.image_source,
+    credit: row.image_credit,
+  };
+}
+
 // ── Profile ────────────────────────────────────────────────────────────────
 
 export type XWinesProfile = {
@@ -175,6 +233,8 @@ export type XWinesProfile = {
   hasNonVintage: boolean;
   ratingAvg: number | null;
   ratingCount: number;
+  /** A real photograph, when the corpus has one. Read `kind` before showing it. */
+  image: XWinesImage | null;
 };
 
 export type VintageRating = {
@@ -208,7 +268,7 @@ function reportCorpusFailure(phase: string, error: unknown, extra: Record<string
 // One literal: supabase-js infers the row type from the literal, and string
 // concatenation degrades it to GenericStringError.
 const CATALOG_COLUMNS =
-  "wine_id, name, winery_name, type, elaborate, grapes, harmonize, abv, body, acidity, region_name, country, website, vintages, has_non_vintage, rating_avg, rating_count" as const;
+  "wine_id, name, winery_name, type, elaborate, grapes, harmonize, abv, body, acidity, region_name, country, website, vintages, has_non_vintage, rating_avg, rating_count, image_url, image_kind, image_source, image_credit" as const;
 
 // The PROJECTION, not the whole row: CATALOG_COLUMNS deliberately omits the
 // join keys (country_code, region_id, winery_id) that nothing here reads, and
@@ -233,6 +293,10 @@ type CatalogRow = Pick<
   | "has_non_vintage"
   | "rating_avg"
   | "rating_count"
+  | "image_url"
+  | "image_kind"
+  | "image_source"
+  | "image_credit"
 >;
 
 function toProfile(
@@ -260,6 +324,7 @@ function toProfile(
     hasNonVintage: row.has_non_vintage,
     ratingAvg: row.rating_avg,
     ratingCount: row.rating_count,
+    image: toImage(row),
   };
 }
 

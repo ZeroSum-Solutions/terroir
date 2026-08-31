@@ -1,6 +1,6 @@
 begin;
 
-select plan(9);
+select plan(10);
 
 -- C30 (db audit 2026-08-23): has_table_privilege('role', 'table',
 -- 'select,insert,update,delete') uses Postgres's documented "ANY of the
@@ -40,6 +40,15 @@ select ok(
 --     RLS-scoped RPC, never a raw client-side delete.
 --   - import_sessions (0102): same pattern — no authenticated DELETE; a
 --     session is never removed, only reverted (revert_import_session, 0110).
+--   - the reference corpus (0131): xwines_catalog / xwines_vintage_ratings
+--     are read-only reference data, granted SELECT only. Nothing in the
+--     product writes them; they are loaded by a service-role seeding
+--     script, so authenticated INSERT/UPDATE/DELETE would be a strictly
+--     wider grant than any code path needs.
+--   - producer_backfill_audit (0137): revoked from authenticated
+--     ENTIRELY, deliberately and with a written rationale in that
+--     migration — it holds every tenant's prior producer values, and RLS
+--     with no policy is its second layer, not its only one.
 --   - the P2 identity spine (0097): canonical_wines / wine_variants /
 --     wine_aliases / identity_merge_log all have deliberately reduced
 --     grants (e.g. canonical_wines is insert-only for authenticated, with
@@ -54,7 +63,8 @@ select ok(
     from pg_tables
     where schemaname = 'public'
       and tablename not in ('background_jobs', 'import_batches', 'import_batch_rows', 'import_sessions',
-                            'canonical_wines', 'wine_variants', 'wine_aliases', 'identity_merge_log')
+                            'canonical_wines', 'wine_variants', 'wine_aliases', 'identity_merge_log',
+                            'xwines_catalog', 'xwines_vintage_ratings', 'producer_backfill_audit')
       and not (
         has_table_privilege('authenticated', format('%I.%I', schemaname, tablename), 'select')
         and has_table_privilege('authenticated', format('%I.%I', schemaname, tablename), 'insert')
@@ -63,6 +73,29 @@ select ok(
       )
   ),
   'authenticated has table CRUD privileges mediated by RLS (except tables deliberately gated behind a SECURITY DEFINER/INVOKER RPC instead of direct grants)'
+);
+
+-- Pins the three tables the assertion above excludes for being read-only
+-- or operator-only, so excluding them narrows what is checked rather than
+-- stopping it being checked. Both directions matter: a corpus table
+-- gaining INSERT would let any authenticated session rewrite the shared
+-- reference data every tenant reads, and producer_backfill_audit gaining
+-- SELECT would expose one tenant's wine and restaurant ids to another —
+-- which is the exact failure 0137's revoke exists to prevent.
+select ok(
+  has_table_privilege('authenticated', 'public.xwines_catalog', 'select')
+    and not has_table_privilege('authenticated', 'public.xwines_catalog', 'insert')
+    and not has_table_privilege('authenticated', 'public.xwines_catalog', 'update')
+    and not has_table_privilege('authenticated', 'public.xwines_catalog', 'delete')
+    and has_table_privilege('authenticated', 'public.xwines_vintage_ratings', 'select')
+    and not has_table_privilege('authenticated', 'public.xwines_vintage_ratings', 'insert')
+    and not has_table_privilege('authenticated', 'public.xwines_vintage_ratings', 'update')
+    and not has_table_privilege('authenticated', 'public.xwines_vintage_ratings', 'delete')
+    and not has_table_privilege('authenticated', 'public.producer_backfill_audit', 'select')
+    and not has_table_privilege('authenticated', 'public.producer_backfill_audit', 'insert')
+    and not has_table_privilege('authenticated', 'public.producer_backfill_audit', 'update')
+    and not has_table_privilege('authenticated', 'public.producer_backfill_audit', 'delete'),
+  'the read-only corpus tables are SELECT-only and the backfill audit is fully revoked for authenticated'
 );
 
 select ok(
@@ -130,7 +163,10 @@ select ok(
     select bool_and(has_column_privilege('anon', 'public.wines', c, 'select'))
     from unnest(array[
       'id', 'name', 'producer', 'vintage', 'varietal', 'region',
-      'serving_temp_min', 'serving_temp_max', 'serving_temp_label', 'is_eightysixed'
+      'serving_temp_min', 'serving_temp_max', 'serving_temp_label', 'is_eightysixed',
+      -- 0142: the published guest menu shows the bottle. A public-bucket
+      -- image URL, carrying no pricing, cost, supplier or operational signal.
+      'hero_image_url'
     ]) as c
   )
   and not exists (
@@ -141,7 +177,8 @@ select ok(
       and not a.attisdropped
       and a.attname not in (
         'id', 'name', 'producer', 'vintage', 'varietal', 'region',
-        'serving_temp_min', 'serving_temp_max', 'serving_temp_label', 'is_eightysixed'
+        'serving_temp_min', 'serving_temp_max', 'serving_temp_label', 'is_eightysixed',
+        'hero_image_url'
       )
       and has_column_privilege('anon', 'public.wines', a.attname, 'select')
   ),
