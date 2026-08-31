@@ -11,6 +11,7 @@ Operational procedures. Each was verified against the tree on 2026-08-29.
 | [`prodshape-tenant.md`](prodshape-tenant.md) | QA against production's data shape rather than the demo tenant's — creating, switching into, and removing `LOCAL PRODSHAPE - Trattoria Bianca` | Verified 2026-08-30: `scripts/local/prodshape.sh`, `seed-prodshape-tenant.mjs`, `e2e/prodshape.ts` |
 | [`migration-numbering.md`](migration-numbering.md) | Before picking a migration number on a branch | Verified. Historical incident record — two branches once both claimed `0046`/`0049` |
 | [`production-migrations.md`](production-migrations.md) | Applying migrations to production — **there is no automated path; a merge to `main` deploys code only** | Written 2026-08-29 after production was found at `0111` while the repo was at `0136` |
+| [`reference-corpus-load.md`](reference-corpus-load.md) | Wine images or taste facts missing in a hosted environment — **`xwines_catalog` is a data load, not a migration, and no merge puts rows in it** | Written 2026-08-31 after production was found with `xwines_catalog` at 0 rows and `lwin_catalog` at 211,498, which is why no wine page could show a picture |
 
 ## Known drift
 
