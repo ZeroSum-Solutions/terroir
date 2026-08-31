@@ -14,11 +14,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   public: {
     Tables: {
       availability_events: {
@@ -1018,6 +1013,106 @@ export type Database = {
           varietal?: string | null
         }
         Relationships: []
+      }
+      lwin_xwines_link_tombstones: {
+        Row: {
+          created_at: string
+          lwin_id: string
+          reason: string
+          xwines_wine_id: number
+        }
+        Insert: {
+          created_at?: string
+          lwin_id: string
+          reason: string
+          xwines_wine_id: number
+        }
+        Update: {
+          created_at?: string
+          lwin_id?: string
+          reason?: string
+          xwines_wine_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lwin_xwines_link_tombstones_lwin_id_fkey"
+            columns: ["lwin_id"]
+            isOneToOne: false
+            referencedRelation: "lwin_catalog"
+            referencedColumns: ["lwin_id"]
+          },
+          {
+            foreignKeyName: "lwin_xwines_link_tombstones_xwines_wine_id_fkey"
+            columns: ["xwines_wine_id"]
+            isOneToOne: false
+            referencedRelation: "xwines_catalog"
+            referencedColumns: ["wine_id"]
+          },
+        ]
+      }
+      lwin_xwines_links: {
+        Row: {
+          lwin_id: string
+          method: string | null
+          name_score: number | null
+          producer_score: number | null
+          review_reason: string | null
+          run_id: string
+          score: number | null
+          second_score: number | null
+          status: string
+          updated_at: string
+          xwines_wine_id: number | null
+        }
+        Insert: {
+          lwin_id: string
+          method?: string | null
+          name_score?: number | null
+          producer_score?: number | null
+          review_reason?: string | null
+          run_id: string
+          score?: number | null
+          second_score?: number | null
+          status: string
+          updated_at?: string
+          xwines_wine_id?: number | null
+        }
+        Update: {
+          lwin_id?: string
+          method?: string | null
+          name_score?: number | null
+          producer_score?: number | null
+          review_reason?: string | null
+          run_id?: string
+          score?: number | null
+          second_score?: number | null
+          status?: string
+          updated_at?: string
+          xwines_wine_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lwin_xwines_links_lwin_id_fkey"
+            columns: ["lwin_id"]
+            isOneToOne: true
+            referencedRelation: "lwin_catalog"
+            referencedColumns: ["lwin_id"]
+          },
+          {
+            foreignKeyName: "lwin_xwines_links_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "xwines_link_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lwin_xwines_links_xwines_wine_id_fkey"
+            columns: ["xwines_wine_id"]
+            isOneToOne: false
+            referencedRelation: "xwines_catalog"
+            referencedColumns: ["wine_id"]
+          },
+        ]
       }
       memberships: {
         Row: {
@@ -2113,6 +2208,33 @@ export type Database = {
           wine_id?: number
           winery_id?: number | null
           winery_name?: string | null
+        }
+        Relationships: []
+      }
+      xwines_link_runs: {
+        Row: {
+          finished_at: string | null
+          id: string
+          notes: string | null
+          params: Json
+          rule_version: string
+          started_at: string
+        }
+        Insert: {
+          finished_at?: string | null
+          id?: string
+          notes?: string | null
+          params: Json
+          rule_version: string
+          started_at?: string
+        }
+        Update: {
+          finished_at?: string | null
+          id?: string
+          notes?: string | null
+          params?: Json
+          rule_version?: string
+          started_at?: string
         }
         Relationships: []
       }
