@@ -1,5 +1,39 @@
 # P2 — Wine Identity Spine and Duplicate Prevention
 
+> **STATUS CORRECTION (2026-08-30).** This document is no longer "design only." The
+> identity spine **shipped**, in migrations `0135`–`0137`:
+> `0135_identity_resolution_on_write.sql` (commit `a39a10f`, #157) put
+> `resolve_wine_variants_bulk` on the manual/LWIN creation path inside
+> `find_or_create_wines_batch` and made `wines.wine_variant_id` a written column;
+> `0136_wine_ownership_on_write_policies.sql` closed the `stock_adjustments` /
+> `bottle_closeouts` cross-tenant cascade hole this design's tenancy work implied;
+> `0137_backfill_blank_producers_from_lwin.sql` repaired 1,277 wines a CSV import had
+> created with an empty `producer`, which is what made the spine's real coverage
+> visible. `AGENTS.md` §"Known state you should not re-discover" describes the live
+> behaviour and is the current authority.
+>
+> Treat everything below as the **original design**, most of which landed, at
+> migration numbers this document does not predict (it reserves `0097`–`0101`; see the
+> numbering correction immediately below, then note that the shipping numbers were
+> `0135`–`0137`). Two pieces of it are **still unbuilt**: the CSV import path
+> (`apply_import_batch_chunk`) does not resolve identity — §9/§12's plan to call
+> `resolve_wine_variants_bulk` once per batch from the TypeScript caller is open work —
+> and the import dedup key is still the fallback four-tuple in
+> `src/domains/import/dedup-key.ts`. Both are tracked in
+> `docs/plans/2026-08-29-modular-architecture-refactor.md`. Before acting on any
+> section below, diff it against what `0135`–`0137` actually did.
+>
+> **Do not move this file to `docs/plans/_archive/`.** Five source files cite it by path —
+> `src/domains/identity/normalize.ts`, `src/domains/identity/normalize.test.ts`,
+> `src/domains/import/row-validator.ts`, `src/domains/import/row-validator.test.ts`, and
+> `scripts/fixtures/generate-partner-cellar.mjs` — as the design authority for the §5
+> normalization and closed-NV rules they implement. Relocating it silently breaks all five.
+> (It does **not** feed `pnpm verify:feature-ledger`, contrary to an earlier claim in
+> `docs/plans/_archive/README.md`; that gate reads `app_spec.txt`,
+> `docs/feature-ledger.json`, and `docs/plans/2026-07-20-terroir-completion-spec.md`.)
+
+Status: shipped in part — see the correction above. Original status line follows.
+
 Status: design only. No code or migrations were written by this pass.
 
 > **MIGRATION-NUMBER CORRECTION (added by the orchestrating session, 2026-08-23).**

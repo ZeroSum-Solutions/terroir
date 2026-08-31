@@ -24,6 +24,7 @@ import { ChunkUploadProgress } from "./chunk-upload-progress";
 import { MAX_SHOWN_ERROR_ROWS, PreviewErrorRows } from "./preview-error-rows";
 import { MAX_SHOWN_MATCHED_ROWS, PreviewBelowThreshold, PreviewMatchedWines } from "./preview-lwin-rows";
 import { SummaryStat } from "./summary-stat";
+import { sourcePreset, type SourcePresetId } from "@/domains/import/source-presets";
 
 // Stable empty defaults for PreviewStep's optional matchedRows/
 // rejectedLwinRows props — module-level so every render that omits them
@@ -41,6 +42,7 @@ const EMPTY_REJECTED_LWIN_ROWS: RejectedLwinRows = new Set();
 export function PreviewStep({
   filename,
   summary,
+  detectedSource,
   errorRows,
   matchedRows,
   rejectedLwinRows,
@@ -62,6 +64,10 @@ export function PreviewStep({
 }: {
   filename: string;
   summary: PreviewSummary;
+  /** SCAN-03 / D1: which source preset the SERVER recognised from this
+   * file's header row (never a client choice). Null when nothing matched,
+   * which is the common case — the generic column profile handles it. */
+  detectedSource?: SourcePresetId | null;
   errorRows: ErrorRowEntry[];
   /** Item 2 (per-row LWIN match visibility): every matched row, so the
    * operator can see WHAT matched (not just that it did) and reject a
@@ -225,6 +231,15 @@ export function PreviewStep({
         </p>
       )}
 
+      {/* SCAN-03: say which column-mapping profile read this file. The
+          operator can only act on a wrong mapping if they are told one was
+          applied — and "not recognised" is the honest, common answer. */}
+      <p className="mt-2xs text-body-sm text-grey">
+        {detectedSource
+          ? `Recognised as a ${sourcePreset(detectedSource).label} export — its column names were mapped on top of the generic ones.`
+          : "Source not recognised — using the generic column mapping. Rename a column in your file if something below landed in the wrong field."}
+      </p>
+
       <dl className="mt-md grid grid-cols-2 gap-sm text-[13px]">
         <SummaryStat label="Total rows" value={summary.totalRows} />
         <SummaryStat label="Passing validation" value={effectivePassingValidationRows} />
@@ -237,6 +252,20 @@ export function PreviewStep({
         The server decides the final ready/needs-resolution split at import — missing costs and
         unmatched wines may still need resolution, and duplicate rows may merge.
       </p>
+      {/* The import path accepts a blank producer on purpose (real exports
+          embed it in the wine name) and always has — which is exactly how
+          1,277 production wines ended up unresolvable to the identity
+          spine, because resolution is producer-first. Nothing prevented a
+          repeat; this at least makes it visible at the boundary that
+          writes it, without rejecting files that are legitimately shaped
+          this way. */}
+      {summary.missingProducerRows > 0 && (
+        <p role="status" className="mt-xs rounded-md bg-risk-wash px-sm py-xs text-body-sm text-risk-ink">
+          {summary.missingProducerRows} row{summary.missingProducerRows === 1 ? " has" : "s have"} no
+          producer. These import, but the wine cannot be matched to the shared catalogue until a
+          producer exists — add a producer/winery column if your export has one.
+        </p>
+      )}
       {fixedCount > 0 && (
         <p className="mt-2xs text-caption text-grey">
           Includes {fixedCount} row{fixedCount === 1 ? "" : "s"} fixed above — re-checked when you confirm.

@@ -1,9 +1,12 @@
 # Terroir — Product PRD (from the 2026-08-29 field walk)
 
-**Status:** DRAFT — awaiting Devin's decisions on the six gated items in §6
+**Status:** DECIDED — the six gated items in §6 were answered by delegation on 2026-08-30.
+The decisions are recorded in `docs/plans/2026-08-30-field-walk-decisions.md` (D1–D6); §6
+below is retained as the statement of each question, annotated with its answer.
 **Date:** 2026-08-30
 **Source:** `docs/plans/2026-08-29-terroir-refactor-field-notes.md` (field walk, 2026-08-29)
-**Baseline commit:** `39afe36`
+**Baseline commit:** `39afe36` at authoring time. Superseded since: `3b02f3b` (#162, the Tier-1
+work §8 describes) and `0bc4c72` (#163) have both landed on `main`.
 **Author:** Claude (autonomous overnight run, 2026-08-29 → 08-30)
 
 ---
@@ -11,8 +14,11 @@
 ## 0. Read this first
 
 This document converts the 2026-08-29 field-walk notes into specced, sized, sequenced
-requirements. It is written to be actioned without further clarification **except** for the
-six items in §6, which are genuinely blocked on a product decision only Devin can make.
+requirements. It was written to be actioned without further clarification **except** for the
+six items in §6, which were genuinely blocked on a product decision only Devin could make.
+Devin then delegated those six rather than answer them; they are decided as D1–D6 in
+`docs/plans/2026-08-30-field-walk-decisions.md`, and each `### 6.N` below carries a pointer to
+its decision.
 
 **What changed while this was being written.** A concurrent session landed six PRs
 (#154, #155, #156, #157, #160, #161) between 19:30 and 21:13 on 2026-08-29, including the
@@ -362,15 +368,30 @@ region, **food**).
 
 ---
 
-## 6. Decision gates — blocked on Devin
+## 6. Decision gates — DECIDED (see `docs/plans/2026-08-30-field-walk-decisions.md`)
 
-I could not responsibly guess these, and each one changes the work materially. Answering these
-five unblocks roughly two-thirds of the remaining roadmap.
+I could not responsibly guess these, and each one changes the work materially. Answering the
+**six** of them (§6.1–§6.6) unblocked roughly two-thirds of the remaining roadmap.
+
+**They are answered.** Devin delegated all six on 2026-08-30 rather than answer them himself;
+the calls, their reasoning, and their reversal cost are recorded as **D1–D6** in
+`docs/plans/2026-08-30-field-walk-decisions.md`. That record, not this section, is the decision
+authority. Each question below is kept as written and annotated with its **Decided:** pointer.
 
 ### 6.1 SCAN-03 — Which migration sources, and what is "Beverly"?
 
+**Decided: D1** — `docs/plans/2026-08-30-field-walk-decisions.md`.
+
 Named in the walk: **Binwise** (usually paired with **Toast**) and something heard as
-**"Beverly"** — most likely **BevSpot**, possibly **Beverage Analytics**. Cannot confirm.
+**"Beverly"**.
+
+> **CORRECTION.** This section originally guessed **BevSpot** (possibly Beverage Analytics).
+> That guess was wrong. "Beverly" is **Bevrly** — *Bevrly Inventory Scanner*, a restaurant
+> beverage-inventory app built around barcode scanning that "centralizes inventory and
+> locations" (<https://apps.apple.com/ca/app/bevrly-inventory-scanner/id6740220524>). The
+> evidence was already in this repository: `docs/evals/README.md:3` describes this codebase as
+> the **"Bevrly-response build"**. D1 names the preset `bevrly` and keeps a `bevspot` preset
+> alongside it, since BevSpot is also a real product in this space.
 
 **Needed:** the confirmed source list, and whether v1 is credentialed API pulls (the Invintory
 model — `invintory-cellartracker-import-options.png` shows username/password with per-bucket
@@ -381,6 +402,8 @@ ingestion.
 account. That is a procurement task, not a coding task.
 
 ### 6.2 SCAN-07 — How literally do we take Vivino's architecture?
+
+**Decided: D2** — `docs/plans/2026-08-30-field-walk-decisions.md`.
 
 Devin: *"I would like to do maybe a one-to-one comparison with the Vivino app and I would like
 for us to probably take that architecture since it does work so well. We can have a fallback of
@@ -398,6 +421,8 @@ Two readings, materially different builds:
 reliably on a cold LLM call. But this is an architecture commitment and should be Devin's.
 
 ### 6.3 SCAN-06 — Corpus coverage is the real recognition gap
+
+**Decided: D3** — `docs/plans/2026-08-30-field-walk-decisions.md`.
 
 The reproducible miss is **Champagne Frédéric Savart "Haute Couture", Le Mesnil/Oger Grand Cru,
 2017, Extra-Brut** — a grower champagne whose own label reads **`2030 Bouteilles`** (a
@@ -421,6 +446,8 @@ is user-generated at consumer scale.
 
 ### 6.4 CELLAR-02 — 3D cellar: what is v1?
 
+**Decided: D4** — `docs/plans/2026-08-30-field-walk-decisions.md`.
+
 The differentiator. User scans their space (camera and/or **LiDAR**), gets a 3D map of cellar /
 fridge / bin / racks, and assigns wines to positions.
 
@@ -441,6 +468,8 @@ superset of the last. Photorealism is the north star, not necessarily v1.
 
 ### 6.5 Design authority for the visual rework
 
+**Decided: D5** — `docs/plans/2026-08-30-field-walk-decisions.md`.
+
 GLOBAL-03, CELLAR-01, and CELLAR-05/06 are visual-design changes to Devin's own product.
 `DESIGN.md` (Nocturne) is a committed, CI-enforced contract. Redesigning the Cellar page
 autonomously would mean inventing art direction with no brief and no approval, against a house
@@ -449,13 +478,15 @@ rule that visual identity is owned, not assumed.
 **Needed:** either a brief/reference set, or approval to propose options for review.
 **Not done autonomously**, deliberately.
 
----
-
 ### 6.6 SCAN-04 — what does deleting an applied invoice do?
+
+**Decided: D6** — `docs/plans/2026-08-30-field-walk-decisions.md`.
 
 Promoted here from Tier 1 once the code was actually checked. See §4's SCAN-04 entry: no
 delete endpoint exists, and the decision that matters is what happens to inventory an
 invoice already added. Refuse / revert / soft-delete — pick one.
+
+---
 
 ## 7. Tier 3 — Epics needing their own specs
 
@@ -481,6 +512,10 @@ one queries inventory, the other queries the world. Worth splitting into two tic
 ---
 
 ## 8. What shipped in tonight's autonomous run
+
+**This has since landed.** The branch was squash-merged to `main` as `3b02f3b` (#162) on
+2026-08-30; it is no longer awaiting review. The description below is kept as the record of
+what that PR contained.
 
 Branch `feat/field-notes-tier-1`, three commits. Every gate green at each commit:
 `tsc --noEmit`, `pnpm lint` (0 errors), `pnpm test` (3,032 passing), `check:design`,
@@ -563,7 +598,8 @@ accounting matters more than a green checkmark:
    21:13, including a 145-file decomposition. Running a second merge train against the same
    files overnight risks exactly the collisions the refactor plan's own §7.4 warns about.
    Tonight's code changes were therefore kept small, isolated from the refactor's contended
-   files, and left on a branch for review rather than auto-landed.
+   files, and left on a branch for review rather than auto-landed. **That branch has since
+   been reviewed and landed on `main` as `3b02f3b` (#162).**
 
 4. **GLM 5.3 was not available and was not used.** There is no Z.AI/GLM credential on this
    machine, and `~/.claude/CLAUDE.md` records GLM/Z.AI as dropped from the stack on 2026-06-02.
@@ -580,8 +616,8 @@ notes explicitly were not one. Now there is a candidate.
 
 ## 10. Recommended sequence
 
-1. **Devin answers §6** (six decisions, ~30 minutes of his time — the highest-leverage half
-   hour available on this project).
+1. ~~**Devin answers §6**~~ — **done**, by delegation on 2026-08-30. See
+   `docs/plans/2026-08-30-field-walk-decisions.md` (D1–D6). The sequence now starts at step 2.
 2. **Tier 1 lands** (§4) — small, already partly done tonight.
 3. **GLOBAL-01 gate script + GLOBAL-02 search** — cheap, and they constrain everything after.
 4. **Tier 2 design pass** (§5) — CELLAR-01, CELLAR-05/06, LIST-03/04 together, once §6.5 is

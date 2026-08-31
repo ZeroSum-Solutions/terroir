@@ -45,8 +45,14 @@ test.describe("mobile scan intake regression (M0-1)", () => {
     });
     await gotoFreshScanPage(page);
 
+    // Kimi audit sprint 1 (commit 4ef6b11, 2026-08-26) merged the standalone
+    // "Take photo" button into the dashed capture zone itself — "one camera
+    // entrance … the old 'Take photo' button duplicated the zone exactly"
+    // (ready-view.tsx). That zone is still the camera trigger (its hidden
+    // input has no `multiple`, same as before); its accessible name is now
+    // its own heading text, "Tap to photograph".
     const fileChooserPromise = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: "Take photo" }).click();
+    await page.getByRole("button", { name: "Tap to photograph" }).click();
     const chooser = await fileChooserPromise;
     expect(chooser.isMultiple()).toBe(false);
     await chooser.setFiles({

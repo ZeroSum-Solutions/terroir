@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, Palette, Sparkles, Upload } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link2, Loader2, Palette, Sparkles, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 import {
   BrandKitPaletteSchema,
   parseStoredProposals,
@@ -38,26 +39,110 @@ export function BrandKitPanel({
   const [generating, setGenerating] = useState(false);
   const [applying, setApplying] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>(null);
+  // LIST-05 — a kit can also come from the restaurant's own website.
+  const [siteUrl, setSiteUrl] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const busyRef = useRef(false);
 
-  async function uploadLogo(file: File) {
-    setUploading(true);
-    setStatus(null);
-    try {
+  const applyBrandKit = useCallback(
+    async (init: RequestInit, failure: string, success: string) => {
+      if (busyRef.current) return;
+      busyRef.current = true;
+      setUploading(true);
+      setStatus(null);
+      try {
+        const response = await fetch("/api/brand-kit", { method: "POST", ...init });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(errorMessage(payload, failure));
+        const nextPalette = BrandKitPaletteSchema.parse(payload.brandKit.palette);
+        setLogoUrl(payload.brandKit.logoUrl);
+        setPalette(nextPalette);
+        setProposals(parseStoredProposals(payload.brandKit.proposals));
+        setStatus({ kind: "success", message: success });
+      } catch (error) {
+        setStatus({ kind: "error", message: messageOf(error) });
+      } finally {
+        busyRef.current = false;
+        setUploading(false);
+      }
+    },
+    [],
+  );
+
+  const uploadLogo = useCallback(
+    (file: File) => {
       const form = new FormData();
       form.set("file", file);
-      const response = await fetch("/api/brand-kit", { method: "POST", body: form });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(errorMessage(payload, "Logo upload failed."));
-      const nextPalette = BrandKitPaletteSchema.parse(payload.brandKit.palette);
-      setLogoUrl(payload.brandKit.logoUrl);
-      setPalette(nextPalette);
-      const stored = parseStoredProposals(payload.brandKit.proposals);
-      setProposals(stored);
-      setStatus({ kind: "success", message: "Palette extracted" });
-    } catch (error) {
-      setStatus({ kind: "error", message: messageOf(error) });
-    } finally {
-      setUploading(false);
+      return applyBrandKit({ body: form }, "Logo upload failed.", "Palette extracted");
+    },
+    [applyBrandKit],
+  );
+
+  const importFromUrl = useCallback(
+    (url: string) => {
+      if (!url.trim()) {
+        setStatus({ kind: "error", message: "Enter a website address." });
+        return;
+      }
+      return applyBrandKit(
+        {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: url.trim() }),
+        },
+        "Couldn't build a kit from that website.",
+        "Palette read from the website",
+      );
+    },
+    [applyBrandKit],
+  );
+
+  /**
+   * Paste anywhere on the page: an image becomes the logo, a bare URL fills the
+   * website field. Text pastes into a field the user is actually typing in are
+   * left alone.
+   */
+  useEffect(() => {
+    function onPaste(event: ClipboardEvent) {
+      const image = [...(event.clipboardData?.files ?? [])].find((file) =>
+        file.type.startsWith("image/"),
+      );
+      if (image) {
+        event.preventDefault();
+        void uploadLogo(image);
+        return;
+      }
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+        return;
+      }
+      const text = event.clipboardData?.getData("text/plain")?.trim() ?? "";
+      if (/^https?:\/\/\S+$/i.test(text)) {
+        event.preventDefault();
+        setSiteUrl(text);
+        void importFromUrl(text);
+      }
+    }
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [uploadLogo, importFromUrl]);
+
+  function onDrop(event: React.DragEvent) {
+    event.preventDefault();
+    setDragging(false);
+    const image = [...event.dataTransfer.files].find((file) =>
+      file.type.startsWith("image/"),
+    );
+    if (image) {
+      void uploadLogo(image);
+      return;
+    }
+    const dropped = (
+      event.dataTransfer.getData("text/uri-list") ||
+      event.dataTransfer.getData("text/plain")
+    ).trim();
+    if (dropped) {
+      setSiteUrl(dropped);
+      void importFromUrl(dropped);
     }
   }
 
@@ -109,6 +194,12 @@ export function BrandKitPanel({
     <section
       aria-label="Brand kit"
       className="mt-xl rounded-card card-surface p-md md:p-lg"
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={onDrop}
     >
       <div className="flex flex-col gap-md sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -117,7 +208,8 @@ export function BrandKitPanel({
             <h2 className="font-serif text-[20px] font-medium text-ink">Brand kit</h2>
           </div>
           <p className="mt-xs max-w-[576px] text-[13px] text-grey">
-            Upload a logo, extract its palette, then generate accessible menu themes.
+            Drop, paste or upload a logo — or give the restaurant&apos;s website
+            address — then generate accessible menu themes.
           </p>
         </div>
         <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-xs rounded-pill border border-rule bg-surface px-md text-[13px] font-medium text-ink hover:bg-wash focus-ring">
@@ -127,7 +219,7 @@ export function BrandKitPanel({
             aria-label="Upload logo"
             className="sr-only"
             type="file"
-            accept="image/png"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif"
             disabled={uploading}
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -137,6 +229,51 @@ export function BrandKitPanel({
           />
         </label>
       </div>
+
+      <form
+        className="mt-md flex flex-col gap-sm sm:flex-row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void importFromUrl(siteUrl);
+        }}
+      >
+        <div className="relative flex-1">
+          <Link2
+            className="pointer-events-none absolute left-sm top-1/2 h-4 w-4 -translate-y-1/2 text-grey"
+            aria-hidden
+          />
+          <input
+            type="url"
+            inputMode="url"
+            aria-label="Business website"
+            placeholder="yourrestaurant.com"
+            value={siteUrl}
+            onChange={(event) => setSiteUrl(event.target.value)}
+            className="h-11 w-full rounded-pill border border-edge bg-surface pl-xl pr-sm text-body-lg text-ink placeholder:text-grey focus:border-accent focus-ring md:text-control"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={uploading}
+          className="min-h-11 shrink-0 rounded-pill border border-rule bg-surface px-md text-body-sm font-medium text-ink hover:bg-wash focus-ring disabled:opacity-50"
+        >
+          Build from website
+        </button>
+      </form>
+
+      <p
+        data-brand-kit-dropzone
+        className={cn(
+          "mt-sm rounded-md border border-dashed px-sm py-xs text-ledger",
+          dragging
+            ? "border-accent bg-wash text-ink"
+            : "border-rule text-grey",
+        )}
+      >
+        {dragging
+          ? "Drop the logo or link to build the kit."
+          : "Drag a logo or a link here, or paste one anywhere on this page."}
+      </p>
 
       {(logoUrl || palette) && (
         <div className="mt-md flex flex-wrap items-center gap-md rounded-md bg-wash p-sm">

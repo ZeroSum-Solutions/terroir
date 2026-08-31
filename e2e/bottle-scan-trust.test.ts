@@ -113,7 +113,11 @@ test.describe("bottle-scan result trust (AF-D, walkthrough §1.2)", () => {
     // Immediate acknowledgment: the captured preview + a progress state
     // render before /api/scan-bottle has resolved — the request is still
     // held open at this point.
-    await expect(page.getByRole("img", { name: "Captured photo" })).toBeVisible();
+    //
+    // Commit 8eb2e34 (WCAG 2.2 AA lint + axe gates, 2026-08-27) reworded this
+    // preview's alt text from "Captured photo" to "What you captured"
+    // (processing-view.tsx) — an a11y copy tweak, not a behavior change.
+    await expect(page.getByRole("img", { name: "What you captured" })).toBeVisible();
     await expect(page.getByRole("progressbar")).toBeVisible();
     await expect(page.getByText("Reading the label")).toBeVisible();
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, "01-immediate-acknowledgment.png") });

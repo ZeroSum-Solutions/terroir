@@ -191,6 +191,20 @@ test.describe("@opp-2 wine-aware cellar health", () => {
     }
   });
 
+  /**
+   * CELLAR-01 moved Producer/Region/Sort/Group-by into the Filters sheet and
+   * left CellarRow's markup untouched — including its pre-existing dual
+   * render (a `lg:hidden` phone stack and the wide layout both render the
+   * producer name in their own element). `getByText(producer, { exact: true
+   * })` therefore resolves to two nodes and trips strict mode. Scoping to the
+   * row via `data-cellar-row` (as e2e/taxonomy.test.ts already does for wine
+   * names) sidesteps the duplicate without weakening what is asserted: the
+   * wine with this producer is present, under this health filter.
+   */
+  function cellarRow(page: Page) {
+    return page.locator(`[data-cellar-row="${wineId}"]`);
+  }
+
   test("EV-2.3/2.4: recompute names the rule, responds to config, and drills into Cellar", async ({
     page,
   }) => {
@@ -211,7 +225,7 @@ test.describe("@opp-2 wine-aware cellar health", () => {
     await expect(metric).toHaveAttribute("href", "/cellar?health=cash_trap");
     await metric.click();
     await expect(page).toHaveURL(/\/cellar\?health=cash_trap$/);
-    await expect(page.getByText(producer, { exact: true })).toBeVisible();
+    await expect(cellarRow(page)).toBeVisible();
 
     const { error: configError } = await admin
       .from("cellar_config")
@@ -229,7 +243,7 @@ test.describe("@opp-2 wine-aware cellar health", () => {
     expect(second?.reason).toMatch(/^dead_stock rule:/);
 
     await page.goto("/cellar?health=dead_stock");
-    await expect(page.getByText(producer, { exact: true })).toBeVisible();
+    await expect(cellarRow(page)).toBeVisible();
   });
 });
 

@@ -15,7 +15,15 @@ export async function extractPaletteFromImage(
   mimeType: string,
 ): Promise<string[]> {
   if (mimeType === "image/png") {
-    return quantizeDominantColours(decodePng(bytes));
+    try {
+      return quantizeDominantColours(decodePng(bytes));
+    } catch {
+      // LIST-05 — the hand-rolled decoder handles only non-interlaced 8-bit
+      // truecolour PNGs. An *indexed* PNG (colour type 3) is what most design
+      // tools export a logo as, and it threw here, which is a large part of
+      // "the brand kit doesn't work". Chromium reads every PNG variant, so
+      // fall through to the rasterizer rather than blaming the file.
+    }
   }
   const browser = await puppeteer.launch({
     headless: true,

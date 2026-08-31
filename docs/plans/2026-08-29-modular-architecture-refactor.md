@@ -1,6 +1,8 @@
 # Modular Architecture Refactor — Plan
 
-**Status:** Draft for review
+**Status:** ACTIVE — partly executed. Phases 0–2 have **landed** (§3B and the Phase 2 RESULT
+block in §6 record the commits: #152, #154, #155, #156, #157). Later phases are still plan.
+Read each phase's own RESULT block before assuming anything below is unbuilt.
 **Date:** 2026-08-29
 **Baseline commit:** `8c777d5` (main, clean)
 **Goal:** Make Terroir a codebase where several senior engineers can work in parallel without colliding, and where no single file or module can grow back into a monolith.

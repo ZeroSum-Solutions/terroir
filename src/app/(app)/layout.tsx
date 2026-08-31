@@ -4,6 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { RestaurantProvider } from "@/lib/context/restaurant";
 import { SettingsDropdown } from "./settings-dropdown";
 import { AssistantPanel } from "./assistant-panel";
+import { GlobalSearch } from "./global-search";
 import { DesktopNavLinks, MobileNavLinks } from "./nav-links";
 import { Fab } from "./fab";
 import { ToastWrapper } from "./toast-wrapper";
@@ -48,6 +49,14 @@ export default async function AppLayout({
           <DesktopNavLinks role={userRole} />
         </nav>
 
+        {/* GLOBAL-02 — search is its own element, at the top, on every page.
+            Desktop puts it in the header's unclaimed middle. At 390px the
+            header has no room left after the brand, the restaurant context
+            and the two icon controls, so the mobile placement is the band
+            directly below — still the top of the page, still a visible field,
+            never folded into a menu. */}
+        <GlobalSearch className="mx-lg hidden min-w-0 max-w-[360px] flex-1 md:block" />
+
         <div className="ml-auto flex shrink-0 items-center gap-sm md:gap-md">
           <span className="hidden text-[12px] font-light tabular text-grey md:inline">
             {user.email}
@@ -59,6 +68,16 @@ export default async function AppLayout({
           <SettingsDropdown />
         </div>
       </header>
+
+      {/* Mobile placement of the same field. Sticky under the header rather
+          than fixed: in flow it reserves its own height, so nothing has to
+          know its size to clear it. */}
+      <div
+        className="sticky z-[var(--z-sticky)] border-b border-rule bg-canvas px-md py-sm md:hidden"
+        style={{ top: "var(--chrome-header-total)" }}
+      >
+        <GlobalSearch />
+      </div>
 
       {/* Content — mobile bottom padding clears the tab bar AND the FAB,
           whose top edge sits ~136px above the viewport bottom (80px offset

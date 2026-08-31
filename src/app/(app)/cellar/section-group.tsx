@@ -39,6 +39,7 @@ export function SectionGroup({
   return (
     <div
       ref={setNodeRef}
+      data-cellar-section={sectionKey}
       data-drop-over={isOver ? "" : undefined}
       className={cn(
         "rounded-card card-surface overflow-hidden transition-colors",

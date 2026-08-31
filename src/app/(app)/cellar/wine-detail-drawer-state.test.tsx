@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/lib/toast";
 import type { CellarWineRow } from "./types";
+import { baseRow as row } from "./test-row";
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -35,7 +36,7 @@ describe("WineDetailDrawer bottle state", () => {
   it("resets preservation and close-out values when switching drawer wines", async () => {
     const requests: Array<Record<string, unknown>> = [];
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
-      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (init?.body) requests.push(JSON.parse(String(init.body)) as Record<string, unknown>);
       return new Response("{}", {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -219,7 +220,7 @@ describe("WineDetailDrawer bottle state", () => {
       .fn()
       .mockResolvedValueOnce(jsonResponse({ error: "Availability update failed." }, 500))
       .mockResolvedValueOnce(jsonResponse({}, 200));
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", exceptCorpusImageFetch(fetchMock));
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -255,7 +256,7 @@ describe("WineDetailDrawer bottle state", () => {
 
   it("submits the restore direction through the shared confirmation", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}, 200));
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("fetch", exceptCorpusImageFetch(fetchMock));
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -371,6 +372,16 @@ async function flushFocusFrame() {
   });
 }
 
+// GLOBAL-04: the drawer now asks /api/wines/<id>/profile for a corpus picture
+// whenever a row has none of its own, and every fixture here has none. These
+// tests are about bottle state, so that GET is answered "no corpus entry" and
+// kept out of the doubles that count calls in order or read a JSON body.
+const exceptCorpusImageFetch = (mock: (url: string, init?: RequestInit) => unknown) =>
+  vi.fn((url: string, init?: RequestInit) =>
+    String(url).endsWith("/profile")
+      ? Promise.resolve(jsonResponse({ available: true, profile: null }, 200))
+      : mock(url, init));
+
 function jsonResponse(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {
     status,
@@ -391,70 +402,4 @@ function button(rootOrText: ParentNode | string, maybeText?: string) {
   const text = typeof rootOrText === "string" ? rootOrText : maybeText;
   return [...root.querySelectorAll<HTMLButtonElement>("button")]
     .find((item) => item.textContent?.trim() === text)!;
-}
-
-function row(overrides: Partial<CellarWineRow>): CellarWineRow {
-  return {
-    wine_id: "wine-1",
-    name: "Test Wine",
-    healthSegment: null,
-    producer: "Producer",
-    vintage: 2024,
-    varietal: "Pinot Noir",
-    region: "Willamette Valley",
-    country: "USA",
-    lineage_id: null,
-    wine_size_ml: 750,
-    duplicate_wine_ids: [],
-    is_eightysixed: false,
-    eightysixed_at: null,
-    tasting_notes: null,
-    hero_image_url: null,
-    sealed_count: 1,
-    bin_location: null,
-    bin_placements: [],
-    unplaced_count: 0,
-    suggested_bin: null,
-    section: null,
-    wine_list_item_id: null,
-    glass_pour_ml: null,
-    pour_size_mode: null,
-    size_ml: 750,
-    open_remaining_ml: 500,
-    opened_at: "2026-08-18T10:00:00.000Z",
-    open_bottle_id: "bottle-1",
-    preservation_method: "coravin",
-    opened_by: null,
-    theoretical_remaining_ml: 515,
-    closeout_reason_codes: [],
-    stock_adjustment_reason_codes: [],
-    drink_window_start: null,
-    drink_window_end: null,
-    peak_year: null,
-    rating: null,
-    rating_source: null,
-    review_excerpt: null,
-    manual_overrides: [],
-    colour: null,
-    serving_temp_min: null,
-    serving_temp_max: null,
-    serving_temp_label: null,
-    decant_minutes: null,
-    retail_min: null,
-    retail_max: null,
-    retail_median: null,
-    retail_retailer_count: null,
-    retail_refreshed_at: null,
-    current_bottle_price: null,
-    current_glass_price: null,
-    current_list_name: null,
-    current_other_list_count: 0,
-    current_unit_cost: null,
-    pricing_target_pour_cost_pct: null,
-    pricing_target_markup_ratio: null,
-    pricing_dismissed_until: null,
-    restaurant_default_target_pour_cost_pct: null,
-    restaurant_default_target_markup_ratio: null,
-    ...overrides,
-  };
 }

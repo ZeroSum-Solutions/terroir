@@ -3005,7 +3005,7 @@ function matchedRow(overrides: Partial<PreviewRow> = {}): PreviewRow {
     lwinId: "LWIN001",
     lwinScore: 0.9,
     lwinDisplayName: "Domaine A Cuvee One 2020",
-    costStatus: "present",
+    costStatus: "present", producerStatus: "present",
     resolution: "auto",
     mergedFromRowNumbers: [],
     duplicateReason: null,

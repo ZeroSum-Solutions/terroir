@@ -1,6 +1,8 @@
 # Visual Wine Platform PRD
 
-Date: 2026-08-24 · Status: **draft for owner approval** · Derives from synthesis v4
+Date: 2026-08-24 · Status: **approved as the VWP requirement source** (the eval contract it
+feeds, `docs/evals/vwp-evals.yaml`, is CI-gated via `pnpm eval:vwp`; its VWP-FR-* IDs and
+13 acceptance criteria are enforced there) · Derives from synthesis v4
 (`docs/plans/2026-08-24-visual-wine-platform-synthesis.md`, audit CONVERGED: Grok 4.6 and
 GPT-5.6 both at sound-with-revisions-applied after four rounds).
 

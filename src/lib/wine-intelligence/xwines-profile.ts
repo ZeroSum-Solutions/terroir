@@ -215,8 +215,8 @@ export type XWinesProfile = {
   /** The corpus's name for what we matched, so a reader can see what we read. */
   matchedName: string;
   matchedWinery: string | null;
-  /** "linked" = an explicit canonical_wines link; "matched" = trigram, this run. */
-  provenance: "linked" | "matched";
+  /** "linked" = canonical link; "matched" = trigram; "producer-matched" = image only. */
+  provenance: "linked" | "matched" | "producer-matched";
   /** Blended match score; null when the link was explicit rather than matched. */
   matchScore: number | null;
   type: string | null;
@@ -387,7 +387,7 @@ export async function resolveXWinesProfile(
     }
   }
 
-  // No link. Fall back to a live match, under the strict rule documented above.
+  // No link: live match, strict rule above. Blank producer -> wine-corpus-profile.ts.
   if (producer === null || producer.trim() === "" || name.trim() === "") {
     return { status: "ok", value: null };
   }

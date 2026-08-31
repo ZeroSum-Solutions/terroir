@@ -23,6 +23,25 @@ Break any of these and you will cause damage that tests will not catch.
    migration at it. `src/test/live-db-target.ts` refuses non-loopback hosts and
    `src/test/contracts/live-db-target.test.ts` enforces that every live-DB test uses
    that guard. Do not weaken, rename around, or skip either.
+
+   **Start the dev server with `scripts/local/dev-local.sh`, never bare `pnpm dev`.**
+   Plain `pnpm dev` loads `.env.local`, so it serves the hosted project while looking
+   exactly like a local server — the terminal output is identical either way, and
+   `/api/dev-login` is disabled only when `NODE_ENV === "production"`, which is false
+   here. `dev-local.sh` pins the local stack in the *process* environment, which Next
+   resolves ahead of any dotenv file. Add `DEV_BYPASS_EMAIL=owner+local@terroir.test`
+   so the bypass identity matches the seed instead of inheriting the production address.
+
+   **Latent hazard, unfixed:** `playwright.config.ts` sets
+   `webServer: { command: "pnpm dev", port: 3000, reuseExistingServer: true }`. If no
+   dev server is already running, `pnpm test:e2e` therefore starts a **bare `pnpm dev`**
+   — the hosted one — and then runs write-capable e2e specs against it. Today the only
+   thing preventing that is somebody having run `dev-local.sh` first, which is luck, not
+   a guard. The individual specs' own `isLoopbackSupabaseUrl` checks skip them, so the
+   practical outcome is a silent full skip rather than damage — but the server still
+   comes up against production. Point `webServer.command` at `dev-local.sh`, or add a
+   loopback assertion to the config; verify against CI before changing it, since CI
+   supplies its Supabase env from `supabase status` rather than from a dotenv file.
 2. **`src/types/database.ts` is generated.** Never hand-edit. `pnpm types:gen` after
    any migration; CI diffs it.
 3. **Service-role usage bypasses RLS entirely.** Every service-role call site must
@@ -39,7 +58,7 @@ Break any of these and you will cause damage that tests will not catch.
    ledger and is CI-verified. Change it through its generator and run
    `pnpm verify:feature-ledger`.
 6. **`main` is protected** with `enforce_admins: true` and a single required check
-   running 14 gates. There is no path around it, by design. Do not try to find one.
+   running 18 gates. There is no path around it, by design. Do not try to find one.
 7. **Merging to `main` deploys. Migrations do not ride along.** Railway is connected to
    `main` and ships the same SHA to *both* the `production` and `staging` environments;
    `railway.toml` runs `pnpm start` and nothing else. There is one Supabase project, so
@@ -59,6 +78,9 @@ pnpm exec tsc --noEmit          # type-check
 pnpm lint                       # ESLint + jsx-a11y
 pnpm test                       # Vitest (live-DB suites self-skip locally, run in CI)
 pnpm check:design               # palette, contrast, token-sync, typography ratchet
+pnpm check:file-size            # file-size ratchet — baselined files may shrink, never grow
+pnpm check:control-rows         # GLOBAL-01 control-row ratchet
+pnpm eval:vwp                   # VWP eval traceability (docs/evals/vwp-evals.yaml)
 pnpm verify:feature-ledger
 pnpm verify:api-contract
 pnpm verify:product-conformance
@@ -67,6 +89,11 @@ pnpm run types:check:local      # after any migration
 pnpm run downs:check
 pnpm run manifest:check
 ```
+
+`check:file-size` and `check:control-rows` are ratchets: they fail on *growth*, so a
+change that is fine in isolation can red the merge because of where it landed. Pay the
+debt down with `pnpm check:file-size:update` after splitting a file — do not raise the
+baseline to make a gate pass.
 
 If `pnpm test` passes locally but you touched anything tenant-scoped, **that is not
 proof** — the cross-tenant containment suites only run against a live loopback
@@ -83,16 +110,25 @@ Postgres. Start one (`docs/runbooks/local-stack.md`) or rely on CI.
 | Operational procedures | `docs/runbooks/` (see its README index) |
 | Active plans and specs | `docs/plans/` — `_archive/` is history, not backlog |
 
-**Do not trust for current status:** `docs/_archive/app_spec.txt` and
-`docs/_archive/claude-progress.txt`. Both are frozen historical records, both contain
-drifted claims (including a dead env var name), and both are retained as evidence
-only.
+**Do not trust for current status:** `app_spec.txt` and `claude-progress.txt` — both
+at the **repo root**, not in `docs/_archive/`. Both are frozen historical records, both
+contain drifted claims (including a dead env var name), and both are retained as
+evidence only.
+
+**Do not move them into `docs/_archive/`.** They read like stale documents because they
+are, but they are *machine-read*, not prose: `scripts/verify-feature-ledger.mjs` sets
+`SOURCE_FILE = "app_spec.txt"`, and `src/lib/feature-ledger/verify-feature-ledger.test.ts`
+resolves both repo-root-relative. Moving either reds `pnpm verify:feature-ledger`, which
+is part of the one required merge check. This has already happened: they were moved to
+`docs/_archive/` on 2026-08-29 and moved straight back the same day when the gate went
+red. Correct their drift in place if you correct it at all; do not relocate them.
+`docs/_archive/README.md` records the same rule.
 
 ## Known state you should not re-discover
 
 - **No React Query, no SWR, no CVA, no shadcn/ui, no Radix.** Absent deliberately or
   by omission — check `docs/CONVENTIONS.md` before assuming a library exists.
-- **Zod at the API boundary is the target, not the reality** — 44 of 93 routes today.
+- **Zod at the API boundary is the target, not the reality** — 46 of 94 routes today.
   New routes use zod; routes you touch get migrated.
 - **`src/adapters/*` has no tests** and is mocked at every call site. A change there
   is invisible to the suite. Add a test with your change.
@@ -117,6 +153,16 @@ only.
   missing one.
   **The import path still accepts a blank producer without warning**, which is
   how this happened; nothing yet prevents a repeat.
+  **Do not expect a local checkout to match those production numbers, and do not
+  read this as a closed incident.** `0137` is a *repair*, not a guard: it fixes
+  rows that already exist and does nothing to the code path that creates them. Any
+  re-import of the same CSV after `0137` has run reproduces the defect exactly.
+  That has already happened on this checkout — measured 2026-08-30, full migration
+  set applied: the `My Restaurant` tenant holds **1,277 wines with a blank
+  `producer`, a null `colour`, and a null `hero_image_url`**, alongside the
+  250-wine `LOCAL SEED - Osteria Scala` demo set. If your local numbers look like
+  the pre-`0137` production ones, that is the expected outcome, not a broken
+  checkout — and it is the standing argument for an import-time guard.
   **The CSV import path (`apply_import_batch_chunk`) is still unresolved by
   design** — the P2 plan (§9/§12) puts that call in P3's TypeScript caller, once
   per batch of unique variants, before the per-row loop. The import dedup key is

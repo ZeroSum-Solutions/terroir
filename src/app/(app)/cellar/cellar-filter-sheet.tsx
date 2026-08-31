@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { CheckSquare, X } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import {
   hasSelectableOptions,
@@ -9,11 +9,16 @@ import {
   type CellarGroupBy,
   type FacetCounts,
 } from "@/lib/cellar-facets";
+import {
+  CELLAR_SORTS,
+  CELLAR_SORT_LABELS,
+  type CellarSort,
+} from "@/lib/cellar-facets/sort";
 import type { CellarFacetPatch } from "./cellar-facet-bar";
 
 export type CellarSecondaryFacets = Pick<
   CellarFacets,
-  "country" | "varietal" | "vintageMin" | "vintageMax" | "format"
+  "producer" | "region" | "country" | "varietal" | "vintageMin" | "vintageMax" | "format"
 >;
 
 const GROUP_BY_OPTIONS: Array<{ value: CellarGroupBy | null; label: string }> = [
@@ -25,26 +30,37 @@ const GROUP_BY_OPTIONS: Array<{ value: CellarGroupBy | null; label: string }> = 
 ];
 
 /**
- * M2-15 §2.4 — the secondary filters (Country, Varietal, Vintage range,
- * Format, Group by) live behind one "Filters" action instead of sprawling
- * across the mobile layout as 8 standing dropdowns. Selections are staged
- * locally and only take effect on Apply; Reset clears everything — both
- * this sheet's own fields and the compact row's Producer/Region — while
- * staying open so the cleared state is visible.
+ * CELLAR-01 — THE filter surface. Every facet the cellar has (Producer,
+ * Region, Country, Varietal, Vintage range, Format), plus the sort and the
+ * grouping, plus the entry point into select-wines mode. Producer and Region
+ * used to stand outside as their own row; sort stood in the control row.
+ * Consolidating them is what lets the page keep one row of controls.
+ *
+ * Selections are staged locally and only take effect on Apply; Reset clears
+ * everything while staying open, so the cleared state is visible.
  */
 export function CellarFilterSheet({
   facets,
   counts,
   groupBy,
+  sort,
   onApply,
   onReset,
+  onEnterSelectMode,
   onClose,
 }: {
   facets: CellarSecondaryFacets;
   counts: FacetCounts;
   groupBy: CellarGroupBy | null;
-  onApply: (patch: CellarFacetPatch, groupBy: CellarGroupBy | null) => void;
+  sort: CellarSort | null;
+  onApply: (
+    patch: CellarFacetPatch,
+    groupBy: CellarGroupBy | null,
+    sort: CellarSort | null,
+  ) => void;
   onReset: () => void;
+  /** Absent when this cellar has no sections to assign wines to. */
+  onEnterSelectMode?: () => void;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -55,6 +71,7 @@ export function CellarFilterSheet({
   // mount over synchronizing state with an effect).
   const [draft, setDraft] = useState<CellarSecondaryFacets>(facets);
   const [draftGroupBy, setDraftGroupBy] = useState<CellarGroupBy | null>(groupBy);
+  const [draftSort, setDraftSort] = useState<CellarSort | null>(sort);
 
   useFocusTrap({ containerRef: dialogRef, onEscape: onClose });
 
@@ -66,6 +83,8 @@ export function CellarFilterSheet({
     };
   }, []);
 
+  const showProducer = hasSelectableOptions(counts.producer);
+  const showRegion = hasSelectableOptions(counts.region);
   const showCountry = hasSelectableOptions(counts.country);
   const showVarietal = hasSelectableOptions(counts.varietal);
   const showVintage = hasSelectableOptions(counts.vintage);
@@ -73,6 +92,8 @@ export function CellarFilterSheet({
 
   function handleReset() {
     setDraft({
+      producer: null,
+      region: null,
       country: null,
       varietal: null,
       vintageMin: null,
@@ -80,11 +101,12 @@ export function CellarFilterSheet({
       format: null,
     });
     setDraftGroupBy(null);
+    setDraftSort(null);
     onReset();
   }
 
   function handleApply() {
-    onApply(draft, draftGroupBy);
+    onApply(draft, draftGroupBy, draftSort);
     onClose();
   }
 
@@ -119,6 +141,22 @@ export function CellarFilterSheet({
 
         <div className="flex-1 overflow-y-auto overscroll-contain px-md py-md">
           <div className="flex flex-col gap-md">
+            {showProducer && (
+              <SheetField
+                label="Producer"
+                value={draft.producer}
+                options={counts.producer}
+                onChange={(producer) => setDraft((d) => ({ ...d, producer }))}
+              />
+            )}
+            {showRegion && (
+              <SheetField
+                label="Region"
+                value={draft.region}
+                options={counts.region}
+                onChange={(region) => setDraft((d) => ({ ...d, region }))}
+              />
+            )}
             {showCountry && (
               <SheetField
                 label="Country"
@@ -189,6 +227,41 @@ export function CellarFilterSheet({
                 </select>
               </label>
             </div>
+            <div>
+              <label className="block">
+                <span className="mb-2xs block text-caption font-medium uppercase text-grey">
+                  Sort
+                </span>
+                <select
+                  aria-label="Sort wines"
+                  value={draftSort ?? ""}
+                  onChange={(event) =>
+                    setDraftSort((event.target.value || null) as CellarSort | null)
+                  }
+                  className={fieldSelectClassName}
+                >
+                  <option value="">Name A–Z</option>
+                  {CELLAR_SORTS.map((option) => (
+                    <option key={option} value={option}>
+                      {CELLAR_SORT_LABELS[option]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {onEnterSelectMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  onEnterSelectMode();
+                  onClose();
+                }}
+                className="inline-flex min-h-11 items-center justify-center gap-xs rounded-pill border border-edge bg-surface text-body-sm font-medium text-ink hover:bg-wash focus-ring"
+              >
+                <CheckSquare className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+                Select wines
+              </button>
+            )}
           </div>
         </div>
 
@@ -199,14 +272,14 @@ export function CellarFilterSheet({
           <button
             type="button"
             onClick={handleReset}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill border border-edge text-[13px] font-medium text-ink hover:bg-wash focus-ring"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill border border-edge text-body-sm font-medium text-ink hover:bg-wash focus-ring"
           >
             Reset
           </button>
           <button
             type="button"
             onClick={handleApply}
-            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill bg-primary text-[13px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-pill bg-primary text-body-sm font-medium text-seal-ink hover:bg-primary-hover focus-ring"
           >
             Apply
           </button>

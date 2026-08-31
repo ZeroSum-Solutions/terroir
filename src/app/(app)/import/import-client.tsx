@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type CanonicalHeader } from "@/domains/import/constants";
 import type { PreviewRow, PreviewSummary } from "@/domains/import/preview-service";
+import type { SourcePresetId } from "@/domains/import/source-presets";
 import type { BatchDetail, BatchSummary } from "@/domains/import/batch-api-types";
 import type { RejectedLwinRows, RowOverrides } from "@/domains/import/review-types";
 import { preparePreviewRun } from "@/domains/import/preview-dispatch";
@@ -32,7 +33,6 @@ import {
   SessionStep,
   confirmChunkedSessionWithResume,
   planChunkedPreview,
-  readStoredSession,
   writeStoredSession,
   ZERO_SUMMARY,
   type ChunkedPlanState,
@@ -48,6 +48,7 @@ import { PreviewStep } from "./preview-step";
 import { BatchStep } from "./batch-step";
 import { RecentImports } from "./recent-imports";
 import { usePreviewUnits } from "./use-preview-units";
+import { useSessionResume } from "./use-session-resume";
 
 // ---------------------------------------------------------------------------
 // Re-exports. Kept here so every existing import of "./import-client"
@@ -88,7 +89,11 @@ export function ImportClient() {
   const [dropNotice, setDropNotice] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ rows: PreviewRow[]; summary: PreviewSummary } | null>(null);
+  const [preview, setPreview] = useState<{
+    rows: PreviewRow[];
+    summary: PreviewSummary;
+    detectedSource?: SourcePresetId | null;
+  } | null>(null);
   const [confirming, setConfirming] = useState(false);
   // Inline row-fix: rowNumber is GLOBAL (the number shown in the preview
   // UI) for both the plain and chunked paths — handleConfirmChunked
@@ -143,62 +148,11 @@ export function ImportClient() {
     };
   }, [loadRecent]);
 
-  // Resume: if a prior session is still in progress (per this browser's
-  // localStorage), jump straight to its SessionStep — reconciled against
-  // the server's own progress, never trusted on its own.
-  //
-  // Round-6 audit finding 4(b): a session with a client-side-skipped chunk
-  // (SessionStep's own comment) can NEVER derive status='completed'
-  // (getImportSessionProgress, session-service.ts) — it stays "in_progress"
-  // on the server forever. VERIFIED every other reader of this status,
-  // grepping across src/ for every place progress.status (or the raw
-  // import_sessions.status column) is read:
-  //   - THIS effect: the early return above only fires for "reverted"/
-  //     "completed", so a permanently-"in_progress" session keeps landing
-  //     the operator back on its own SessionStep on every reload — until
-  //     they explicitly click "Start a new import" (writeStoredSession(null),
-  //     the SessionStep/BatchStep onDone handlers below).
-  //   - SessionStep's own status pill (session-step.tsx): renders "In
-  //     progress" forever instead of "Completed" — a cosmetic difference
-  //     only, not a functional gate.
-  //   - SessionStep's pending-resolution and revert-button gates
-  //     (`progress.status !== "reverted"`): both treat "in_progress" and
-  //     "completed" IDENTICALLY — a stuck-at-in_progress session behaves
-  //     exactly like a completed one for apply/resolve/revert.
-  //   - No cron/cleanup job, no other UI surface, and no other file reads
-  //     this status at all. A permanently in_progress session is therefore
-  //     benign everywhere: at worst a stale status LABEL and a reload that
-  //     returns you to the same place, never a hard error, a blocked
-  //     action, or a resource leak.
-  useEffect(() => {
-    const stored = readStoredSession();
-    if (!stored) return;
-    let active = true;
-    (async () => {
-      try {
-        const response = await fetch(`/api/import/sessions/${stored.sessionId}`, { cache: "no-store" });
-        if (!response.ok) {
-          writeStoredSession(null);
-          return;
-        }
-        const progress = (await response.json()) as { status: string };
-        if (!active) return;
-        if (progress.status === "reverted" || progress.status === "completed") {
-          // Nothing left to resume — never re-jump into a finished session.
-          writeStoredSession(null);
-          return;
-        }
-        setSessionId(stored.sessionId);
-        setSessionLabel(stored.label);
-        setStep("session");
-      } catch {
-        // best-effort — resume is a convenience, never load-bearing.
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
+  useSessionResume((resumedSessionId, label) => {
+    setSessionId(resumedSessionId);
+    setSessionLabel(label);
+    setStep("session");
+  });
 
   const runSingleFilePreview = useCallback(async (selectedFile: File) => {
     const result = await requestSingleFilePreview(selectedFile);
@@ -521,6 +475,7 @@ export function ImportClient() {
         <PreviewStep
           filename={file?.name ?? "cellar.csv"}
           summary={chunkedPreview?.summary ?? preview?.summary ?? ZERO_SUMMARY}
+          detectedSource={preview?.detectedSource ?? null}
           errorRows={
             chunkedPreview?.errorRows ??
             (preview?.rows

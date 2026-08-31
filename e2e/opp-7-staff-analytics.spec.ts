@@ -137,7 +137,19 @@ test.describe("@opp-7 staff, comp, and anomaly analytics", () => {
 
     await page.goto(`/cellar?wine=${wineId}`);
     const form = page.getByRole("region", { name: "Stock adjustment" });
-    await form.getByRole("combobox", { name: "Reason" }).selectOption(reasonId);
+    // The region is server-rendered and already actionable-looking the instant
+    // the page loads, but StockAdjustmentForm's onChange handlers only attach
+    // once React hydrates that client boundary — a race this spec always ran,
+    // now lost reliably (proven with a standalone repro, with/without trace
+    // recording) because CELLAR-05/06's bottle-photo identity block sits above
+    // it in the SAME "use client" drawer and pushed hydration past the window
+    // a bare selectOption() used to clear by luck. Retrying the select until
+    // the button reflects it — rather than a fixed sleep — self-heals once
+    // hydration completes and still fails loudly if it never does.
+    await expect(async () => {
+      await form.getByRole("combobox", { name: "Reason" }).selectOption(reasonId);
+      await expect(form.getByRole("button", { name: "Record event" })).toBeEnabled();
+    }).toPass({ timeout: 10_000 });
     await form.getByRole("textbox", { name: "Note" }).fill(`ui-${run}`);
     await form.getByRole("button", { name: "Record event" }).click();
     await expect(form.getByRole("status")).toHaveText("Event recorded.");

@@ -4,7 +4,13 @@ This guide records the current GitHub, Railway, and Supabase gate state. It does
 not authorize a deployment, migration, promotion, rollback, or production data
 operation.
 
-## Current GitHub state
+## GitHub state — snapshot as of 2026-08-20
+
+> **This section is a dated snapshot, not current truth.** It was verified through
+> the GitHub API on 2026-08-20 and has been overtaken in places by the later
+> sections below ("Re-verification — 2026-08-22" and "Option A implementation —
+> 2026-08-22"). Read those before acting on anything here. Corrections applied
+> in place are marked **UPDATE**.
 
 Verified through the GitHub API on 2026-08-20:
 
@@ -12,7 +18,13 @@ Verified through the GitHub API on 2026-08-20:
   `Staging smoke / Required staging smoke` check, enforces administrators and
   linear history, and blocks force pushes and branch deletion.
 - The staging branch contains the `Staging smoke` and `Promote to production`
-  workflow files. Those files do not exist on `main`.
+  workflow files. At the time of this snapshot neither existed on `main`.
+  **UPDATE (still true 2026-08-30 for one of the two):** `Staging smoke` **does**
+  now exist on `main` — `.github/workflows/staging-smoke.yml`, added 2026-08-22 in
+  `1ca7f30` (#92); see "Option A implementation — 2026-08-22" below, and
+  `docs/runbooks/production-migrations.md`, which depends on it being there.
+  `Promote to production` is still genuinely absent from `main`, so the promotion
+  blocker recorded two paragraphs down still stands.
 - The staging smoke workflow is operational. It binds the deployed Railway
   candidate to the expected SHA before its isolated browser jobs can run.
 - The latest staging-tip run, GitHub Actions run `31283879947`, failed the

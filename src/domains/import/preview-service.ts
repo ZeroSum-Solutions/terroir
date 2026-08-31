@@ -15,6 +15,7 @@ import { mapHeader, validateRow, type FieldError, type FieldsInput, type RawRowF
 import { matchLwinBulk, buildLwinQueryVariants, type LwinMatch } from "./lwin-matching";
 import { mergeIntraBatchDuplicates, type IntraBatchDuplicateReason } from "./dedup-key";
 import { LWIN_MATCH_MAX_QUERIES, type CanonicalHeader } from "./constants";
+import type { SourcePresetId } from "./source-presets";
 
 /** Inline row-fix overrides (see ConfirmBatchOptions.rowOverrides in
  * batch-service.ts), keyed by the 1-indexed data row number a caller
@@ -53,6 +54,9 @@ export type PreviewRow = {
    * returns a null display_name (never fails preview either way). */
   lwinDisplayName: string | null;
   costStatus: "present" | "missing";
+  /** SCAN-03: this row has no producer. Allowed, but counted — see
+   * ValidRow.producerMissing (row-validator.ts) for why it matters. */
+  producerStatus: "present" | "missing";
   resolution: "auto" | "pending" | "include" | "exclude";
   /** P3 §1.5 tier 1: row numbers of other rows in this same upload that
    * were auto-merged into this one (same wine + location + cost +
@@ -76,10 +80,15 @@ export type PreviewSummary = {
   missingCostRows: number;
   readyToApplyRows: number;
   pendingResolutionRows: number;
+  /** SCAN-03: valid rows carrying no producer at all. Not an error — the
+   * import boundary deliberately accepts them — but surfaced so the
+   * condition that left 1,277 production wines unresolvable to the
+   * identity spine is visible before it is written again. */
+  missingProducerRows: number;
 };
 
 export type PreviewResult =
-  | { ok: true; rows: PreviewRow[]; summary: PreviewSummary }
+  | { ok: true; rows: PreviewRow[]; summary: PreviewSummary; detectedSource: SourcePresetId | null }
   | { ok: false; error: { code: string; message: string; missingHeaders?: CanonicalHeader[] } };
 
 export async function buildImportPreview(
@@ -93,7 +102,7 @@ export async function buildImportPreview(
     return { ok: false, error: parsed.error };
   }
 
-  const { columnToField, missingRequired } = mapHeader(parsed.header);
+  const { columnToField, missingRequired, detectedSource } = mapHeader(parsed.header);
   if (missingRequired.length > 0) {
     return {
       ok: false,
@@ -220,6 +229,7 @@ export async function buildImportPreview(
         lwinScore: null,
         lwinDisplayName: null,
         costStatus: "present",
+        producerStatus: "present",
         resolution: "exclude",
         mergedFromRowNumbers: [],
         duplicateReason: null,
@@ -242,6 +252,7 @@ export async function buildImportPreview(
       lwinScore: match?.score ?? null,
       lwinDisplayName: match?.displayName ?? null,
       costStatus,
+      producerStatus: row.producerMissing ? "missing" : "present",
       resolution: needsResolution ? "pending" : "auto",
       mergedFromRowNumbers: [],
       duplicateReason: null,
@@ -266,7 +277,10 @@ export async function buildImportPreview(
     missingCostRows: mergedRows.filter((r) => r.rowState === "valid" && r.costStatus === "missing").length,
     readyToApplyRows: mergedRows.filter((r) => r.resolution === "auto").length,
     pendingResolutionRows: mergedRows.filter((r) => r.resolution === "pending").length,
+    missingProducerRows: mergedRows.filter(
+      (r) => r.rowState === "valid" && r.producerStatus === "missing",
+    ).length,
   };
 
-  return { ok: true, rows: mergedRows, summary };
+  return { ok: true, rows: mergedRows, summary, detectedSource };
 }

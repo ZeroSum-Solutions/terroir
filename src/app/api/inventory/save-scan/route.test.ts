@@ -12,8 +12,9 @@ import { makeScan, makeLineItem } from "@/test/fixtures/invoices/scans";
  *   2. Bad input: 400 on missing scan, missing originalItems, bad JSON
  *   3. Happy path: returns scanId + counts
  *   4. DB error on invoice_scans insert → 500, no wines created
- *   5. DB error on find_or_create_wines_batch RPC → invoice_scans row is
- *      rolled back (delete is called) and the caller sees a 500
+ *   5. DB error on find_or_create_wines_batch RPC → the invoice_scans row
+ *      STAYS (D6 rule 1) but records status_reason=inventory_save_failed
+ *      and releases its claim, and the caller sees a 500
  */
 
 // ── requireMembership stub ───────────────────────────────────────────────
@@ -37,7 +38,6 @@ type UploadResult = { error: unknown };
 
 type SupabaseBehavior = {
   invoiceScansInsert: InsertResult;
-  invoiceScansDelete: { error: unknown };
   invoiceScansUpdate: { error: unknown };
   inventoryItemsInsert: { error: unknown };
   findOrCreateWinesBatch: RpcResult;
@@ -47,7 +47,6 @@ type SupabaseBehavior = {
 
 const supabaseBehavior: SupabaseBehavior = {
   invoiceScansInsert: { data: { id: "scan-123" }, error: null },
-  invoiceScansDelete: { error: null },
   invoiceScansUpdate: { error: null },
   inventoryItemsInsert: { error: null },
   findOrCreateWinesBatch: { data: ["wine-1", "wine-2"], error: null },
@@ -56,21 +55,21 @@ const supabaseBehavior: SupabaseBehavior = {
 };
 
 const calls: {
-  deleteInvoiceScanCalled: boolean;
   inventoryInserts: unknown[];
   invoiceScansInserts: unknown[];
+  invoiceScansUpdates: Record<string, unknown>[];
   rpc: Array<{ fn: string; args: unknown }>;
 } = {
-  deleteInvoiceScanCalled: false,
   inventoryInserts: [],
   invoiceScansInserts: [],
+  invoiceScansUpdates: [],
   rpc: [],
 };
 
 function resetSupabaseCallRecords() {
-  calls.deleteInvoiceScanCalled = false;
   calls.inventoryInserts = [];
   calls.invoiceScansInserts = [];
+  calls.invoiceScansUpdates = [];
   calls.rpc = [];
 }
 
@@ -87,15 +86,16 @@ function buildSupabaseStub() {
               }),
             };
           },
-          delete: () => ({
-            eq: async () => {
-              calls.deleteInvoiceScanCalled = true;
-              return supabaseBehavior.invoiceScansDelete;
-            },
-          }),
-          update: () => ({
-            eq: async () => supabaseBehavior.invoiceScansUpdate,
-          }),
+          update: (row: Record<string, unknown>) => {
+            calls.invoiceScansUpdates.push(row);
+            // Chainable: .eq().eq() marks a failed save; .eq().eq().is().select() claims.
+            const chain: Record<string, unknown> = {
+              eq: () => chain, is: () => chain, select: () => chain,
+              then: (r: (v: unknown) => unknown) =>
+                r({ data: [{ id: "scan-123" }], ...supabaseBehavior.invoiceScansUpdate }),
+            };
+            return chain;
+          },
         };
       }
       if (table === "inventory_items") {
@@ -159,6 +159,7 @@ function authedAsA() {
   });
 }
 
+const SAVE_FAILED_MARK = { status_reason: "inventory_save_failed", committed_at: null };
 const { POST } = await import("./route");
 
 // ── Tests ────────────────────────────────────────────────────────────────
@@ -171,7 +172,6 @@ describe("POST /api/inventory/save-scan", () => {
       data: { id: "scan-123" },
       error: null,
     };
-    supabaseBehavior.invoiceScansDelete = { error: null };
     supabaseBehavior.invoiceScansUpdate = { error: null };
     supabaseBehavior.inventoryItemsInsert = { error: null };
     supabaseBehavior.findOrCreateWinesBatch = {
@@ -412,9 +412,8 @@ describe("POST /api/inventory/save-scan", () => {
         message: "Internal server error.",
       },
     });
-    // The route must delete the invoice_scans row we just inserted to
-    // avoid stranding a parent row with no children.
-    expect(calls.deleteInvoiceScanCalled).toBe(true);
+    // D6 rule 1: the row STAYS and states why nothing reached inventory.
+    expect(calls.invoiceScansUpdates).toEqual([SAVE_FAILED_MARK]);
     expect(calls.inventoryInserts).toHaveLength(0);
   });
 
@@ -436,9 +435,9 @@ describe("POST /api/inventory/save-scan", () => {
         message: "Internal server error.",
       },
     });
-    // Wines were created, but inventory failed — clean up the parent row.
+    // Wines were created, but inventory failed — the row stays, marked.
     expect(calls.inventoryInserts).toHaveLength(1);
-    expect(calls.deleteInvoiceScanCalled).toBe(true);
+    expect(calls.invoiceScansUpdates).toEqual([SAVE_FAILED_MARK]);
   });
 
   // ── G1-12: arithmetic re-validation ─────────────────────────────────

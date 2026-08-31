@@ -38,7 +38,10 @@ describe("BrandKitPanel proposal identity", () => {
     expect(container.querySelectorAll("article")).toHaveLength(3);
 
     const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
-    expect(input.accept).toBe("image/png");
+    // LIST-05 — the picker used to hide every non-PNG, which is most logos.
+    expect(input.accept.split(",")).toEqual(
+      expect.arrayContaining(["image/png", "image/jpeg", "image/webp"]),
+    );
     Object.defineProperty(input, "files", {
       configurable: true,
       value: [new File(["png"], "new-logo.png", { type: "image/png" })],
@@ -83,7 +86,79 @@ describe("BrandKitPanel proposal identity", () => {
     expect(generate.className).toContain("min-h-11");
     await act(async () => root.unmount());
   });
+
+  it("offers a website address as a second way in (LIST-05)", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      brandKit: {
+        logoUrl: null,
+        palette: { colors: ["#2244CC"] },
+        proposals: null,
+      },
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { root, container } = await renderPanel(STORED_PROPOSALS);
+
+    const url = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Business website"]',
+    )!;
+    expect(url).not.toBeNull();
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!
+        .call(url, "thefrenchlaundry.com");
+      url.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      url.closest("form")!.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/brand-kit",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ url: "thefrenchlaundry.com" }),
+      }),
+    );
+    expect(container.querySelector("[data-palette-swatch]")).not.toBeNull();
+    await act(async () => root.unmount());
+  });
+
+  it("takes an image dropped onto the panel", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      brandKit: {
+        logoUrl: "data:image/jpeg;base64,aaa",
+        palette: { colors: ["#123456"] },
+        proposals: null,
+      },
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { root, container } = await renderPanel(STORED_PROPOSALS);
+
+    const panel = container.querySelector<HTMLElement>('section[aria-label="Brand kit"]')!;
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", {
+      value: {
+        files: [new File(["jpg"], "logo.jpg", { type: "image/jpeg" })],
+        getData: () => "",
+      },
+    });
+    await act(async () => {
+      panel.dispatchEvent(drop);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/brand-kit",
+      expect.objectContaining({ method: "POST", body: expect.any(FormData) }),
+    );
+    await act(async () => root.unmount());
+  });
 });
+
 
 async function renderPanel(proposals: typeof STORED_PROPOSALS) {
   const container = document.createElement("div");

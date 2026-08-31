@@ -156,7 +156,44 @@ describe("processInvoiceScanOnce catch-path recovery data (C04)", () => {
     ).rejects.toThrow("ocr boom");
 
     expect(updatePayloads).toHaveLength(1);
-    expect(updatePayloads[0]).toEqual({ status: "failed" });
+    // status_reason (SCAN-04 / D6 rule 1, migration 0143): the row stays in
+    // the ledger, so it has to say why. A plain Error is not an OcrError or
+    // an AiExtractError, so the stage is genuinely unknown here.
+    expect(updatePayloads[0]).toEqual({ status: "failed", status_reason: "unexpected_error" });
+  });
+
+  it("names the failing stage in status_reason for a typed OCR failure", async () => {
+    const { OcrError } = await import("@/adapters/ocr/azure-document-intelligence");
+    // The module mock replaces OcrError with a bare `extends Error` class,
+    // so the real constructor's code argument is dropped — set it back.
+    const ocrFailure = new OcrError("upstream_error", "azure down") as Error & { code?: string };
+    ocrFailure.code = "upstream_error";
+    mockExtractOcr.mockRejectedValue(ocrFailure);
+
+    const updatePayloads: Record<string, unknown>[] = [];
+    const supabase = {
+      from: vi.fn(() => ({
+        update: vi.fn((payload: Record<string, unknown>) => {
+          updatePayloads.push(payload);
+          return captureUpdateResult();
+        }),
+      })),
+    };
+
+    const result = await processInvoiceScanOnce({
+      supabase: supabase as never,
+      restaurantId: "restaurant-a",
+      userId: "user-a",
+      fileBuffer: Buffer.from("invoice"),
+      mimeType: "image/jpeg",
+      preCreatedScanId: "scan-a",
+    });
+
+    expect(result.status).toBe(502);
+    expect(updatePayloads[0]).toEqual({
+      status: "failed",
+      status_reason: "ocr_upstream_error",
+    });
   });
 });
 

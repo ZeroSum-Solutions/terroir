@@ -3,7 +3,6 @@
 import { useMemo, useState, useCallback, useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { CheckSquare, Layers, ChevronDown, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -33,6 +32,7 @@ import {
   type CellarFacetPatch,
 } from "./cellar-facet-bar";
 import { CellarRow, LEDGER_COLS } from "./cellar-row";
+import { CellarSelectToolbar } from "./cellar-select-toolbar";
 import { LineageBlockList } from "./lineage-block-list";
 import { SectionGroup } from "./section-group";
 import { TaxonomyGroup } from "./taxonomy-group";
@@ -84,7 +84,10 @@ export function CellarList({
   sort,
   onFacetsChange,
   onGroupByChange,
+  onSortChange,
   onFilteredCountChange,
+  filtersOpen,
+  onFiltersOpenChange,
   sections,
 }: {
   rows: CellarWineRow[];
@@ -98,8 +101,14 @@ export function CellarList({
   sort: CellarSort | null;
   onFacetsChange: (patch: CellarFacetPatch) => void;
   onGroupByChange: (groupBy: CellarGroupBy | null) => void;
+  onSortChange: (sort: CellarSort | null) => void;
   // Reports the post-filter row count up to the shell's sticky masthead.
   onFilteredCountChange?: (count: number) => void;
+  // CELLAR-01 — the button that opens the one filter surface lives in the
+  // shell's single control row; the sheet itself renders here, where the
+  // facet counts are.
+  filtersOpen: boolean;
+  onFiltersOpenChange: (open: boolean) => void;
   // BND-063/064 — cellar sections for grouping, DnD, and bulk assign
   sections?: CellarSection[];
 }) {
@@ -196,14 +205,14 @@ export function CellarList({
       }
     }
 
-    // Remove empty groups (except uncategorized)
-    const result: Array<{ key: string; name: string; wines: CellarWineRow[] }> = [];
-    for (const [key, group] of groups) {
-      if (group.wines.length > 0 || key === UNCATEGORIZED) {
-        result.push({ key, name: group.name, wines: group.wines });
-      }
-    }
-    return result;
+    // Every configured section renders, empty or not. Hiding the empty ones
+    // meant a newly-created section was not a drop target until something was
+    // already in it — you could never drag the first wine into it (CELLAR-04).
+    return [...groups].map(([key, group]) => ({
+      key,
+      name: group.name,
+      wines: group.wines,
+    }));
   }, [visibleRows, sections, sectionOverrides]);
 
   // BND-063: handle DnD — when a wine is dropped into a different section
@@ -264,7 +273,10 @@ export function CellarList({
         const res = await fetch(`/api/cellar/${wineId}/section`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ section: nextSection ?? "" }),
+          // null clears the section — the Uncategorized drop target. The
+          // route accepts null explicitly; it used to 400 on the empty
+          // string this sent instead (CELLAR-04).
+          body: JSON.stringify({ section: nextSection }),
         });
         if (!res.ok) {
           throw new Error(`Failed (${res.status})`);
@@ -382,8 +394,12 @@ export function CellarList({
           facets={facets}
           counts={counts}
           groupBy={groupBy}
+          sort={sort}
+          open={filtersOpen}
+          onOpenChange={onFiltersOpenChange}
           onFacetsChange={onFacetsChange}
           onGroupByChange={onGroupByChange}
+          onSortChange={onSortChange}
         />
         <div className="rounded-card card-surface px-md py-lg text-center">
           <p className="text-[13px] text-grey">{message}</p>
@@ -405,99 +421,37 @@ export function CellarList({
         facets={facets}
         counts={counts}
         groupBy={groupBy}
+        sort={sort}
+        open={filtersOpen}
+        onOpenChange={onFiltersOpenChange}
         onFacetsChange={onFacetsChange}
         onGroupByChange={onGroupByChange}
+        onSortChange={onSortChange}
+        onEnterSelectMode={
+          sections && sections.length > 0 && !groupBy
+            ? () => setSelectMode(true)
+            : undefined
+        }
       />
-      {/* BND-064: Selection mode toolbar */}
-      {sections && sections.length > 0 && !groupBy && (
-        <div className="mb-sm flex items-center gap-xs">
-          {!selectMode ? (
-            <button
-              type="button"
-              onClick={() => setSelectMode(true)}
-              className="inline-flex min-h-11 items-center gap-xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-wash transition-colors"
-            >
-              <CheckSquare className="h-4 w-4" strokeWidth={2} aria-hidden />
-              Select wines
-            </button>
-          ) : (
-            <div className="flex flex-wrap items-center gap-xs w-full">
-              <button
-                type="button"
-                onClick={selectAll}
-                className="inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-wash"
-              >
-                Select all ({filtered.length})
-              </button>
-              {selectedIds.size > 0 && (
-                <button
-                  type="button"
-                  onClick={deselectAll}
-                  className="inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-wash"
-                >
-                  Clear
-                </button>
-              )}
-              {selectedIds.size > 0 && (
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setAssignTarget(assignTarget ? null : "__open__")}
-                    className="inline-flex min-h-11 items-center gap-xs rounded-pill bg-primary px-sm text-[12px] font-medium text-seal-ink hover:bg-primary-hover"
-                  >
-                    <Layers className="h-4 w-4" strokeWidth={2} aria-hidden />
-                    Assign {selectedIds.size} to section
-                    <ChevronDown className="h-3 w-3" strokeWidth={2} aria-hidden />
-                  </button>
-                  {assignTarget === "__open__" && (
-                    <div className="absolute top-full left-0 mt-1 z-[var(--z-overlay)] w-56 rounded-lg card-surface py-xs">
-                      {sections.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => setAssignTarget(s.name)}
-                          className="block min-h-11 w-full px-sm py-xs text-left text-[13px] text-ink hover:bg-wash"
-                        >
-                          {s.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {assignTarget && assignTarget !== "__open__" && (
-                <div className="flex items-center gap-xs">
-                  <span className="text-[12px] text-grey">
-                    Assign to <strong>{assignTarget}</strong>?
-                  </span>
-                  <button
-                    type="button"
-                    onClick={doBulkAssign}
-                    disabled={busy}
-                    className="inline-flex min-h-11 items-center rounded-pill bg-primary px-sm text-[12px] font-medium text-seal-ink hover:bg-primary-hover disabled:opacity-60"
-                  >
-                    {busy ? "..." : "Confirm"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAssignTarget(null)}
-                    disabled={busy}
-                    className="inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-wash disabled:opacity-60"
-                  >
-                    <X className="h-3 w-3" strokeWidth={2} aria-hidden />
-                  </button>
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => { setSelectMode(false); setSelectedIds(new Set()); setAssignTarget(null); }}
-                className="ml-auto inline-flex min-h-11 items-center rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-grey hover:bg-wash"
-              >
-                Done
-              </button>
-            </div>
-          )}
-        </div>
+      {/* BND-064 — bulk assign. Select-wines mode is entered from the filter
+          surface now, so this is only ever on screen while the mode is on. */}
+      {selectMode && sections && sections.length > 0 && !groupBy && (
+        <CellarSelectToolbar
+          sections={sections}
+          totalCount={filtered.length}
+          selectedCount={selectedIds.size}
+          assignTarget={assignTarget}
+          busy={busy}
+          onSelectAll={selectAll}
+          onDeselectAll={deselectAll}
+          onAssignTargetChange={setAssignTarget}
+          onConfirm={doBulkAssign}
+          onExit={() => {
+            setSelectMode(false);
+            setSelectedIds(new Set());
+            setAssignTarget(null);
+          }}
+        />
       )}
 
       {/* Wine list with optional DnD section grouping */}

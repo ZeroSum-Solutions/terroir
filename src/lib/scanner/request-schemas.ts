@@ -89,6 +89,10 @@ export const StoredOcrSchema = z.object({
 });
 
 const ScanSchema = z.object({
+  // Echoed back from POST /api/scan's own response so save-scan can claim
+  // the ledger row that scan already created instead of inserting a
+  // duplicate (T2). Optional: the manual-entry flow has no prior row.
+  scanId: z.string().uuid().optional(),
   source: z.object({
     distributor: z.string(),
     invoiceNo: z.string(),

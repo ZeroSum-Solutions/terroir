@@ -136,10 +136,24 @@ test.describe("@opp-1 vintage lineage", () => {
     await expect(rollup).toContainText("5 btls");
 
     // Per-vintage child rows, newest first, each its own row.
+    //
+    // CellarRow renders every field (name, producer, vintage, region) twice
+    // — once in a `lg:hidden` phone stack, once in the wide layout — and both
+    // copies sit in the DOM regardless of viewport (pre-existing markup, see
+    // e2e/taxonomy.test.ts). At this suite's default ~1280px viewport the
+    // phone stack is CSS-hidden, but it is FIRST in document order, so
+    // `getByText("2016").first()` deterministically resolves to the hidden
+    // copy and `toBeVisible()` fails. Scoping to the row itself via
+    // `data-cellar-row` (the 2016 sibling's own wine id) sidesteps the
+    // duplicate the same way taxonomy.test.ts's `cellarRow` helper does —
+    // whichever of the row's two internal renders is the visible one, the
+    // row locator resolves to it.
     await expandLineage(block);
     const children = block.locator("[data-lineage-children]");
     await expect(children).toBeVisible();
-    await expect(children.getByText("2016", { exact: false }).first()).toBeVisible();
+    await expect(
+      children.locator(`[data-cellar-row="${wineIds.v2016}"]`),
+    ).toBeVisible();
 
     // Collapse hides the children; the rollup stays.
     await block.locator("[data-lineage-header]").click();
@@ -162,20 +176,37 @@ test.describe("@opp-1 vintage lineage", () => {
     ).toBeVisible();
 
     // Open the keeper 2019's drawer → merge panel lists the twin.
-    // (Click inside the children container — the lineage HEADER also carries
-    // the exact cuvée text, and clicking it would collapse the block.)
+    // (Click the row itself, scoped by wine id, not its name text — CellarRow
+    // renders the name twice (a `lg:hidden` phone stack plus the wide layout,
+    // both always in the DOM; see e2e/taxonomy.test.ts), so `getByText(CUVEE,
+    // { exact: true }).first()` deterministically grabs the hidden phone-stack
+    // copy at this suite's desktop viewport and the click times out. The
+    // lineage HEADER also carries the exact cuvée text and clicking it would
+    // collapse the block, so this stays scoped inside the children container.)
     await block
       .locator("[data-lineage-children]")
-      .getByText(CUVEE, { exact: true })
-      .first()
+      .locator(`[data-cellar-row="${wineIds.v2019}"]`)
       .click();
     const mergePanel = page.locator("[data-merge-duplicates]");
     await expect(mergePanel).toBeVisible();
     await mergePanel.getByRole("button", { name: /Merge .*dup/ }).click();
+
+    // Start watching for the toast BEFORE confirming, not after. A merge
+    // navigates (`?q=…&filter=all`), and a toast is transient — asserting it
+    // after the click means racing a notice that may have appeared and been
+    // torn down by the navigation while the assertion was still waiting for
+    // that navigation to settle. `toBeVisible` retries, but retrying cannot
+    // recover a toast that has already gone. Under the full suite this failed;
+    // run alone it passed, which is the signature of exactly this race and not
+    // of a broken merge. Watching from before the click observes it either way,
+    // so the user-facing guarantee is still asserted rather than dropped.
+    const mergedToast = page
+      .getByText("Duplicate merged", { exact: false })
+      .waitFor({ state: "visible", timeout: 15_000 });
     await mergePanel.getByRole("button", { name: "Confirm merge" }).click();
 
     // Twin is gone; combined stock (3 + 2 = 5) survives on the keeper.
-    await expect(page.getByText("Duplicate merged", { exact: false })).toBeVisible();
+    await mergedToast;
     const admin = adminClient();
     const { data: gone } = await admin
       .from("wines")

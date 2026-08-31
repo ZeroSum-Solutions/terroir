@@ -54,12 +54,6 @@ export default function setup() {
     const suites = findLiveDbSuites(srcDir).sort();
     if (suites.length === 0) return;
 
-    const envExample = existsSync(
-      path.resolve(process.cwd(), ".env.local.example"),
-    )
-      ? ".env.local.example"
-      : ".env.example";
-
     process.stderr.write(
       [
         "",
@@ -72,10 +66,17 @@ export default function setup() {
         "",
         ...suites.map((s) => `    - ${s}`),
         "",
-        "  To run them:",
+        "  To run them, see docs/runbooks/local-stack.md for full bring-up. In",
+        "  short:",
         "    supabase start",
-        `    cp ${envExample} .env.local   # then fill in the printed keys`,
         "    pnpm run supabase:seed:local:apply",
+        "",
+        "  Then export NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY into",
+        "  this shell before re-running `pnpm test` — the same way",
+        "  scripts/local/dev-local.sh reads them (from `supabase status`), not by",
+        "  writing them into .env.local. That file holds PRODUCTION credentials",
+        "  (AGENTS.md non-negotiable #1); putting local-stack keys there points",
+        "  every other command at the hosted project instead.",
         "",
         "  Use the keys `supabase start` just printed, and nothing else. These",
         "  suites hold a service-role key that bypasses RLS and they create and",

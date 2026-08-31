@@ -69,6 +69,12 @@ export type ArithmeticValidation = {
 };
 
 export type Scan = {
+  /** The `invoice_scans` row this extraction already created, when it came
+   * from POST /api/scan (whose 200 body is `{ scanId, ...scan }`). Absent
+   * for a Scan the client built itself — the scanner's manual-entry flow.
+   * POST /api/inventory/save-scan claims THIS row instead of inserting a
+   * second one; see src/domains/scanning/invoice-scan-ledger.ts. */
+  scanId?: string;
   source: ScanSource;
   items: LineItem[];
   edits: Record<string, true>;

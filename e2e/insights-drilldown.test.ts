@@ -114,11 +114,19 @@ test.describe("@opp-3 insights drill-down", () => {
       }),
     );
     expect(linkState.length).toBeGreaterThan(0);
+    // `cellar-health-unscored` (cellar-health-panel.tsx) is a reconciliation
+    // note, not a drill-down — "N wines not yet scored" has nowhere in
+    // /cellar to point at, and rendering it as a dead link would be worse
+    // than rendering it as text. It predates this branch and is the one
+    // documented exception, same footing as reconcile-queue-count's own
+    // different-destination exception below.
     expect(
       linkState.every(({ metric, href }) =>
         metric === "reconcile-queue-count"
           ? href === "/reconcile-queue"
-          : /^\/cellar(?:\?|$)/.test(href),
+          : metric === "cellar-health-unscored"
+            ? href === ""
+            : /^\/cellar(?:\?|$)/.test(href),
       ),
     ).toBeTruthy();
 

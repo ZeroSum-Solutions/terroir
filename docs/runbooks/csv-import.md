@@ -70,7 +70,7 @@ whatever the dialog does with a file, they do.
 
 ## The decision: chunked ingest, not a raised cap or a worker
 
-**Superseded 2026-08-23 (P3, `docs/plans/2026-08-23-p3-chunked-import.md`).**
+**Superseded 2026-08-23 (P3, `docs/plans/_archive/2026-08-23-p3-chunked-import.md`).**
 This section used to say the row cap was "the signal to revisit" and
 sketched wiring a `csv_import` job type through `src/lib/jobs/*`
 (background_jobs' claim/reclaim machinery, from G1-6) once files routinely
@@ -533,19 +533,31 @@ never on the caller's RLS-scoped client. The snapshot read, the
 the caller's RLS-scoped client (tenant-scoped, so the `DELETE` can never
 itself cross tenants).
 
-This is load-bearing, not a style preference: `stock_adjustments`' INSERT
-RLS policy ("members insert own stock_adjustments") checks only
-`is_member(restaurant_id) and acting_user_id = auth.uid()` — never that
-`wine_id` belongs to that same `restaurant_id` — and `wine_id` is `ON
-DELETE CASCADE`. So a tenant-B member can insert a `stock_adjustments`
-row naming tenant A's `wine_id`. Tenant A's reference sweep, run on A's
-own RLS-scoped client, can never see that tenant-B row (RLS hides it) —
-and Postgres referential-integrity actions (the cascade) bypass row
-security entirely when they fire. Without a service-role sweep, A's wine
-`DELETE` would destroy B's row. `bottle_closeouts` has the identical
-shape (member insert, `restaurant_id`-only check, `wine_id` cascade —
-see the next section). A service-role client sees every tenant's rows,
-closing this regardless of which tenant wrote the referencing row.
+This is load-bearing, not a style preference. **Until migration `0136`**,
+`stock_adjustments`' INSERT RLS policy ("members insert own
+stock_adjustments") checked only `is_member(restaurant_id) and
+acting_user_id = auth.uid()` — never that `wine_id` belonged to that same
+`restaurant_id` — and `wine_id` is `ON DELETE CASCADE`. So a tenant-B
+member could insert a `stock_adjustments` row naming tenant A's
+`wine_id`. Tenant A's reference sweep, run on A's own RLS-scoped client,
+can never see that tenant-B row (RLS hides it) — and Postgres
+referential-integrity actions (the cascade) bypass row security entirely
+when they fire. Without a service-role sweep, A's wine `DELETE` would
+destroy B's row. `bottle_closeouts` had the identical shape (member
+insert, `restaurant_id`-only check, `wine_id` cascade — see the next
+section).
+
+**`0136_wine_ownership_on_write_policies.sql` closed both policies.** Each
+INSERT policy now additionally requires the row's `wine_id` — and
+`bottle_closeouts.open_bottle_id`, when non-null — to belong to the row's
+own `restaurant_id`; see the `0136` section of
+`supabase/schema.snapshot.sql`, and
+`src/domains/cellar/wine-ownership-write-policies.test.ts` for the
+containment suite (live-DB-only, because the boundary being tested *is*
+RLS). The service-role sweep stays anyway, and is now **belt-and-braces
+rather than the only guard**: a service-role client sees every tenant's
+rows, which keeps the sweep correct regardless of which tenant wrote a
+referencing row, and regardless of any future policy regression.
 
 If the service-role client is unavailable — `SUPABASE_SERVICE_ROLE_KEY`
 MISSING; see `src/lib/supabase/service-role.ts` — `cleanupOrphanWines`
@@ -820,11 +832,17 @@ Two different reasons land a table in the seven that ARE re-checked.
 IS tenant-safe and requires a live open bottle), and `import_batch_rows`'
 own cross-batch `applied_wine_id` claim are three where the gap is
 genuinely forgeable in the RLS-exploit sense — the first two cross-tenant
-(neither requires live inventory to write via a direct RLS insert, and
-neither's INSERT policy checks that `wine_id` belongs to the inserting
-tenant), the third same-tenant-or-cross-tenant (any member can insert or
-update an `import_batch_rows` row with an arbitrary `applied_wine_id` —
-see "Round 4, finding 1, corrected round 5, finding 1" above).
+(neither requires live inventory to write via a direct RLS insert, and,
+**until `0136`**, neither's INSERT policy checked that `wine_id` belonged
+to the inserting tenant), the third same-tenant-or-cross-tenant (any
+member can insert or update an `import_batch_rows` row with an arbitrary
+`applied_wine_id` — see "Round 4, finding 1, corrected round 5, finding 1"
+above). **`0136` added the ownership `WITH CHECK` to
+`stock_adjustments` and `bottle_closeouts`**, so the cross-tenant forgery
+for those two is now closed at the policy layer and the re-check below is
+defence in depth for them. `import_batch_rows.applied_wine_id` was **not**
+constrained by `0136` and remains genuinely open — for that table the
+TS-layer re-check is still the only guard.
 `availability_events` (round 6, finding 1) and `open_bottles`,
 `cellar_health`, `pricing_recommendations` (round 7, finding 1) are the
 other four — none has a member-insertable RLS gap (`open_bottles` is
@@ -867,14 +885,21 @@ and `pricing_recommendations` there is no CAS backstop — none of their
 writers touches the `wines` row — so the residual for those three stays
 the full single-page-read window, accepted for the same reason as
 `availability_events`'s pre-CAS residual: each writer is a legitimate,
-same-tenant, non-malicious product code path, not an attacker. The two
+same-tenant, non-malicious product code path, not an attacker. Of the two
 fixes that would close the window outright for the three RLS-gap tables —
 an ownership `WITH CHECK` on all three tables' write policies (closing
-the underlying gaps
-directly), or moving the re-check and the `DELETE` into one `SECURITY
-INVOKER` RPC transaction (closing the window itself) — are both
-migration-gated and out of reach for this TS-layer-only pass; tracked
-here until the migration lock lifts, same as the "Known gap" below; (c)
+the underlying gaps directly), or moving the re-check and the `DELETE`
+into one `SECURITY INVOKER` RPC transaction (closing the window itself) —
+**the first has landed, as migration `0136`, for two of the three
+tables**: `stock_adjustments` and `bottle_closeouts` both now carry the
+ownership `WITH CHECK`. Two things remain open. (i)
+`import_batch_rows.applied_wine_id` is still unconstrained — `0136` did
+not touch it — so the TS-layer re-check remains the only guard there.
+(ii) The application-layer TOCTOU window itself still exists for all
+three; only the `SECURITY INVOKER` RPC transaction closes that, and it is
+still unbuilt. For `stock_adjustments` and `bottle_closeouts` the
+TS-layer re-check is therefore now belt-and-braces rather than the sole
+defence; (c)
 for the LWIN unstamp, a third party writing the
 exact `(lwin_id, lwin_match_score)` pair a row's own LWIN match would
 independently compute, before apply ran, on a wine that row also

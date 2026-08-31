@@ -25,6 +25,11 @@ vi.mock("./toast-wrapper", () => ({
 vi.mock("./settings-dropdown", () => ({
   SettingsDropdown: () => <button data-settings="true">Settings</button>,
 }));
+vi.mock("./global-search", () => ({
+  GlobalSearch: ({ className }: { className?: string }) => (
+    <input data-global-search="true" type="search" className={className} />
+  ),
+}));
 vi.mock("./nav-links", () => ({
   DesktopNavLinks: () => <span data-desktop-nav="true">Desktop nav</span>,
   MobileNavLinks: () => <span data-mobile-nav="true">Mobile nav</span>,

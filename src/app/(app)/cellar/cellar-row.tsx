@@ -4,6 +4,7 @@ import { WineThumb } from "@/components/wine-thumb";
 import { StatusChip } from "@/components/status-chip";
 import { bottlesOnHand, pickRowChip } from "./row-chip";
 import type { CellarWineRow } from "./types";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 /**
  * Desktop ledger-table column template (Kimi audit D4 — a real workspace
@@ -45,6 +46,7 @@ export function CellarRow({
   return (
     <div
       className="flex items-center"
+      data-cellar-row={row.wine_id}
       // OPP-1 (EV-1.2) — same lineage + vintage + format twin detected
       data-duplicate-suspect={row.duplicate_wine_ids.length > 0 ? "" : undefined}
     >
@@ -109,7 +111,7 @@ export function CellarRow({
               size={36}
             />
             <span className="min-w-0 flex-1 truncate font-serif text-[17px] font-medium text-ink">
-              {row.name}
+              {wineDisplayName(row.producer, row.name)}
             </span>
             {chip && (
               <StatusChip tone={chip.tone} className="shrink-0">
@@ -142,7 +144,7 @@ export function CellarRow({
                 {row.producer}
               </div>
               <div className="truncate font-serif text-[17px] font-medium text-ink">
-                {row.name}
+                {wineDisplayName(row.producer, row.name)}
               </div>
             </div>
           </div>

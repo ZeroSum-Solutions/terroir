@@ -59,9 +59,23 @@ fi
 # ever reports something non-loopback, refuse rather than serve it.
 NEXT_PUBLIC_SUPABASE_URL="$API_URL" source scripts/local/assert-local-db.sh
 
-echo "dev-local: serving against $API_URL"
+# The app's own origin, pinned to the SAME loopback spelling the e2e suite and
+# CI use (.github/workflows/ci.yml and e2e-full.yml both export
+# NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000).
+#
+# Without this, getAppOrigin() falls back to LOCAL_APP_ORIGIN — "localhost:3000"
+# — while Playwright drives the browser on 127.0.0.1:3000. Those are different
+# origins to a browser, so the PKCE code verifier that supabase-js writes as a
+# cookie on 127.0.0.1 is not sent to localhost, exchangeCodeForSession fails,
+# and the recovery link lands on /login?error=link. That looked exactly like a
+# broken password reset and was really a two-spellings-of-loopback mismatch
+# that only ever existed locally, because CI already pins this.
+APP_URL="http://127.0.0.1:3000"
+
+echo "dev-local: serving against $API_URL (app origin $APP_URL)"
 exec env \
   NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$PUBLISHABLE" \
   SUPABASE_SERVICE_ROLE_KEY="$SERVICE" \
+  NEXT_PUBLIC_APP_URL="$APP_URL" \
   pnpm dev "$@"

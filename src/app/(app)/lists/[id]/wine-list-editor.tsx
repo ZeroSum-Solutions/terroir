@@ -24,44 +24,17 @@ import { ListActions } from "./components/list-actions";
 import { SortableSectionButton } from "./components/sortable-section-button";
 import { useSectionReorder } from "./use-section-reorder";
 import { useWineItemReorder } from "./use-wine-item-reorder";
+import { useAddWine } from "./use-add-wine";
+import type {
+  WineListEditorItem,
+  WineListEditorSection,
+} from "./wine-list-editor.types";
 
-export type WineListEditorWine = {
-  id: string;
-  name: string;
-  producer: string;
-  vintage: number | null;
-  varietal: string | null;
-  region: string | null;
-  drink_window_start?: number | null;
-  drink_window_end?: number | null;
-  serving_temp_min?: number | null;
-  serving_temp_max?: number | null;
-  serving_temp_label?: string | null;
-};
-
-export type WineListEditorItem = {
-  id: string;
-  section_id: string;
-  wine_id: string;
-  position: number;
-  glass_price: number | null;
-  bottle_price: number | null;
-  glass_pour_ml: number | null;
-  pour_size_mode: "fixed" | "picker";
-  tasting_note: string | null;
-  name_override: string | null;
-  blurb: string | null;
-  hidden: boolean;
-  wines: WineListEditorWine;
-};
-
-export type WineListEditorSection = {
-  id: string;
-  name: string;
-  position: number;
-  wine_list_id: string;
-  wine_list_items: WineListEditorItem[];
-};
+export type {
+  WineListEditorWine,
+  WineListEditorItem,
+  WineListEditorSection,
+} from "./wine-list-editor.types";
 
 export function WineListEditor({
   list,
@@ -116,11 +89,22 @@ export function WineListEditor({
   const [showAddWine, setShowAddWine] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
-  const [copyFeedback, setCopyFeedback] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [errorToast, setErrorToast] = useState<string | null>(null);
   const [addingSection, setAddingSection] = useState(false);
   const [deletingItem, setDeletingItem] = useState(false);
   const [deletingSection, setDeletingSection] = useState(false);
+
+  /** The neutral confirmation toast, shared by copy-URL and add-wine (LIST-06). */
+  const showNotice = useCallback((message: string) => {
+    setNotice(message);
+    setTimeout(() => setNotice(null), 2500);
+  }, []);
+  const closeAddWine = useCallback(() => setShowAddWine(false), []);
+  const refreshServerProps = useCallback(
+    () => startTransition(() => router.refresh()),
+    [router],
+  );
 
   const totalWines = useMemo(
     () => sections.reduce((sum, s) => sum + s.wine_list_items.length, 0),
@@ -205,30 +189,16 @@ export function WineListEditor({
     }
   }, [deleteTarget, activeSection, router]);
 
-  const addWineToSection = useCallback(
-    async (wineId: string, glassPrice: number | null, bottlePrice: number | null, sectionIds: string[]) => {
-      if (sectionIds.length === 0) return;
-      let failed = false;
-      for (const sectionId of sectionIds) {
-        const res = await fetch("/api/wine-list-items", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            section_id: sectionId,
-            wine_id: wineId,
-            glass_price: glassPrice,
-            bottle_price: bottlePrice,
-          }),
-        });
-        if (!res.ok) failed = true;
-      }
-      if (!failed) {
-        setShowAddWine(false);
-        startTransition(() => router.refresh());
-      }
-    },
-    [router],
-  );
+  // LIST-06 — the add-wine write, its local state resync, and its reporting.
+  const addWineToSection = useAddWine({
+    sections,
+    setSections,
+    setActiveSection,
+    setNotice: showNotice,
+    setErrorToast,
+    closeModal: closeAddWine,
+    refresh: refreshServerProps,
+  });
 
   const addSection = useCallback(async () => {
     const raw = window.prompt("New section name");
@@ -458,12 +428,11 @@ export function WineListEditor({
     if (!list.slug) return;
     const url = `${window.location.origin}/list/${list.slug}`;
     navigator.clipboard.writeText(url).then(() => {
-      setCopyFeedback(true);
-      setTimeout(() => setCopyFeedback(false), 2500);
+      showNotice("URL copied to clipboard.");
     }).catch(() => {
       // Clipboard API may fail in insecure contexts — silently ignore.
     });
-  }, [list.slug]);
+  }, [list.slug, showNotice]);
 
   const updateTemplate = useCallback(
     async (template: Template) => {
@@ -637,7 +606,7 @@ export function WineListEditor({
       </div>
 
       {/* Desktop: sidebar + content */}
-      <div className="md:grid md:grid-cols-[248px_1fr] md:gap-lg">
+      <div className="md:grid md:grid-cols-[288px_1fr] md:gap-lg">
         {/* Desktop sidebar */}
         <aside className="hidden md:block">
           <div className="text-caption font-medium uppercase text-grey">
@@ -743,7 +712,7 @@ export function WineListEditor({
                 >
                   <div>
                     {/* Desktop table header */}
-                    <div className="hidden border-b border-rule bg-wash px-lg py-xs md:grid md:grid-cols-[28px_1fr_80px_80px_36px]">
+                    <div className="hidden border-b border-rule bg-wash px-lg py-xs md:grid md:grid-cols-[28px_1fr_136px_136px_36px]">
                       <div />
                       <div className="text-caption font-medium uppercase text-grey">
                         Wine
@@ -879,7 +848,7 @@ export function WineListEditor({
           sections={sections.map((s) => ({ id: s.id, name: s.name }))}
           activeSectionId={activeSection}
           onAdd={addWineToSection}
-          onClose={() => setShowAddWine(false)}
+          onClose={closeAddWine}
         />
       )}
 
@@ -903,10 +872,13 @@ export function WineListEditor({
         </div>
       )}
 
-      {/* Copy URL toast */}
-      {copyFeedback && (
-        <div className="fixed bottom-[calc(var(--safe-bottom)+var(--spacing-lg))] left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-pill bg-surface-inverse px-lg py-sm text-[13px] font-medium text-on-inverse animate-in fade-in slide-in-from-bottom-2">
-          URL copied to clipboard.
+      {/* Neutral confirmation toast (copied URL, wine added) */}
+      {notice && (
+        <div
+          role="status"
+          className="fixed bottom-[calc(var(--safe-bottom)+var(--spacing-lg))] left-1/2 z-[var(--z-toast)] -translate-x-1/2 rounded-pill bg-surface-inverse px-lg py-sm text-[13px] font-medium text-on-inverse animate-in fade-in slide-in-from-bottom-2"
+        >
+          {notice}
         </div>
       )}
     </section>

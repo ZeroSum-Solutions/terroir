@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextResponse, type NextRequest } from "next/server";
 
 const mockRequireRole = vi.fn();
@@ -32,6 +32,14 @@ function request(file: File | null) {
   }) as unknown as NextRequest;
 }
 
+function urlRequest(url: string) {
+  return new Request("http://localhost/api/brand-kit", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url }),
+  }) as unknown as NextRequest;
+}
+
 describe("POST /api/brand-kit", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -43,12 +51,34 @@ describe("POST /api/brand-kit", () => {
     expect(mockRequireRole).toHaveBeenCalledWith(["owner", "manager"]);
   });
 
-  it("rejects unsupported logo types before extraction", async () => {
+  // LIST-05 — the route used to accept image/png alone, so the JPEG most
+  // people have to hand was refused by a decoder that can read it.
+  it.each([
+    ["image/jpeg", "logo.jpg"],
+    ["image/webp", "logo.webp"],
+    ["image/gif", "logo.gif"],
+    ["image/avif", "logo.avif"],
+  ])("extracts a palette from %s", async (type, name) => {
+    const { supabase, upsert } = makeSupabase();
+    mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    mockExtractPalette.mockResolvedValue(["#CC2233"]);
+
+    const response = await POST(request(new File(["bytes"], name, { type })));
+
+    expect(response.status).toBe(200);
+    expect(mockExtractPalette).toHaveBeenCalledWith(expect.any(Buffer), type);
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ palette: { colors: ["#CC2233"] } }),
+      { onConflict: "restaurant_id" },
+    );
+  });
+
+  it("still rejects a format the rasterizer cannot be trusted with", async () => {
     const { supabase } = makeSupabase();
     mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
 
     const response = await POST(
-      request(new File(["gif"], "logo.gif", { type: "image/gif" })),
+      request(new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" })),
     );
 
     expect(response.status).toBe(422);
@@ -56,24 +86,8 @@ describe("POST /api/brand-kit", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: {
         code: "unsupported_logo_format",
-        message: expect.stringContaining("non-interlaced 8-bit RGB or RGBA PNG"),
+        message: expect.stringContaining("PNG, JPEG, WebP"),
       },
-    });
-  });
-
-  it.each([
-    ["image/jpeg", "logo.jpg"],
-    ["image/webp", "logo.webp"],
-  ])("rejects advertised-but-undecodable %s uploads with the exact PNG contract", async (type, name) => {
-    const { supabase } = makeSupabase();
-    mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
-
-    const response = await POST(request(new File(["bytes"], name, { type })));
-
-    expect(response.status).toBe(422);
-    expect(mockExtractPalette).not.toHaveBeenCalled();
-    await expect(response.json()).resolves.toMatchObject({
-      error: { message: expect.stringContaining("non-interlaced 8-bit RGB or RGBA PNG") },
     });
   });
 
@@ -121,8 +135,92 @@ describe("POST /api/brand-kit", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: {
         code: "invalid_logo",
-        message: expect.stringContaining("non-interlaced 8-bit RGB or RGBA PNG"),
+        message: expect.stringContaining("PNG, JPEG, WebP"),
       },
+    });
+  });
+
+  describe("LIST-05 — building a kit from a business URL", () => {
+    const previousKey = process.env.FIRECRAWL_API_KEY;
+    afterEach(() => {
+      if (previousKey === undefined) delete process.env.FIRECRAWL_API_KEY;
+      else process.env.FIRECRAWL_API_KEY = previousKey;
+      vi.unstubAllGlobals();
+    });
+
+    it.each([
+      "http://127.0.0.1/admin",
+      "http://localhost:3000",
+      "https://10.0.0.5",
+      "https://192.168.1.1",
+      "https://169.254.169.254/latest/meta-data",
+      "file:///etc/passwd",
+    ])("refuses %s without calling out", async (url) => {
+      const { supabase } = makeSupabase();
+      mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
+      const outbound = vi.fn();
+      vi.stubGlobal("fetch", outbound);
+
+      const response = await POST(urlRequest(url));
+
+      expect(response.status).toBe(400);
+      expect(outbound).not.toHaveBeenCalled();
+    });
+
+    it("stores the palette Firecrawl's branding format returns", async () => {
+      const { supabase, upsert } = makeSupabase();
+      mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
+      process.env.FIRECRAWL_API_KEY = "fc-test";
+      const outbound = vi.fn(async () =>
+        Response.json({
+          success: true,
+          data: {
+            branding: {
+              colors: { primary: "#FF4C00", background: "#F9F9F9" },
+              // Not SVG (finding C: safeLogoUrl refuses data:image/svg+xml —
+              // covered directly in site-brand.test.ts) — a raster format,
+              // to keep this test's focus on palette + logo storage.
+              images: { logo: "data:image/png;base64,iVBORw0KGgoAAAA=" },
+            },
+          },
+        }),
+      );
+      vi.stubGlobal("fetch", outbound);
+
+      const response = await POST(urlRequest("thefrenchlaundry.com"));
+
+      expect(response.status).toBe(200);
+      expect(outbound).toHaveBeenCalledWith(
+        "https://api.firecrawl.dev/v2/scrape",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            url: "https://thefrenchlaundry.com/",
+            formats: ["branding"],
+          }),
+        }),
+      );
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          palette: { colors: ["#FF4C00", "#F9F9F9"] },
+          logo_url: expect.stringContaining("data:image/png"),
+        }),
+        { onConflict: "restaurant_id" },
+      );
+    });
+
+    it("says so, rather than failing silently, when the key is missing", async () => {
+      const { supabase, upsert } = makeSupabase();
+      mockRequireRole.mockResolvedValue({ supabase, restaurantId: "r-1" });
+      delete process.env.FIRECRAWL_API_KEY;
+
+      const response = await POST(urlRequest("https://example.com"));
+
+      expect(response.status).toBe(502);
+      expect(upsert).not.toHaveBeenCalled();
+      await expect(response.json()).resolves.toMatchObject({
+        error: { message: expect.stringContaining("Upload a logo instead") },
+      });
     });
   });
 });

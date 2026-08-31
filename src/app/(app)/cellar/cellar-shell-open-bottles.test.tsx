@@ -165,52 +165,70 @@ describe("CellarShell open bottles route", () => {
     expect(container.querySelector("section")?.className).toContain(
       "overflow-x-hidden",
     );
+
+    // CELLAR-01 / GLOBAL-01 — ONE control row. The scope pills, the
+    // open-bottle cluster, Filters, the view toggle and Cellar settings all
+    // live in it; it used to be four stacked rows.
+    const controlRows = container.querySelectorAll("[data-cellar-control-row]");
+    expect(controlRows).toHaveLength(1);
+    const controlRow = controlRows[0]!;
+    expect(controlRow.querySelector('[role="tablist"]')).not.toBeNull();
+    expect(controlRow.contains(link)).toBe(true);
+
+    // The pills scroll sideways inside that row rather than wrapping into a
+    // second one.
+    expect(
+      container.querySelector('[role="tablist"]')?.className.split(" "),
+    ).toContain("flex-nowrap");
     container.querySelectorAll('[role="tab"]').forEach((tab) => {
       expect(tab.className).toContain("min-h-11");
     });
-    expect(
-      container.querySelector('[role="tablist"]')?.className.split(" "),
-    ).toContain("flex-wrap");
-    // M2-15 §2.4 residuals audit: the compact control row (Producer/Region +
-    // Filters) must read as ONE row down to 320px rather than wrapping into a
-    // multi-row block, so it's flex-nowrap (with overflow-x-auto as a
-    // fallback) — not flex-wrap. The applied-filter chip row is a separate
-    // sibling that still wraps.
-    expect(
-      container
-        .querySelector('[data-cellar-facet-bar] > div')
-        ?.className.split(" "),
-    ).toEqual(expect.arrayContaining(["flex-nowrap", "overflow-x-auto"]));
-    expect(link.parentElement?.className).toContain("w-full");
-    expect(link.parentElement?.className).toContain("flex-wrap");
-    const desktopSearch = container.querySelector<HTMLInputElement>(
+
+    // GLOBAL-02 — search is exempt from the one-row rule, sits above it, and
+    // is present at every width. The old mobile search icon + overlay are gone.
+    const search = container.querySelector<HTMLInputElement>(
       'input[placeholder="Search name, producer, region…"]',
     )!;
-    expect(desktopSearch.className).toContain("h-11");
-    container.querySelectorAll("[data-cellar-facet-bar] select").forEach((select) => {
-      expect(select.className.split(" ")).toContain("h-11");
-      expect(select.className.split(" ")).not.toContain("md:h-9");
-    });
+    expect(search.className).toContain("h-11");
+    expect(controlRow.contains(search)).toBe(false);
+    expect(container.querySelector('[aria-label="Search all wines"]')).toBeNull();
+
     for (const label of ["List view", "Grid view"]) {
       const control = container.querySelector<HTMLElement>(`[aria-label="${label}"]`)!;
       expect(control.className).toContain("h-11");
       expect(control.className).toContain("w-11");
     }
-    for (const label of ["Search wines", "Cellar settings", "Drag to reorder"]) {
-      const control = container.querySelector<HTMLElement>(
-        `[aria-label="${label}"]`,
-      );
-      expect(control, label).not.toBeNull();
-      expect(control?.className, label).toContain("w-11");
-      expect(control?.className, label).toContain("h-11");
-    }
-    for (const label of ["Reconcile 1 open bottle →", "Select wines", "Show"]) {
+
+    // CELLAR-01b — settings is no longer an icon-only button wearing the same
+    // sliders glyph as the real Filters control. It carries its own label and
+    // sits outside the filter cluster.
+    const settings = [...controlRow.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "Cellar settings",
+    );
+    expect(settings).not.toBeUndefined();
+    expect(settings?.className).toContain("h-11");
+    const filters = [...controlRow.querySelectorAll("button")].find((button) =>
+      button.textContent?.trim().startsWith("Filters"),
+    );
+    expect(filters).not.toBeUndefined();
+    expect(filters).not.toBe(settings);
+
+    for (const label of ["Reconcile 1 open bottle →", "Show"]) {
       const control = [...container.querySelectorAll("button")].find(
         (button) => button.textContent?.trim() === label,
       );
       expect(control, label).not.toBeUndefined();
       expect(control?.className, label).toContain("min-h-11");
     }
+
+    // "Select wines" is a mode entered from the filter surface now, not a
+    // standing fourth row.
+    expect(
+      [...container.querySelectorAll("button")].some(
+        (button) => button.textContent?.trim() === "Select wines",
+      ),
+    ).toBe(false);
+    expect(container.querySelector('[aria-label="Drag to reorder"]')).not.toBeNull();
   });
 
   it("starts multi-vintage lineages collapsed and expands them on demand", () => {

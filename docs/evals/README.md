@@ -1,10 +1,20 @@
-# Top-10 evals — gauntlet protocol
+# Evals — gauntlet protocol
 
-`top10-evals.yaml` is the merge-gate contract for the Bevrly-response build.
+**`vwp-evals.yaml` is the CI-gated eval contract for the Bevrly-response build.**
+`package.json`'s `eval:vwp` script runs `scripts/run-vwp-evals.mjs` against it, CI
+runs that as the step "VWP eval traceability", and
+`src/test/contracts/vwp-evals-contract.test.ts` schema-validates it. Break either and
+the merge is blocked.
+
+**`top10-evals.yaml` is not a gate.** It is the original top-10 wave protocol, kept
+because `vwp-evals.yaml` and a dozen migrations cite it as precedent for the
+one-opportunity-one-branch / eval-becomes-a-failing-test pattern. Nothing executes it.
+Its `global_gates` list is historical and is *not* the current gate set — see
+`AGENTS.md` for the commands that actually have to pass.
 
 > The originating product spec lives **outside this repository** on the author's
 > machine and is unreachable to anyone else. Do not treat it as a dependency. The
-> in-repo authorities are `top10-evals.yaml` itself for the gate contract and
+> in-repo authorities are `vwp-evals.yaml` for the enforced eval contract and
 > `docs/feature-ledger.json` for completion status. Post-implementation audits for
 > the shipped UX-01..10 cluster are archived at `_archive/ux-high-leverage/`.
 

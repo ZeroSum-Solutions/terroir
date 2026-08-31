@@ -117,6 +117,7 @@ function unplacedSources(
         units: item.quantity,
         unitCost: item.unit_cost,
         wineId: item.wine_id,
+        deepLink: `/cellar?wine=${encodeURIComponent(item.wine_id)}`,
         action: { type: "place_bin", label: "Place in bin", targetId: item.id },
       };
     });
@@ -160,6 +161,14 @@ function unmatchedSource(scan: Scan, line: Line, index: number, wineCandidates: 
     detail: `Unmatched line from ${scan.distributor_name}`,
     units,
     unitCost: number(line.unitCost ?? line.unit_cost),
+    // An unmatched line is unmatched: most of the time there is NO wine in this
+    // cellar to open, and pointing at one would be inventing a destination. So
+    // the link goes to the suggested wine only when identity resolution found
+    // one — that candidate already carries a deepLink (`candidates()` above),
+    // which was computed, copied into the suggestion by `toSuggestion`, and
+    // then never rendered — and otherwise to the scan the line came from,
+    // which is where the line can actually be matched or committed.
+    deepLink: suggestion?.deepLink ?? `/scan/${encodeURIComponent(scan.id)}`,
     suggestion,
     action: suggestion ? {
       type: "match_scan" as const,

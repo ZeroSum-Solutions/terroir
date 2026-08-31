@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   formatSignedVarianceOz,
@@ -9,6 +10,7 @@ import {
 } from "@/lib/reconciliation/variance";
 import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
+import { wineDisplayName } from "@/lib/wine-display-name";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 
 type ReconcileItem = OpenBottleRow;
@@ -173,14 +175,19 @@ function ReconcileRow({
       <div className="mb-sm">
         <div className="flex items-start justify-between gap-sm">
           <div className="min-w-0">
-            <div className="font-serif text-[17px] font-medium text-ink leading-snug">
-              {item.producer} {item.name}
+            {/* The wine itself opens the wine. Everything else on this card is
+                a counting control, so only the name is the link. */}
+            <Link
+              href={`/cellar?wine=${item.wine_id}`}
+              className="flex min-h-11 items-center rounded-md font-serif text-[17px] font-medium text-ink leading-snug transition-colors hover:text-accent focus-ring"
+            >
+              {item.producer} {wineDisplayName(item.producer, item.name)}
               {item.vintage !== null && (
                 <span className="ml-xs font-sans text-[12px] font-light text-grey">
                   {item.vintage}
                 </span>
               )}
-            </div>
+            </Link>
             <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-grey">
               <span className="rounded-pill bg-surface-sunken px-sm py-2xs font-mono">
                 {formatBottleSize(item.size_ml)}

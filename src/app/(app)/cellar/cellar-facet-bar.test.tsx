@@ -2,6 +2,7 @@ import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CellarFacets, CellarGroupBy, FacetCount, FacetCounts } from "@/lib/cellar-facets";
+import type { CellarSort } from "@/lib/cellar-facets/sort";
 import { CellarFacetBar, type CellarFacetPatch } from "./cellar-facet-bar";
 
 const reactTestEnvironment = globalThis as typeof globalThis & {
@@ -62,11 +63,18 @@ describe("CellarFacetBar", () => {
     facets?: CellarFacets;
     counts?: FacetCounts;
     groupBy?: CellarGroupBy | null;
+    sort?: CellarSort | null;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
     onFacetsChange?: (patch: CellarFacetPatch) => void;
     onGroupByChange?: (groupBy: CellarGroupBy | null) => void;
+    onSortChange?: (sort: CellarSort | null) => void;
+    onEnterSelectMode?: () => void;
   }) {
     const onFacetsChange = props.onFacetsChange ?? vi.fn();
     const onGroupByChange = props.onGroupByChange ?? vi.fn();
+    const onSortChange = props.onSortChange ?? vi.fn();
+    const onOpenChange = props.onOpenChange ?? vi.fn();
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -76,44 +84,56 @@ describe("CellarFacetBar", () => {
         facets={props.facets ?? emptyFacets}
         counts={props.counts ?? diverseCounts}
         groupBy={props.groupBy ?? null}
+        sort={props.sort ?? null}
+        open={props.open ?? false}
+        onOpenChange={onOpenChange}
         onFacetsChange={onFacetsChange}
         onGroupByChange={onGroupByChange}
+        onSortChange={onSortChange}
+        onEnterSelectMode={props.onEnterSelectMode}
       />
     );
     await act(async () => root.render(element));
-    return { container, root, onFacetsChange, onGroupByChange, render: makeRender(root) };
+    return {
+      container,
+      root,
+      onFacetsChange,
+      onGroupByChange,
+      onSortChange,
+      onOpenChange,
+      render: makeRender(root),
+    };
   }
 
   function makeRender(root: Root) {
     return async (element: ReactElement) => act(async () => root.render(element));
   }
 
-  it("renders Producer and Region in the compact row plus a Filters button", async () => {
+  it("renders nothing when the sheet is closed and no filter is applied", async () => {
     const { container } = await mount({});
-    expect(labelledSelect(container, "Producer")).toBeDefined();
-    expect(labelledSelect(container, "Region")).toBeDefined();
-    expect(button(container, /^Filters/)).toBeDefined();
+    expect(container.querySelector("[data-cellar-facet-bar]")).toBeNull();
   });
 
-  it("keeps Producer, Region, and Filters on one non-wrapping row (residuals audit — was 2 rows down to 320px)", async () => {
-    const { container } = await mount({});
-    const row = container.querySelector<HTMLElement>("[data-cellar-facet-bar] > div");
-    const classes = row?.className.split(/\s+/) ?? [];
-    expect(classes).toContain("flex-nowrap");
-    expect(classes).not.toContain("flex-wrap");
-    expect(classes).toContain("overflow-x-auto");
-    // Each compact-row select is capped narrow enough on mobile that
-    // Producer + Region + the Filters button fit one row at 320px.
-    const producerSelect = labelledSelect(container, "Producer")!;
-    expect(producerSelect.className).toContain("max-w-[104px]");
+  it("carries Producer and Region inside the one filter surface (CELLAR-01)", async () => {
+    // They used to be a standing row of their own above the list; the page is
+    // allowed exactly one control row, and this is where they went.
+    const { container } = await mount({ open: true });
+    const dialog = container.querySelector('[role="dialog"]')!;
+    expect(labelledSelect(dialog, "Producer")).toBeDefined();
+    expect(labelledSelect(dialog, "Region")).toBeDefined();
+    expect(labelledSelect(dialog, "Country")).toBeDefined();
+    expect(labelledSelect(dialog, "Group by")).toBeDefined();
+    expect(labelledSelect(dialog, "Sort wines")).toBeDefined();
   });
 
-  it("hides a compact-row control once it has only one selectable option", async () => {
+  it("hides a control once it has only one selectable option", async () => {
     const { container } = await mount({
+      open: true,
       counts: { ...diverseCounts, region: options("Napa") },
     });
-    expect(labelledSelect(container, "Producer")).toBeDefined();
-    expect(labelledSelect(container, "Region")).toBeUndefined();
+    const dialog = container.querySelector('[role="dialog"]')!;
+    expect(labelledSelect(dialog, "Producer")).toBeDefined();
+    expect(labelledSelect(dialog, "Region")).toBeUndefined();
   });
 
   it("ignores the disabled Unknown placeholder when counting selectable options", async () => {
@@ -122,87 +142,79 @@ describe("CellarFacetBar", () => {
       { value: "__unknown__", label: "Unknown", count: 1, isUnknown: true },
     ];
     const { container } = await mount({
+      open: true,
       counts: { ...diverseCounts, region: withUnknown },
     });
-    // Exactly one real choice ("Napa") plus an inert Unknown placeholder is
-    // still not a useful control — it should be hidden.
-    expect(labelledSelect(container, "Region")).toBeUndefined();
-  });
-
-  it("renders nothing when every dimension has one option and no facet is applied", async () => {
-    const singleOption: FacetCounts = {
-      colour: options("Red"),
-      producer: options("Only Producer"),
-      region: options("Only Region"),
-      country: options("Only Country"),
-      varietal: options("Only Varietal"),
-      vintage: options("2020"),
-      format: options("750"),
-    };
-    const { container } = await mount({ counts: singleOption });
-    expect(container.querySelector("[data-cellar-facet-bar]")).toBeNull();
-  });
-
-  it("shows a Filters badge counting active secondary facets", async () => {
-    const { container } = await mount({
-      facets: { ...emptyFacets, country: "France", vintageMin: 2015, vintageMax: 2020 },
-      groupBy: "varietal",
-    });
-    const filtersButton = button(container, /^Filters/);
-    // country (1) + vintage range (1, counted once) + group-by (1) = 3
-    expect(filtersButton.textContent).toContain("3");
-  });
-
-  it("opens a sheet with only the secondary controls that have real choices", async () => {
-    const { container } = await mount({
-      counts: { ...diverseCounts, format: options("750") },
-    });
-    await click(button(container, /^Filters/));
     const dialog = container.querySelector('[role="dialog"]')!;
-    expect(dialog).toBeDefined();
-    expect(labelledSelect(dialog, "Country")).toBeDefined();
-    expect(labelledSelect(dialog, "Varietal")).toBeDefined();
-    expect(labelledSelect(dialog, "Format")).toBeUndefined();
-    expect(labelledSelect(dialog, "Group by")).toBeDefined();
+    expect(labelledSelect(dialog, "Region")).toBeUndefined();
+  });
+
+  it("offers select-wines mode from the filter surface when the cellar has sections", async () => {
+    const onEnterSelectMode = vi.fn();
+    const { container } = await mount({ open: true, onEnterSelectMode });
+    const dialog = container.querySelector('[role="dialog"]')!;
+    await click(button(dialog, "Select wines"));
+    expect(onEnterSelectMode).toHaveBeenCalled();
+  });
+
+  it("omits select-wines mode when there are no sections to assign to", async () => {
+    const { container } = await mount({ open: true });
+    const dialog = container.querySelector('[role="dialog"]')!;
+    expect(
+      [...dialog.querySelectorAll("button")].some(
+        (node) => node.textContent?.trim() === "Select wines",
+      ),
+    ).toBe(false);
   });
 
   it("applies the staged sheet selections and closes on Apply", async () => {
     const onFacetsChange = vi.fn();
     const onGroupByChange = vi.fn();
-    const { container } = await mount({ onFacetsChange, onGroupByChange });
-    await click(button(container, /^Filters/));
+    const onSortChange = vi.fn();
+    const onOpenChange = vi.fn();
+    const { container } = await mount({
+      open: true,
+      onFacetsChange,
+      onGroupByChange,
+      onSortChange,
+      onOpenChange,
+    });
 
-    const countrySelect = labelledSelect(container, "Country")!;
-    await selectValue(countrySelect, "France");
-    const groupBySelect = labelledSelect(container, "Group by")!;
-    await selectValue(groupBySelect, "varietal");
+    await selectValue(labelledSelect(container, "Country")!, "France");
+    await selectValue(labelledSelect(container, "Producer")!, "Alpha Estate");
+    await selectValue(labelledSelect(container, "Group by")!, "varietal");
+    await selectValue(labelledSelect(container, "Sort wines")!, "vintage-asc");
 
     await click(button(container, "Apply"));
 
     expect(onFacetsChange).toHaveBeenCalledWith(
-      expect.objectContaining({ country: "France" }),
+      expect.objectContaining({ country: "France", producer: "Alpha Estate" }),
     );
     expect(onGroupByChange).toHaveBeenCalledWith("varietal");
-    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(onSortChange).toHaveBeenCalledWith("vintage-asc");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("Reset clears every field (including compact-row facets) but keeps the sheet open", async () => {
+  it("Reset clears every field but keeps the sheet open", async () => {
     const onFacetsChange = vi.fn();
     const onGroupByChange = vi.fn();
+    const onSortChange = vi.fn();
     const { container } = await mount({
+      open: true,
       facets: { ...emptyFacets, country: "France", producer: "Alpha Estate" },
       groupBy: "varietal",
+      sort: "vintage-asc",
       onFacetsChange,
       onGroupByChange,
+      onSortChange,
     });
-    await click(button(container, /^Filters/));
     await click(button(container, "Reset"));
 
     expect(onFacetsChange).toHaveBeenCalledWith(
       expect.objectContaining({ producer: null, country: null, varietal: null, format: null }),
     );
     expect(onGroupByChange).toHaveBeenCalledWith(null);
-    // The sheet itself stays open with its own fields visibly cleared.
+    expect(onSortChange).toHaveBeenCalledWith(null);
     const dialog = container.querySelector('[role="dialog"]');
     expect(dialog).not.toBeNull();
     expect(labelledSelect(dialog!, "Country")!.value).toBe("");
@@ -210,32 +222,35 @@ describe("CellarFacetBar", () => {
 
   it("closes on Escape without applying the staged draft", async () => {
     const onFacetsChange = vi.fn();
-    const { container } = await mount({ onFacetsChange });
-    await click(button(container, /^Filters/));
-    const countrySelect = labelledSelect(container, "Country")!;
-    await selectValue(countrySelect, "France");
+    const onOpenChange = vi.fn();
+    const { container } = await mount({ open: true, onFacetsChange, onOpenChange });
+    await selectValue(labelledSelect(container, "Country")!, "France");
 
     await act(async () => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
 
-    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onFacetsChange).not.toHaveBeenCalled();
   });
 
-  it("shows every active filter (including a deep-linked health filter) as a removable chip", async () => {
+  it("shows every active filter (including a deep-linked health filter and the sort) as a removable chip", async () => {
     const onFacetsChange = vi.fn();
     const onGroupByChange = vi.fn();
+    const onSortChange = vi.fn();
     const { container } = await mount({
       facets: { ...emptyFacets, producer: "Alpha Estate", health: "hold" },
       groupBy: "region",
+      sort: "vintage-asc",
       onFacetsChange,
       onGroupByChange,
+      onSortChange,
     });
 
     expect(container.textContent).toContain("Producer: Alpha Estate");
     expect(container.textContent).toContain("Health: Hold");
     expect(container.textContent).toContain("Group: Region");
+    expect(container.textContent).toContain("Sort: ");
 
     await click(chipRemoveButton(container, "Producer: Alpha Estate"));
     expect(onFacetsChange).toHaveBeenCalledWith({ producer: null });
@@ -245,22 +260,29 @@ describe("CellarFacetBar", () => {
 
     await click(chipRemoveButton(container, "Group: Region"));
     expect(onGroupByChange).toHaveBeenCalledWith(null);
+
+    await click(chipRemoveButton(container, "Sort: "));
+    expect(onSortChange).toHaveBeenCalledWith(null);
   });
 
-  it("Clear all removes every facet and the group-by together", async () => {
+  it("Clear all removes every facet, the group-by and the sort together", async () => {
     const onFacetsChange = vi.fn();
     const onGroupByChange = vi.fn();
+    const onSortChange = vi.fn();
     const { container } = await mount({
       facets: { ...emptyFacets, producer: "Alpha Estate" },
       groupBy: "region",
+      sort: "qty-desc",
       onFacetsChange,
       onGroupByChange,
+      onSortChange,
     });
     await click(button(container, "Clear all"));
     expect(onFacetsChange).toHaveBeenCalledWith(
       expect.objectContaining({ producer: null, region: null, country: null }),
     );
     expect(onGroupByChange).toHaveBeenCalledWith(null);
+    expect(onSortChange).toHaveBeenCalledWith(null);
   });
 
   it("uses the project's outline focus pattern (never outline-none + a box-shadow ring) on every facet-surface control", async () => {
@@ -268,26 +290,24 @@ describe("CellarFacetBar", () => {
     // CSS that always beats Tailwind's layered ring-* utilities, so any
     // focus-visible:ring-* on these controls is an automatic fail. Every
     // control here must carry the outline-based pattern instead.
-    const onFacetsChange = vi.fn();
-    const onGroupByChange = vi.fn();
     const { container } = await mount({
+      open: true,
       facets: { ...emptyFacets, producer: "Alpha Estate", health: "hold" },
       groupBy: "region",
-      onFacetsChange,
-      onGroupByChange,
+      onEnterSelectMode: vi.fn(),
     });
 
-    expectFocusOutlinePattern(labelledSelect(container, "Producer")!);
-    expectFocusOutlinePattern(labelledSelect(container, "Region")!);
-    expectFocusOutlinePattern(button(container, /^Filters/));
     expectFocusOutlinePattern(chipRemoveButton(container, "Producer: Alpha Estate"));
     expectFocusOutlinePattern(button(container, "Clear all"));
 
-    await click(button(container, /^Filters/));
     const dialog = container.querySelector('[role="dialog"]')!;
+    expectFocusOutlinePattern(labelledSelect(dialog, "Producer")!);
+    expectFocusOutlinePattern(labelledSelect(dialog, "Region")!);
     expectFocusOutlinePattern(labelledSelect(dialog, "Country")!);
     expectFocusOutlinePattern(labelledSelect(dialog, "Varietal")!);
     expectFocusOutlinePattern(labelledSelect(dialog, "Group by")!);
+    expectFocusOutlinePattern(labelledSelect(dialog, "Sort wines")!);
+    expectFocusOutlinePattern(button(dialog, "Select wines"));
     expectFocusOutlinePattern(
       dialog.querySelector<HTMLButtonElement>('button[aria-label="Close filters"]')!,
     );

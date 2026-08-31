@@ -38,6 +38,30 @@ export const OUTLIER_DEVIATION_PCT = 20; // >20% deviation = outlier worth revie
 const RETAIL_REFRESH_MAX_AGE_DAYS = 7; // retail cache TTL
 
 /**
+ * Floor below which a pour-cost target is not a pricing choice but a units
+ * error. The column is a percentage (schema default 22.00, CHECK > 0 AND
+ * < 100); a value like 0.24 is the same number written as a *fraction*, and
+ * dividing by it inflates the suggestion exactly 100×. No real programme pours
+ * at under 1% cost, so anything below this is unusable input rather than
+ * arithmetic to honour.
+ */
+export const MIN_PLAUSIBLE_POUR_COST_PCT = 1.0;
+
+/**
+ * True when a pour-cost target (a percentage, not a fraction) is within the
+ * plausible range — see `MIN_PLAUSIBLE_POUR_COST_PCT`. The single check
+ * `suggestGlassPrice` and `resolvePourCostTarget` both apply, so an
+ * implausible value like 0.24 can't yield a suggestion of null on one
+ * surface while still driving the deviation/outlier calculation on the
+ * other — the exact disagreement reviewer finding E flagged.
+ */
+export function isPlausiblePourCostTarget(
+  value: number | null | undefined,
+): value is number {
+  return value != null && value >= MIN_PLAUSIBLE_POUR_COST_PCT && value < 100;
+}
+
+/**
  * Compute pour cost % for a glass pour.
  *
  * @param costPerBottle - what we paid (invoice cost or median retail) — dollars
@@ -112,7 +136,16 @@ export function suggestBottlePrice(
  * Suggest a glass price given a target pour cost % + cost-per-bottle + glass pour size.
  * cost-per-bottle is invoice cost when known, else median retail.
  *
- * @returns suggested dollar price rounded to nearest dollar, or null when inputs missing
+ * The lower bound on `targetPourCostPct` is load-bearing, not defensive
+ * boilerplate. The old bound was `> 0`, which let a fraction through: the local
+ * seed held 0.24 where the column means 24, and the app rendered a suggested
+ * glass price of **$7,203** — arithmetically correct, exactly 100× wrong, and
+ * shown to the user with a straight face. A suggestion nobody can act on is
+ * worse than no suggestion, so an implausible target now yields null and the
+ * row falls back to a dash.
+ *
+ * @returns suggested dollar price rounded to nearest dollar, or null when
+ *   inputs are missing or the target is outside the plausible range
  */
 export function suggestGlassPrice(
   costPerBottle: number | null | undefined,
@@ -123,12 +156,10 @@ export function suggestGlassPrice(
   if (
     costPerBottle == null ||
     glassPourMl == null ||
-    targetPourCostPct == null ||
     !sizeMl ||
     sizeMl <= 0 ||
     glassPourMl <= 0 ||
-    targetPourCostPct <= 0 ||
-    targetPourCostPct >= 100
+    !isPlausiblePourCostTarget(targetPourCostPct)
   ) {
     return null;
   }
@@ -243,6 +274,26 @@ export function isRetailPlausible(
 }
 
 /**
+ * A glass must cost less than the whole bottle it is poured from.
+ *
+ * Second line of defence behind `suggestGlassPrice`'s target floor, and the one
+ * that does not depend on knowing *why* the number is wrong: whatever produced
+ * it — a bad target, a bad size_ml, a bad cost — a glass priced at or above the
+ * bottle is not a suggestion anyone can use.
+ *
+ * Same shape as `isRetailPlausible` above: no anchor to compare against means
+ * accept, because refusing on missing data would suppress good suggestions.
+ */
+export function isGlassPricePlausible(
+  glassPrice: number | null,
+  bottleReference: number | null | undefined,
+): boolean {
+  if (glassPrice == null) return true; // nothing to judge
+  if (bottleReference == null || bottleReference <= 0) return true; // no anchor
+  return glassPrice < bottleReference;
+}
+
+/**
  * Position of the bottle list price along the target band axis (0-100%).
  * Used by the PriceBand visual component. The band is centered on the
  * target markup × retail reference, with ±20% bounds.
@@ -285,13 +336,20 @@ export function formatPricingStatusLabel(status: PricingStatus): string {
 
 /**
  * Resolve effective pour-cost target: per-wine override > restaurant default > house fallback.
+ *
+ * An implausible stored value (finding E: the same 0.24-as-fraction bug
+ * `suggestGlassPrice` guards against) is treated as absent rather than
+ * returned raw — otherwise a bad per-wine or restaurant value would produce
+ * a null suggestion (dash) while still driving `getGlassStatus`'s deviation
+ * math into flagging the row as an outlier, two surfaces disagreeing about
+ * the same number.
  */
 export function resolvePourCostTarget(
   perWineTarget: number | null | undefined,
   restaurantDefault: number | null | undefined,
 ): number {
-  if (perWineTarget != null) return perWineTarget;
-  if (restaurantDefault != null) return restaurantDefault;
+  if (isPlausiblePourCostTarget(perWineTarget)) return perWineTarget;
+  if (isPlausiblePourCostTarget(restaurantDefault)) return restaurantDefault;
   return DEFAULT_TARGET_POUR_COST_PCT;
 }
 
