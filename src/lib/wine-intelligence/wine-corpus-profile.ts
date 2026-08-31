@@ -91,6 +91,7 @@
 import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { wineDisplayName } from "@/lib/wine-display-name";
 import { weakerImageKind } from "./corpus-image";
 import {
   PRODUCER_PREFIX_SAFE_WORDS,
@@ -142,18 +143,38 @@ export async function resolveWineCorpusProfile(
 ): Promise<CorpusRead<XWinesProfile | null>> {
   const { supabase, canonicalWineId, producer, name } = input;
 
+  // The cuvée, not the stored string. An importer writes `name` as
+  // "<producer>, <varietal>, <region>", so the cuvée floor was comparing
+  // "Willis Hall, Cabernet Franc, Columbia Valley" against the corpus's
+  // "Cabernet Franc" — 0.333 against a 0.64 floor, while that same wine's
+  // producer scored 1.000. The floor was right and was being asked about the
+  // wrong string; `wineDisplayName` is the word-boundary strip BUG-01 already
+  // needed, reused rather than reinvented. Measured on 300 production wines:
+  // PROFILE_ACCEPT went from 23 (7.7%) to 63 (21.0%).
+  const statedCuvee = wineDisplayName(producer, name);
+
   const asStored = await resolveXWinesProfile({
     supabase,
     canonicalWineId,
     producer,
-    name,
+    name: statedCuvee,
   });
   if (asStored.status === "unavailable") return asStored;
   if (asStored.value !== null) return asStored;
 
-  // Only a row with no producer of its own has anything left to try. A row
-  // that HAS one and did not match has been answered.
-  if (producer !== null && producer.trim() !== "") return asStored;
+  // A row that STATES its producer has nothing to RECOVER — digging a second,
+  // made-up producer out of its name would be a guess layered on a rejection,
+  // and that remains refused. But the image tier was never about recovery: it
+  // is about what a captioned picture may claim. The producer here is the
+  // row's own and the RPC is still required to agree at the producer floor, so
+  // this row is entitled to the same producer-level picture a recovered one
+  // gets — and the 2-word floor, which exists only to protect recovery, does
+  // not apply to a producer nobody had to guess. 60 further wines of the same
+  // 300 (20.0%) clear the producer floor with a cuvée that does not; they were
+  // being shown nothing at all.
+  if (producer !== null && producer.trim() !== "") {
+    return imageOnlyProfile(supabase, producer, statedCuvee);
+  }
 
   const recovered = await recoverProducerFromName(supabase, name);
   if (recovered.status === "unavailable") return recovered;

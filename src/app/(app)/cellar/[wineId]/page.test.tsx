@@ -59,6 +59,16 @@ function supabaseReturning(
         };
         return self;
       },
+      /**
+       * The corpus image tier reaches this. A wine that states a producer but
+       * whose cuvée misses the name floor is now offered a producer-level
+       * picture (wine-corpus-profile.ts), which asks match_xwines a second
+       * time — a call this double did not have to model while that path
+       * returned early. No matches, so every assertion below is unaffected.
+       */
+      rpc: () => ({
+        then: (r: (v: unknown) => unknown) => r({ data: [], error: null }),
+      }),
     },
   };
 }

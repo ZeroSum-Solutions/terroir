@@ -1,125 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database";
 import { resolveWineCorpusProfile } from "./wine-corpus-profile";
 import { XWINES_PRODUCER_FLOOR } from "./xwines-profile";
+import {
+  CATALOG_ROW,
+  fakeSupabase,
+  producerOnlyHit,
+  strictHit,
+} from "@/test/fixtures/wine-corpus-double";
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
-const CATALOG_ROW = {
-  wine_id: 119230,
-  name: "Vosne-Romanee",
-  winery_name: "Benjamin Leroux",
-  type: "Red",
-  elaborate: "Varietal/100%",
-  grapes: ["Pinot Noir"],
-  harmonize: ["Beef", "Poultry"],
-  abv: 13.0,
-  body: "Medium-bodied",
-  acidity: "High",
-  region_name: "Vosne-Romanée",
-  country: "France",
-  website: null,
-  vintages: [2019, 2018],
-  has_non_vintage: false,
-  rating_avg: 4.1,
-  rating_count: 120,
-  image_url: "http://127.0.0.1:57321/storage/v1/object/public/wine-images/xwines/119230.jpeg",
-  image_kind: "label",
-  image_source: "xwines",
-  image_credit: null,
-};
-
-type MatchRow = {
-  wine_id: number;
-  score: number;
-  producer_score: number;
-  name_score: number;
-};
-
-type Call = { table: string; values?: unknown; args?: unknown };
-
-/**
- * PostgREST + RPC double covering the three tables this module touches. Plain
- * thenables, per xwines-profile.test.ts's note about `await` short-circuiting
- * native promises.
- */
-function fakeSupabase(options: {
-  /** What the producer-prefix lookup finds in `winery_name`. */
-  prefixHit?: string | null;
-  /** What match_xwines returns, in order. */
-  match?: MatchRow[];
-  catalog?: Record<string, unknown> | null;
-  canonical?: { xwines_wine_id: number | null } | null;
-  fail?: "prefix" | "match" | "catalog";
-}) {
-  const calls: Call[] = [];
-  const error = { message: "boom" };
-  const supabase = {
-    from: (table: string) => {
-      const call: Call = { table };
-      // The prefix lookup is the only `.in()` on xwines_catalog; a `.eq()` on
-      // the same table is the image tier reading one row back.
-      let isPrefixLookup = false;
-      const settle = () => {
-        calls.push(call);
-        if (table === "canonical_wines") {
-          return thenable({ data: options.canonical ?? null, error: null });
-        }
-        if (isPrefixLookup) {
-          if (options.fail === "prefix") return thenable({ data: null, error });
-          const winery = options.prefixHit ?? null;
-          return thenable({
-            data: winery === null ? null : { winery_name: winery },
-            error: null,
-          });
-        }
-        if (options.fail === "catalog") return thenable({ data: null, error });
-        return thenable({ data: options.catalog ?? null, error: null });
-      };
-      const self = {
-        select: () => self,
-        eq: () => self,
-        in: (column: string, values: unknown) => {
-          isPrefixLookup = true;
-          call.values = values;
-          return self;
-        },
-        order: () => self,
-        limit: () => self,
-        maybeSingle: settle,
-      };
-      return self;
-    },
-    rpc: (fn: string, args: unknown) => {
-      calls.push({ table: `rpc:${fn}`, args });
-      if (options.fail === "match") return thenable({ data: null, error });
-      return thenable({ data: options.match ?? [], error: null });
-    },
-  } as unknown as SupabaseClient<Database>;
-  return { supabase, calls };
-}
-
-function thenable(payload: unknown) {
-  return { then: (resolve: (value: unknown) => unknown) => resolve(payload) };
-}
-
 const blank = { canonicalWineId: null, producer: "", name: "Benjamin Leroux Vosne-Romanée" };
 
-const strictHit: MatchRow = {
-  wine_id: 119230,
-  score: 0.95,
-  producer_score: 1,
-  name_score: 0.95,
-};
-
-/** Right winery, cuvée nowhere near — clears the producer floor and nothing else. */
-const producerOnlyHit: MatchRow = {
-  wine_id: 119230,
-  score: 0.75,
-  producer_score: 1,
-  name_score: 0.35,
-};
 
 describe("resolveWineCorpusProfile — a row that already has a producer", () => {
   it("is answered by the existing rule alone, with no recovery attempted", async () => {
@@ -135,8 +27,15 @@ describe("resolveWineCorpusProfile — a row that already has a producer", () =>
   });
 
   it("does not go looking in the name when the producer it has failed to match", async () => {
-    // A wine that HAS a producer has been answered. Digging a second, made-up
-    // producer out of its name would be a guess layered on a rejection.
+    // A wine that HAS a producer never has one RECOVERED for it: digging a
+    // second, made-up producer out of its name would be a guess layered on a
+    // rejection, and that is still refused — the prefix lookup (the only
+    // `.in()` this module issues) must not happen.
+    //
+    // What DOES now happen is the image tier, which is a different question:
+    // it re-asks the RPC about the producer the row already states, and offers
+    // a captioned picture if that clears the producer floor. Here it does not,
+    // so the answer is unchanged. Two RPC calls, one conclusion.
     const { supabase, calls } = fakeSupabase({ match: [] });
     const read = await resolveWineCorpusProfile({
       supabase,
@@ -145,7 +44,6 @@ describe("resolveWineCorpusProfile — a row that already has a producer", () =>
       name: "Some Cuvée",
     });
     expect(read).toEqual({ status: "ok", value: null });
-    expect(calls.filter((call) => call.table === "rpc:match_xwines")).toHaveLength(1);
     expect(calls.some((call) => call.values !== undefined)).toBe(false);
   });
 });
