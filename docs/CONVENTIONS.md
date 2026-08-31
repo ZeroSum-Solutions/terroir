@@ -19,7 +19,7 @@ which was deleted after four months of drift.
 ## React / Next.js
 
 - **App Router only.** No `pages/` directory.
-- **Server Components by default.** 19 of 21 route `page.tsx` files are server
+- **Server Components by default.** 24 of 27 route `page.tsx` files are server
   components; `'use client'` sits at feature/leaf level (~35% of `.tsx` files).
   Keep it off layouts.
 - Route segments are kebab-case (`price-comparison/`, `wine-lists/`).
@@ -46,13 +46,13 @@ which was deleted after four months of drift.
 ## API routes
 
 - Auth via the shared helpers in `src/lib/api/auth.ts` — `requireAuth`,
-  `requireMembership`, `requireOwner`, `requireRole`. 90 of 93 route files use them;
+  `requireMembership`, `requireOwner`, `requireRole`. 91 of 94 route files use them;
   the three exceptions (`dev-login`, `health`, `team/accept-invite`) are deliberate
   and documented.
 - Errors via `src/lib/api/errors.ts` (`Errors.*`, typed `ErrorEnvelope`). Never leak a
   raw Postgres error.
 - Handlers wrapped with `withApiHandler` for uniform Sentry-wrapped error handling.
-- **Zod at the boundary is the target, not yet the reality** — 44 of 93 route files
+- **Zod at the boundary is the target, not yet the reality** — 46 of 94 route files
   use zod today; the rest hand-roll validation. New routes use zod. Routes you touch
   get migrated.
 - Idempotency via the `scan_idempotency` table for write-heavy flows.
@@ -67,7 +67,7 @@ which was deleted after four months of drift.
   `docs/runbooks/migration-numbering.md` before picking a number on a branch.
 - After any schema change: `pnpm snapshot` and `pnpm types:gen`, both before commit.
   `snapshot:check` and `types:check` gate the merge.
-- **RLS is on for all 35 tables**, gated by `is_member` / `is_member_with_role`.
+- **RLS is on for all 36 tables**, gated by `is_member` / `is_member_with_role`.
 - Atomic and RLS-aware business rules live in DB functions (`record_pour`,
   `reconcile_open_bottle`, …).
 - **Service-role usage bypasses RLS entirely.** Every service-role call site must
@@ -113,4 +113,4 @@ which was deleted after four months of drift.
 - Conventional commits: `type: description`.
 - One feature = one branch = one squashed commit on `main`.
 - `main` is protected with `enforce_admins: true` and a single required check that
-  runs 14 gates. There is no path around it, by design.
+  runs 18 gates. There is no path around it, by design.

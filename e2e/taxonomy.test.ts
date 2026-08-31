@@ -107,26 +107,74 @@ test.describe("@opp-4 navigable wine taxonomy", () => {
     await admin.from("wines").delete().in("id", wineIds);
   });
 
+  /**
+   * CELLAR-01 moved Producer, Region, Sort and Group by off the page and into
+   * the Filters sheet — the cellar renders one control row now, so the facets
+   * cannot each own a control of their own. The behaviour under test is
+   * unchanged (a region filter narrows the list and survives a reload); only
+   * the route to the control moved, so this spec opens the sheet rather than
+   * asserting the old placement.
+   */
+  /** One cellar row, addressed by the wine name it contains. */
+  function cellarRow(page: Page, name: string) {
+    return page.locator("[data-cellar-row]", { hasText: name });
+  }
+
+  /**
+   * `exact: true` matters: once a filter is applied the chip strip renders a
+   * remove button labelled "Remove Region: Ahr filter", which a substring match
+   * on "Region" also finds. Without it this locator resolves to the chip after
+   * the sheet closes and every visibility assertion here inverts.
+   */
+  async function openFilters(page: Page) {
+    await page.getByRole("button", { name: /^Filters/ }).click();
+    await expect(page.getByLabel("Region", { exact: true })).toBeVisible();
+  }
+
+  /**
+   * The sheet stages selections and commits them on Apply — the X discards the
+   * draft. Clicking the X here would silently throw the filter away and leave
+   * this spec asserting against an unfiltered list.
+   */
+  async function applyFilters(page: Page) {
+    await page.getByRole("button", { name: "Apply" }).click();
+    await expect(page.getByLabel("Region", { exact: true })).toBeHidden();
+  }
+
   test("EV-4.1–4.3: region persists through reload and producer groups show exact rollups", async ({ page }) => {
     await login(page);
     await page.goto("/cellar");
 
-    await page.getByLabel("Region").selectOption({ label: `${regionA} (2)` });
-    await expect(page.getByText(names[0], { exact: true })).toBeVisible();
-    await expect(page.getByText(names[1], { exact: true })).toBeVisible();
-    await expect(page.getByText(names[2], { exact: true })).toHaveCount(0);
+    await openFilters(page);
+    await page.getByLabel("Region", { exact: true }).selectOption({ label: `${regionA} (2)` });
+    await applyFilters(page);
+    // Assert on the ROW, not on the text. CellarRow renders the wine name twice
+    // — once in a `lg:hidden` stack for phones and once in the wide layout — so
+    // a bare getByText resolves to two nodes and trips strict mode. That is
+    // pre-existing markup, not a regression; counting rows is what this test
+    // actually means anyway.
+    await expect(cellarRow(page, names[0])).toHaveCount(1);
+    await expect(cellarRow(page, names[1])).toHaveCount(1);
+    await expect(cellarRow(page, names[2])).toHaveCount(0);
     // URLSearchParams serializes spaces as "+", encodeURIComponent as "%20".
     const regionParam = regionA.split(" ").map(encodeURIComponent).join("(?:\\+|%20)");
     await expect(page).toHaveURL(new RegExp(`region=${regionParam}`));
 
     await page.reload();
-    await expect(page.getByLabel("Region")).toHaveValue(regionA);
-    await expect(page.getByText(names[2], { exact: true })).toHaveCount(0);
+    await openFilters(page);
+    await expect(page.getByLabel("Region", { exact: true })).toHaveValue(regionA);
+    // Nothing staged — dismiss rather than re-Apply, so this still proves the
+    // value came back from the URL and not from a write this spec just made.
+    await page.getByRole("button", { name: "Close filters" }).click();
+    await expect(page.getByLabel("Region", { exact: true })).toBeHidden();
+    await expect(cellarRow(page, names[2])).toHaveCount(0);
 
     // Back-to-back changes with no wait between them: useCellarUrlState
     // must not let a stale router snapshot resurrect the cleared region.
-    await page.getByLabel("Region").selectOption("");
-    await page.getByLabel("Group by").selectOption("producer");
+    await openFilters(page);
+    await page.getByLabel("Region", { exact: true }).selectOption("");
+    await page.getByLabel("Group by", { exact: true }).selectOption("producer");
+    await applyFilters(page);
     await expect(page).toHaveURL(/group_by=producer/);
     await expect(page).not.toHaveURL(/region=/);
 

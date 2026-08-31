@@ -92,3 +92,49 @@ describe("assembleQueue: unmatched scans", () => {
     expect(queue.rows.filter((issue) => issue.kind === "unmatched_scan")).toHaveLength(0);
   });
 });
+
+describe("assembleQueue: every row can be opened", () => {
+  it("links an unplaced row to its wine in the cellar", () => {
+    const wines = [wine({ id: "wine-1" })];
+    const inventory = [inventoryItem({ id: "inv-1", bin_id: null })];
+
+    const queue = assembleQueue(inventory, [], wines);
+
+    const unplaced = queue.rows.filter((issue) => issue.kind === "unplaced");
+    expect(unplaced).toHaveLength(1);
+    expect(unplaced[0].deepLink).toBe("/cellar?wine=wine-1");
+  });
+
+  it("links an unmatched scan line to the wine it was matched to, when there is one", () => {
+    const wines = [wine({ id: "wine-1", producer: "Maker", name: "Estate Red", vintage: 2020 })];
+    // Same identity as the wine, different quantity — so `exactInventoryMatch`
+    // cannot consume it, but `suggestWineMatch` resolves it to a single wine.
+    const scans = [scan({
+      final_line_items: [
+        { id: "line-1", producer: "Maker", name: "Estate Red", vintage: 2020, qty: 3, unitCost: 10, format: "750ml" },
+      ],
+    })];
+
+    const queue = assembleQueue([], scans, wines);
+
+    const unmatched = queue.rows.filter((issue) => issue.kind === "unmatched_scan");
+    expect(unmatched).toHaveLength(1);
+    expect(unmatched[0].deepLink).toBe("/cellar?wine=wine-1");
+  });
+
+  it("links an unmatched scan line with no wine to the scan it came from", () => {
+    const wines = [wine({ id: "wine-1" })];
+    const scans = [scan({
+      final_line_items: [
+        { id: "line-1", producer: "Nobody", name: "Not In This Cellar", qty: 1, unitCost: 12 },
+      ],
+    })];
+
+    const queue = assembleQueue([], scans, wines);
+
+    const unmatched = queue.rows.filter((issue) => issue.kind === "unmatched_scan");
+    expect(unmatched).toHaveLength(1);
+    expect(unmatched[0].suggestion).toBeUndefined();
+    expect(unmatched[0].deepLink).toBe(`/scan/${SCAN_ID}`);
+  });
+});

@@ -1,12 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { WineThumb } from "@/components/wine-thumb";
-import { GripVertical, MoreHorizontal, Trash2 } from "lucide-react";
+import { IconButton } from "@/components/icon-button";
+import { GripVertical, Pencil, Trash2 } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { ML_PER_OZ } from "@/lib/units";
+import { wineDisplayName } from "@/lib/wine-display-name";
+import { PriceStepper } from "./price-stepper";
 
 type Wine = {
   id: string;
@@ -31,6 +35,9 @@ type ListItem = {
   position: number;
   glass_price: number | null;
   bottle_price: number | null;
+  // LIST-03: the suggested price shown when the stored one is null.
+  suggested_glass_price?: number | null;
+  suggested_bottle_price?: number | null;
   // BND-038: pour tracking per wine-list-item.
   glass_pour_ml: number | null;
   pour_size_mode: "fixed" | "picker";
@@ -68,88 +75,24 @@ interface WineRowProps {
   dragHandleProps?: Record<string, unknown>;
 }
 
-interface PriceInputProps {
-  value: number | null;
-  onChange: (v: number | null) => void;
-  muted?: boolean;
-}
-
-function formatPrice(n: number | null) {
-  if (n == null) return "—";
-  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-}
-
-export function PriceInput({ value, onChange, muted }: PriceInputProps) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value?.toString() ?? "");
-
-  const commit = () => {
-    setEditing(false);
-    const parsed = parseFloat(draft);
-    if (draft.trim() === "" || draft.trim() === "—") {
-      onChange(null);
-    } else if (!isNaN(parsed) && parsed >= 0) {
-      onChange(Math.round(parsed * 100) / 100);
-    }
-  };
-
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setDraft(value?.toString() ?? "");
-          setEditing(true);
-        }}
-        className={cn(
-          "min-h-11 w-full rounded-md border border-transparent px-xs py-2xs text-right font-mono text-[14px] transition-colors hover:border-rule hover:bg-surface",
-          muted ? "text-grey" : "text-ink",
-        )}
-      >
-        {formatPrice(value)}
-      </button>
-    );
-  }
-
-  return (
-    <div className="relative">
-      <span className="pointer-events-none absolute left-xs top-1/2 -translate-y-1/2 font-mono text-[14px] text-grey">
-        $
-      </span>
-      <input
-        autoFocus
-        type="text"
-        inputMode="decimal"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
-          if (e.key === "Escape") setEditing(false);
-        }}
-        className="min-h-11 w-full rounded-md border-2 border-mark bg-surface py-2xs pl-md pr-xs text-right font-mono text-[14px] text-ink focus-ring"
-      />
-    </div>
-  );
-}
-
 /**
  * BND-169: inline click-to-edit for the list item's display name.
  * When name_override is set, it replaces the wine name on the public
  * list. When null, the original wine name is used.
  */
-function NameEdit({
+function NameEditField({
   item,
   onNameChange,
+  onDone,
 }: {
   item: ListItem;
   onNameChange: (id: string, value: string | null) => void;
+  onDone: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.name_override ?? "");
 
   const commit = () => {
-    setEditing(false);
+    onDone();
     const trimmed = draft.trim();
     if (trimmed === "" || trimmed === item.wines.name) {
       // Blank or matching original → clear override (use wine name)
@@ -159,16 +102,42 @@ function NameEdit({
     }
   };
 
+  return (
+    <input
+      autoFocus
+      type="text"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+        if (e.key === "Escape") onDone();
+      }}
+      placeholder={item.wines.name}
+      aria-label={`Display name for ${item.wines.name}`}
+      className="min-h-11 w-full rounded-md border-2 border-mark bg-surface px-xs py-2xs font-serif text-[17px] font-medium text-ink focus-ring"
+    />
+  );
+}
+
+function NameEdit({
+  item,
+  onNameChange,
+}: {
+  item: ListItem;
+  onNameChange: (id: string, value: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
   if (!editing) {
-    const displayName = item.name_override ?? `${item.wines.producer}, ${item.wines.name}`;
+    const displayName =
+      item.name_override ??
+      `${item.wines.producer}, ${wineDisplayName(item.wines.producer, item.wines.name)}`;
     const isOverridden = item.name_override != null;
     return (
       <button
         type="button"
-        onClick={() => {
-          setDraft(item.name_override ?? "");
-          setEditing(true);
-        }}
+        onClick={() => setEditing(true)}
         className={cn(
           "min-h-11 rounded-md border border-transparent px-xs py-2xs text-left transition-colors hover:border-rule hover:bg-surface",
           "font-serif text-[17px] font-medium",
@@ -189,18 +158,10 @@ function NameEdit({
   }
 
   return (
-    <input
-      autoFocus
-      type="text"
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") commit();
-        if (e.key === "Escape") setEditing(false);
-      }}
-      placeholder={item.wines.name}
-      className="min-h-11 w-full rounded-md border-2 border-mark bg-surface px-xs py-2xs font-serif text-[17px] font-medium text-ink focus-ring"
+    <NameEditField
+      item={item}
+      onNameChange={onNameChange}
+      onDone={() => setEditing(false)}
     />
   );
 }
@@ -298,12 +259,14 @@ export function WineRow({
   dragHandleProps,
 }: WineRowProps) {
   const wine = item.wines;
+  // Mobile only: the rename the card used to open on tap.
+  const [renaming, setRenaming] = useState(false);
 
   return (
     <>
       {/* Desktop row — grid + compact pour-config sub-row stacked below. */}
       <div className="group hidden border-b border-rule transition-colors last:border-b-0 hover:bg-wash md:block">
-      <div className="grid grid-cols-[28px_40px_1fr_80px_80px_36px] items-center px-lg py-sm">
+      <div className="grid grid-cols-[28px_40px_1fr_136px_136px_36px] items-center px-lg py-sm">
         <div
           aria-label="Drag to reorder"
           className="flex min-h-11 min-w-11 cursor-grab items-center justify-center text-grey opacity-0 transition-opacity group-hover:opacity-100"
@@ -344,13 +307,17 @@ export function WineRow({
             )}
           </div>
         </div>
-        <PriceInput
+        <PriceStepper
           value={item.glass_price}
+          suggested={item.suggested_glass_price}
+          label={`glass price for ${wine.name}`}
           onChange={(v) => onPriceChange(item.id, "glass_price", v)}
           muted
         />
-        <PriceInput
+        <PriceStepper
           value={item.bottle_price}
+          suggested={item.suggested_bottle_price}
+          label={`bottle price for ${wine.name}`}
           onChange={(v) => onPriceChange(item.id, "bottle_price", v)}
         />
         <button
@@ -400,56 +367,86 @@ export function WineRow({
       {/* Mobile card */}
       <div className="border-b border-rule px-md py-md last:border-b-0 md:hidden">
         <div className="flex items-start justify-between gap-sm">
-          <WineThumb
-            src={wine.hero_image_url}
-            producer={wine.producer}
-            name={wine.name}
-            colour={wine.colour}
-            size={40}
-          />
-          <div className="min-w-0 flex-1">
-            <NameEdit item={item} onNameChange={onNameChange} />
-            <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-grey">
-              <span className="rounded-pill bg-surface-sunken px-sm py-2xs font-mono text-[11px] text-ink-soft">
-                {wine.vintage ?? "NV"}
-              </span>
-              {wine.region && <span>{wine.region}</span>}
-            </div>
-            {(wine.serving_temp_label || wine.drink_window_start) && (
-              <div className="mt-xs flex items-center gap-sm text-[11px] text-grey">
-                {wine.serving_temp_label && (
-                  <span>{wine.serving_temp_min}–{wine.serving_temp_max}°F</span>
-                )}
-                {wine.drink_window_start && wine.drink_window_end && (
-                  <span>Drink {wine.drink_window_start}–{wine.drink_window_end}</span>
-                )}
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            aria-label={`Options for ${item.wines.name}`}
-            onClick={() => onDelete(item.id)}
-            className="ml-sm flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-pill text-grey hover:text-accent"
+          {/* Tapping the wine shows the wine. The rename it used to open moved
+              onto its own control, and the one that said "Options" while
+              deleting now says Remove. */}
+          <Link
+            href={`/cellar?wine=${item.wine_id}`}
+            className="flex min-h-11 min-w-0 flex-1 items-start gap-sm rounded-md transition-colors hover:bg-wash focus-ring"
           >
-            <MoreHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-          </button>
+            <WineThumb
+              src={wine.hero_image_url}
+              producer={wine.producer}
+              name={wine.name}
+              colour={wine.colour}
+              size={40}
+            />
+            <div className="min-w-0 flex-1">
+              <div
+                className={cn(
+                  "font-serif text-body-lg font-medium",
+                  item.name_override != null ? "text-accent italic" : "text-ink",
+                )}
+              >
+                {item.name_override ??
+                  `${wine.producer}, ${wineDisplayName(wine.producer, wine.name)}`}
+              </div>
+              <div className="mt-2xs flex flex-wrap items-center gap-xs text-[12px] text-grey">
+                <span className="rounded-pill bg-surface-sunken px-sm py-2xs font-mono text-[11px] text-ink-soft">
+                  {wine.vintage ?? "NV"}
+                </span>
+                {wine.region && <span>{wine.region}</span>}
+              </div>
+              {(wine.serving_temp_label || wine.drink_window_start) && (
+                <div className="mt-xs flex items-center gap-sm text-[11px] text-grey">
+                  {wine.serving_temp_label && (
+                    <span>{wine.serving_temp_min}–{wine.serving_temp_max}°F</span>
+                  )}
+                  {wine.drink_window_start && wine.drink_window_end && (
+                    <span>Drink {wine.drink_window_start}–{wine.drink_window_end}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </Link>
+          <IconButton label={`Rename ${item.wines.name}`} onClick={() => setRenaming(true)} className="shrink-0 rounded-pill text-grey hover:text-accent">
+            <Pencil className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+          </IconButton>
+          <IconButton label={`Remove ${item.wines.name}`} onClick={() => onDelete(item.id)} className="shrink-0 rounded-pill text-grey hover:bg-risk-wash hover:text-risk-ink">
+            <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+          </IconButton>
         </div>
-        <div className="mt-sm flex gap-lg">
+        {renaming && (
+          <div className="mt-sm">
+            <NameEditField item={item} onNameChange={onNameChange} onDone={() => setRenaming(false)} />
+          </div>
+        )}
+        <div className="mt-sm grid grid-cols-2 gap-sm">
           <div>
             <div className="text-caption uppercase text-grey">
               Glass
             </div>
-            <div className="font-mono text-[14px] text-grey">
-              {formatPrice(item.glass_price)}
+            <div className="mt-2xs">
+              <PriceStepper
+                value={item.glass_price}
+                suggested={item.suggested_glass_price}
+                label={`glass price for ${wine.name}`}
+                onChange={(v) => onPriceChange(item.id, "glass_price", v)}
+                muted
+              />
             </div>
           </div>
           <div>
             <div className="text-caption uppercase text-grey">
               Bottle
             </div>
-            <div className="font-mono text-[14px] text-ink">
-              {formatPrice(item.bottle_price)}
+            <div className="mt-2xs">
+              <PriceStepper
+                value={item.bottle_price}
+                suggested={item.suggested_bottle_price}
+                label={`bottle price for ${wine.name}`}
+                onChange={(v) => onPriceChange(item.id, "bottle_price", v)}
+              />
             </div>
           </div>
         </div>

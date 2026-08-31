@@ -69,7 +69,10 @@ export function CellarCounters({
   onSelect: (filter: CellarUrlFilter) => void;
 }) {
   return (
-    <div role="tablist" aria-label="Cellar counters" className="flex flex-wrap gap-xs">
+    // GLOBAL-01: the scope pills are the primary segment of the page's ONE
+    // control row, so they scroll sideways inside it rather than wrapping into
+    // a second row when a cellar lights up five or six counters at once.
+    <div role="tablist" aria-label="Cellar counters" className="flex flex-nowrap gap-xs">
       {counters.map((counter) => {
         const selected = activeFilter === counter.id;
         return (

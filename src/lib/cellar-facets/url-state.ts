@@ -17,6 +17,16 @@ export const CELLAR_FILTERS = [
 
 export type CellarUrlFilter = (typeof CELLAR_FILTERS)[number];
 
+/**
+ * List or the bin grid. In the URL because the grid is a destination: a phone
+ * could not reach it at all while the view lived in `useState` — the List/Grid
+ * toggle is the only way in and it was desktop-only — and `/cellar?view=grid`
+ * is what makes it linkable from anywhere else.
+ */
+export const CELLAR_VIEWS = ["list", "grid"] as const;
+
+export type CellarView = (typeof CELLAR_VIEWS)[number];
+
 export type CellarUrlState = CellarFacets & {
   q: string;
   filter: CellarUrlFilter;
@@ -31,6 +41,7 @@ export type CellarUrlState = CellarFacets & {
   groupBy: CellarGroupBy | null;
   health: CellarHealthSegment | null;
   sort: CellarSort | null;
+  view: CellarView;
   wine: string | null;
 };
 
@@ -44,6 +55,7 @@ const filterSchema = z.enum(CELLAR_FILTERS);
 const groupSchema = z.enum(["producer", "region", "varietal", "vintage"]);
 const healthSchema = z.enum(HEALTH_SEGMENTS);
 const sortSchema = z.enum(CELLAR_SORTS);
+const viewSchema = z.enum(CELLAR_VIEWS);
 const wineSchema = z.string().uuid();
 
 export function parseCellarUrlState(params: SearchParamsReader): CellarUrlState {
@@ -61,6 +73,7 @@ export function parseCellarUrlState(params: SearchParamsReader): CellarUrlState 
     groupBy: parseValue(groupSchema, params.get("group_by")),
     health: parseValue(healthSchema, params.get("health")),
     sort: parseValue(sortSchema, params.get("sort")),
+    view: parseValue(viewSchema, params.get("view")) ?? "list",
     wine: parseValue(wineSchema, params.get("wine")),
   };
 }
@@ -80,6 +93,10 @@ export function serializeCellarUrlState(state: CellarUrlState): URLSearchParams 
   setText(params, "group_by", state.groupBy);
   setText(params, "health", state.health);
   setText(params, "sort", state.sort);
+  // List is the default, so it is never written: `?view=grid` is the only
+  // form that has to survive a round trip, and every other cellar URL stays
+  // as short as it was.
+  setText(params, "view", state.view === "list" ? null : state.view);
   setText(params, "wine", state.wine);
   return params;
 }

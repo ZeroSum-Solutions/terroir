@@ -3,10 +3,10 @@ import { notFound } from "next/navigation";
 import { getAuthContext } from "@/lib/auth-context";
 import {
   fetchVintageRatings,
-  resolveXWinesProfile,
   type CorpusRead,
   type VintageRating,
 } from "@/lib/wine-intelligence/xwines-profile";
+import { resolveWineCorpusProfile } from "@/lib/wine-intelligence/wine-corpus-profile";
 import { WineDetailView } from "./wine-detail-view";
 
 export const metadata: Metadata = { title: "Wine" };
@@ -59,7 +59,7 @@ export default async function WineDetailPage({ params }: { params: Params }) {
       .select("quantity, bin_location, section")
       .eq("wine_id", wineId)
       .eq("restaurant_id", restaurantId),
-    resolveXWinesProfile({
+    resolveWineCorpusProfile({
       supabase,
       canonicalWineId: wine.canonical_wine_id,
       producer: wine.producer,

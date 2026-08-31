@@ -105,8 +105,8 @@ test.describe("mobile wine-list editor", () => {
 
     const addWine = page.locator("main button").filter({ hasText: "Add wine" });
     await addWine.scrollIntoViewIfNeeded();
-    const pageScrollBefore = await page.evaluate(() => window.scrollY);
     await addWine.click();
+
 
     const dialog = page.getByRole("dialog", { name: /Add wine to/ });
     const panel = dialog.locator("[data-add-wine-panel]");
@@ -131,11 +131,21 @@ test.describe("mobile wine-list editor", () => {
       resultsBox!.x + resultsBox!.width / 2,
       resultsBox!.y + resultsBox!.height / 2,
     );
+    // The page behind must not move while the results pane scrolls. `window.scrollY`
+    // cannot express that: the modal locks the background with `position: fixed`, so
+    // scrollY reads 0 for as long as it is open, whatever the page was at. The old
+    // assertion compared it to the pre-open scroll and therefore only held when the
+    // page had not scrolled at all — it passed by luck until "Add wine" moved below
+    // the fold. The page's real position while locked lives in `body.style.top`, so
+    // that is what must survive the wheel.
+    const lockedOffsetBefore = await page.evaluate(() => document.body.style.top);
+    expect(lockedOffsetBefore).toMatch(/^-?\d+px$/);
     await page.mouse.wheel(0, 600);
     await expect
       .poll(() => results.evaluate((element) => element.scrollTop))
       .toBeGreaterThan(0);
-    expect(await page.evaluate(() => window.scrollY)).toBe(pageScrollBefore);
+    expect(await page.evaluate(() => document.body.style.top)).toBe(lockedOffsetBefore);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
 
     await search.click();
     await page.setViewportSize({ width: 390, height: 500 });
@@ -153,6 +163,11 @@ test.describe("mobile wine-list editor", () => {
     await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(dialog).toBeHidden();
     expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+    // Closing restores the page to where it was, which is the half of "owns
+    // scrolling" that scrollY can actually speak to.
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBe(Number(lockedOffsetBefore.replace(/px$/, "")) * -1);
   });
 });
 

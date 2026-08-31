@@ -859,6 +859,59 @@ export type Database = {
           },
         ]
       }
+      invoice_scan_deletions: {
+        Row: {
+          bottles_removed: number
+          deleted_at: string
+          deleted_by: string | null
+          distributor_name: string
+          final_line_items: Json
+          id: string
+          inventory_rows_deleted: number
+          invoice_number: string | null
+          invoice_scan_id: string
+          item_count: number
+          restaurant_id: string
+          scan_status: string
+        }
+        Insert: {
+          bottles_removed: number
+          deleted_at?: string
+          deleted_by?: string | null
+          distributor_name: string
+          final_line_items: Json
+          id?: string
+          inventory_rows_deleted: number
+          invoice_number?: string | null
+          invoice_scan_id: string
+          item_count: number
+          restaurant_id: string
+          scan_status: string
+        }
+        Update: {
+          bottles_removed?: number
+          deleted_at?: string
+          deleted_by?: string | null
+          distributor_name?: string
+          final_line_items?: Json
+          id?: string
+          inventory_rows_deleted?: number
+          invoice_number?: string | null
+          invoice_scan_id?: string
+          item_count?: number
+          restaurant_id?: string
+          scan_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_scan_deletions_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_scans: {
         Row: {
           accuracy_score: number | null
@@ -878,6 +931,7 @@ export type Database = {
           raw_image_path: string | null
           restaurant_id: string
           status: string
+          status_reason: string | null
           updated_at: string
         }
         Insert: {
@@ -898,6 +952,7 @@ export type Database = {
           raw_image_path?: string | null
           restaurant_id: string
           status?: string
+          status_reason?: string | null
           updated_at?: string
         }
         Update: {
@@ -918,6 +973,7 @@ export type Database = {
           raw_image_path?: string | null
           restaurant_id?: string
           status?: string
+          status_reason?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2199,6 +2255,7 @@ export type Database = {
         }
         Returns: Json
       }
+      delete_invoice_scan: { Args: { p_scan_id: string }; Returns: Json }
       dismiss_pricing_alert: {
         Args: { p_days?: number; p_wine_id: string }
         Returns: string
@@ -2233,6 +2290,7 @@ export type Database = {
       }
       generate_slug: { Args: { input: string }; Returns: string }
       identity_normalize_text: { Args: { raw: string }; Returns: string }
+      immutable_unaccent: { Args: { "": string }; Returns: string }
       is_member: { Args: { r_id: string }; Returns: boolean }
       is_member_with_role: {
         Args: {
@@ -2441,6 +2499,18 @@ export type Database = {
       }
       revert_import_batch: { Args: { p_batch_id: string }; Returns: number }
       revert_import_session: { Args: { p_session_id: string }; Returns: Json }
+      search_wines_fuzzy: {
+        Args: {
+          p_limit?: number
+          p_query: string
+          p_restaurant_id: string
+          p_threshold?: number
+        }
+        Returns: {
+          score: number
+          wine_id: string
+        }[]
+      }
       seed_reason_codes: {
         Args: { p_restaurant_id: string }
         Returns: undefined

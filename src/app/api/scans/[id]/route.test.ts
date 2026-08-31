@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
-const auth = vi.hoisted(() => ({ requireMembership: vi.fn() }));
+const auth = vi.hoisted(() => ({ requireMembership: vi.fn(), requireRole: vi.fn() }));
 vi.mock("@/lib/api/auth", () => ({
   requireMembership: (...args: unknown[]) => auth.requireMembership(...args),
+  requireRole: (...args: unknown[]) => auth.requireRole(...args),
 }));
 
 const { PATCH } = await import("./route");
@@ -182,5 +183,103 @@ describe("PATCH /api/scans/[id]", () => {
 
     expect(response.status).toBe(500);
     expect(JSON.stringify(await response.json())).not.toContain("sensitive");
+  });
+});
+
+// ── DELETE (SCAN-04 / D6) ───────────────────────────────────────────────
+
+const { DELETE } = await import("./route");
+
+function makeDeleteRequest() {
+  return new Request(`http://localhost/api/scans/${SCAN_ID}`, {
+    method: "DELETE",
+  }) as NextRequest;
+}
+
+function makeRpcSupabase(result: { data: unknown; error: unknown }) {
+  const rpc = vi.fn(async () => result);
+  return { supabase: { rpc }, rpc };
+}
+
+describe("DELETE /api/scans/[id]", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("reverses inventory through delete_invoice_scan and reports the impact", async () => {
+    const { supabase, rpc } = makeRpcSupabase({
+      data: { scanId: SCAN_ID, inventoryRowsDeleted: 3, bottlesRemoved: 18 },
+      error: null,
+    });
+    auth.requireRole.mockResolvedValue({
+      supabase,
+      restaurantId: RESTAURANT_ID,
+      role: "manager",
+    });
+
+    const response = await DELETE(makeDeleteRequest(), {
+      params: Promise.resolve({ id: SCAN_ID }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      scanId: SCAN_ID,
+      inventoryRowsDeleted: 3,
+      bottlesRemoved: 18,
+    });
+    // One RPC, one transaction — never a client-side "delete inventory then
+    // delete the scan" sequence that can half-happen.
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith("delete_invoice_scan", { p_scan_id: SCAN_ID });
+  });
+
+  it("requires owner or manager", async () => {
+    auth.requireRole.mockImplementation(async (roles: string[]) => {
+      expect(roles).toEqual(["owner", "manager"]);
+      return NextResponse.json({ error: "no" }, { status: 403 });
+    });
+
+    const response = await DELETE(makeDeleteRequest(), {
+      params: Promise.resolve({ id: SCAN_ID }),
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it("maps the RPC's not-found signal to 404 without leaking the raw error", async () => {
+    const { supabase } = makeRpcSupabase({
+      data: null,
+      error: { code: "P0002", message: "invoice scan ... not found" },
+    });
+    auth.requireRole.mockResolvedValue({ supabase, restaurantId: RESTAURANT_ID, role: "owner" });
+
+    const response = await DELETE(makeDeleteRequest(), {
+      params: Promise.resolve({ id: SCAN_ID }),
+    });
+    expect(response.status).toBe(404);
+    expect((await response.json()).error.code).toBe("not_found");
+  });
+
+  it("maps the RPC's privilege signal to 403", async () => {
+    const { supabase } = makeRpcSupabase({
+      data: null,
+      error: { code: "P0003", message: "insufficient privilege" },
+    });
+    auth.requireRole.mockResolvedValue({ supabase, restaurantId: RESTAURANT_ID, role: "manager" });
+
+    const response = await DELETE(makeDeleteRequest(), {
+      params: Promise.resolve({ id: SCAN_ID }),
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it("rejects a non-uuid scan id before touching the database", async () => {
+    const { supabase, rpc } = makeRpcSupabase({ data: null, error: null });
+    auth.requireRole.mockResolvedValue({ supabase, restaurantId: RESTAURANT_ID, role: "owner" });
+
+    const response = await DELETE(makeDeleteRequest(), {
+      params: Promise.resolve({ id: "not-a-uuid" }),
+    });
+    expect(response.status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

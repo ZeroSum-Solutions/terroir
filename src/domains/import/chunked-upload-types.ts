@@ -121,4 +121,5 @@ export const ZERO_SUMMARY: PreviewSummary = {
   missingCostRows: 0,
   readyToApplyRows: 0,
   pendingResolutionRows: 0,
+  missingProducerRows: 0,
 };

@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 94,
-  "discoveredOperationCount": 109,
+  "routeFileCount": 95,
+  "discoveredOperationCount": 111,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/assistant",
@@ -688,6 +688,17 @@
       }
     },
     {
+      "operationId": "api:DELETE:/api/scans/{param}",
+      "method": "DELETE",
+      "path": "/api/scans/[id]",
+      "source": {
+        "file": "src/app/api/scans/[id]/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "DELETE",
+        "moduleSpecifier": null
+      }
+    },
+    {
       "operationId": "api:POST:/api/scans/{param}/commit",
       "method": "POST",
       "path": "/api/scans/[id]/commit",
@@ -1091,6 +1102,17 @@
         "file": "src/app/api/wines/[id]/pricing-targets/route.ts",
         "exportKind": "function-declaration",
         "localName": "PATCH",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/wines/{param}/profile",
+      "method": "GET",
+      "path": "/api/wines/[id]/profile",
+      "source": {
+        "file": "src/app/api/wines/[id]/profile/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
         "moduleSpecifier": null
       }
     },

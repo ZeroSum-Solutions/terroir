@@ -7,12 +7,12 @@
 #   - docs/plans/2026-08-24-visual-wine-platform-spec-list.md (§1 migration manifest
 #     0112-0126+, §2 spec list SPEC-01..SPEC-24, §3 spike register)
 #   - docs/plans/2026-08-24-visual-wine-platform-synthesis.md (design decisions D1-D9)
-#   - docs/plans/2026-08-25-spike-01-stt-vendor-eval.md (STT vendor eval: accent folding,
+#   - docs/plans/_archive/2026-08-25-spike-01-stt-vendor-eval.md (STT vendor eval: accent folding,
 #     empty-transcript, keyterm capacity)
 #   - docs/plans/2026-08-25-spike-04-corpus-join-rates.md (X-Wines/WineSensed corpus
 #     findings; WineSensed correction re: labeled-benchmark framing)
-#   - docs/plans/2026-08-25-spike-05-ddgs-soak.md (DDGS cascade tier: retry/backoff verdict)
-#   - docs/plans/2026-08-25-spike-09-voice-retrieval-eval.md (producer-corroboration/margin
+#   - docs/plans/_archive/2026-08-25-spike-05-ddgs-soak.md (DDGS cascade tier: retry/backoff verdict)
+#   - docs/plans/_archive/2026-08-25-spike-09-voice-retrieval-eval.md (producer-corroboration/margin
 #     rule; false-accept findings)
 #
 # PRD approval pending — this file activates at ticket freeze (spec list §4 item 4).
@@ -656,7 +656,7 @@ slices:
 
   # non-starred slice: minimal acceptance contract (added on audit — criteria coverage)
   # source: docs/plans/2026-08-24-visual-wine-platform-spec-list.md §2 "SPEC-19 Voice
-  #   intake" (VWP-FR-023); docs/plans/2026-08-25-spike-01-stt-vendor-eval.md
+  #   intake" (VWP-FR-023); docs/plans/_archive/2026-08-25-spike-01-stt-vendor-eval.md
   #   ("Consequences for the specs" §, items 1 and 5).
   - id: SPEC-19
     name: voice intake

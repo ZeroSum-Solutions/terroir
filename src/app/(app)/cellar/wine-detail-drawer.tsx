@@ -1,10 +1,9 @@
 "use client";
 
 import { useRef, useState, useTransition, useCallback } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { X, PowerOff, Edit3, Loader2, Upload, Trash2 } from "lucide-react";
+import { X, PowerOff, Edit3, Loader2, Upload } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { useToast } from "@/lib/toast";
 import { ML_PER_OZ } from "@/lib/units";
@@ -17,6 +16,7 @@ import type { CellarWineRow } from "./types";
 import type { PreservationMethod } from "@/lib/partial-bottles/math";
 import { PartialBottleCloseout } from "./partial-bottle-closeout";
 import { StockAdjustmentForm } from "./stock-adjustment-form";
+import { WineDetailIdentity } from "./wine-detail-identity";
 import { Stat } from "./stat";
 import { PricingSection } from "./pricing-section";
 import { DecantTimeSection } from "./decant-time-section";
@@ -29,6 +29,7 @@ import { PourActionBar } from "./pour-action-bar";
 import { useHeroImageActions } from "./use-hero-image-actions";
 import { useEightysixToggle } from "./use-eightysix-toggle";
 import { useAsyncAction } from "./use-async-action";
+import { wineDisplayName } from "@/lib/wine-display-name";
 
 export function WineDetailDrawer({
   row,
@@ -291,7 +292,13 @@ export function WineDetailDrawer({
           <div className="flex items-center justify-between border-b border-rule px-md py-sm">
             <div className="min-w-0">
               <h2 id={headingId} className="font-serif text-[19px] font-medium text-ink leading-snug">
-                <span>{row.producer}</span> <span>{row.name}</span>
+                {/* BUG-01 — the name is rendered with the producer lifted off
+                    its front, because the producer is already the span beside
+                    it. See src/lib/wine-display-name.ts: this heading is the
+                    "Benoit Ente Benoit Ente, Puligny-Montrachet" Devin
+                    photographed. */}
+                <span>{row.producer}</span>{" "}
+                <span>{wineDisplayName(row.producer, row.name)}</span>
               </h2>
               {row.vintage != null && (
                 <p className="mt-2xs font-mono text-[11px] tracking-[0.12em] text-grey">
@@ -325,32 +332,13 @@ export function WineDetailDrawer({
             className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-md py-md md:px-lg md:py-lg"
             style={{ paddingBottom: "calc(var(--safe-bottom) + var(--spacing-lg))" }}
           >
-            {/* Hero image */}
-            {row.hero_image_url && (
-              <section aria-label="Hero image" className="mb-md">
-                <div className="relative rounded-lg overflow-hidden border border-rule bg-wash">
-                  <Image
-                    src={row.hero_image_url}
-                    alt={`${row.producer} ${row.name}`}
-                    width={800}
-                    height={384}
-                    unoptimized
-                    className="w-full h-48 object-cover"
-                  />
-                  {canManage && (
-                    <button
-                      type="button"
-                      onClick={handleHeroImageDelete}
-                      disabled={heroImageUploading}
-                      className="absolute top-2 right-2 flex h-11 w-11 items-center justify-center rounded-pill bg-black/50 text-white hover:bg-black/70 disabled:opacity-40"
-                      aria-label="Remove image"
-                    >
-                      <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
-                    </button>
-                  )}
-                </div>
-              </section>
-            )}
+            {/* CELLAR-05/06 — the wine leads. */}
+            <WineDetailIdentity
+              row={row}
+              canManage={canManage}
+              onDeleteImage={handleHeroImageDelete}
+              deleteDisabled={heroImageUploading}
+            />
 
             {/* Stock breakdown */}
             <section
@@ -404,6 +392,37 @@ export function WineDetailDrawer({
               )}
             </section>
 
+            {/* CELLAR-06 — the wine's own reference data, promoted above the
+                action zone. It was already built; it was simply underneath a
+                stock-adjustment form that owned the panel. The service verbs
+                a sommelier needs mid-pour did not move: they are pinned in the
+                sticky action bar at the drawer's foot. */}
+            {row.tasting_notes && (
+              <section
+                aria-label="Tasting notes"
+                className="mt-md rounded-lg card-surface p-md"
+              >
+                <h3 className="text-caption font-medium uppercase text-grey mb-sm">Tasting notes</h3>
+                <p className="text-[13px] text-ink-soft leading-relaxed whitespace-pre-wrap">
+                  {row.tasting_notes}
+                </p>
+              </section>
+            )}
+
+            {row.retail_median != null && (
+              <PricingSection row={row} canManage={canManage} />
+            )}
+
+            {row.drink_window_end != null && (
+              <DrinkWindowSection row={row} />
+            )}
+            {row.serving_temp_label && row.serving_temp_min != null && row.serving_temp_max != null && (
+              <ServingTempSection row={row} />
+            )}
+            {row.decant_minutes != null && row.decant_minutes > 0 && (
+              <DecantTimeSection row={row} />
+            )}
+
             {errorMsg && eightysix.pendingDirection === null && (
               <div
                 role="alert"
@@ -429,11 +448,6 @@ export function WineDetailDrawer({
 
             {/* Quick actions */}
             <section aria-label="Actions" className="mt-md flex flex-col gap-sm">
-              <StockAdjustmentForm
-                wineId={row.wine_id}
-                reasons={row.stock_adjustment_reason_codes}
-                onComplete={() => startTransition(() => router.refresh())}
-              />
               {(row.sealed_count > 0 || canPour) && (
                 <label className="text-[12px] text-grey">
                   Preservation method
@@ -454,38 +468,35 @@ export function WineDetailDrawer({
                   at the drawer's foot — the service actions stay in reach
                   without scrolling (Kimi audit 2026-08-26). */}
 
+              {/* GLOBAL-01 — one row, not a stack of full-width buttons. */}
               {canManage && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    eightysix.setPendingDirection(row.is_eightysixed ? "restored" : "eightysixed")
-                  }
-                  className={cn(
-                    "flex h-[48px] items-center justify-center gap-xs rounded-pill border text-[14px] font-medium transition-colors disabled:opacity-60",
-                    row.is_eightysixed
-                      ? "border-accent bg-primary text-seal-ink hover:bg-primary-hover"
-                      : "border-edge bg-surface text-ink hover:bg-wash",
-                  )}
-                >
-                  <PowerOff className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  {row.is_eightysixed ? "Restore" : "86 this wine"}
-                </button>
-              )}
-
-              {canManage && (
-                <EnrichControl wineId={row.wine_id} setErrorMsg={setErrorMsg} refresh={refresh} />
-              )}
-
-              {canManage && (
-                <button
-                  type="button"
-                  onClick={() => setEditOpen(true)}
-                  className="flex h-11 items-center justify-center gap-xs rounded-pill border border-edge bg-surface text-[13px] font-medium text-ink hover:bg-wash transition-colors"
-                >
-                  <Edit3 className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  Edit metadata
-                </button>
+                <div className="flex flex-wrap items-center gap-xs">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      eightysix.setPendingDirection(row.is_eightysixed ? "restored" : "eightysixed")
+                    }
+                    className={cn(
+                      "inline-flex h-11 items-center justify-center gap-xs rounded-pill border px-md text-body-sm font-medium transition-colors disabled:opacity-60",
+                      row.is_eightysixed
+                        ? "border-accent bg-primary text-seal-ink hover:bg-primary-hover"
+                        : "border-edge bg-surface text-ink hover:bg-wash",
+                    )}
+                  >
+                    <PowerOff className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    {row.is_eightysixed ? "Restore" : "86 this wine"}
+                  </button>
+                  <EnrichControl wineId={row.wine_id} setErrorMsg={setErrorMsg} refresh={refresh} />
+                  <button
+                    type="button"
+                    onClick={() => setEditOpen(true)}
+                    className="inline-flex h-11 items-center justify-center gap-xs rounded-pill border border-edge bg-surface px-md text-body-sm font-medium text-ink hover:bg-wash transition-colors"
+                  >
+                    <Edit3 className="h-4 w-4" strokeWidth={2} aria-hidden />
+                    Edit metadata
+                  </button>
+                </div>
               )}
 
               {/* OPP-1 (EV-1.2): merge duplicate — manager+ */}
@@ -515,35 +526,16 @@ export function WineDetailDrawer({
                 />
               )}
 
+              {/* CELLAR-06 — "Record comp or adjustment" used to open the
+                  drawer and fill most of it. It is a back-office correction,
+                  not the headline, so it is last. Still present, still
+                  reachable, still `region "Stock adjustment"`. */}
+              <StockAdjustmentForm
+                wineId={row.wine_id}
+                reasons={row.stock_adjustment_reason_codes}
+                onComplete={() => startTransition(() => router.refresh())}
+              />
             </section>
-
-            {/* Reference sections — below the action zone so the drawer
-                leads with "what can I do" mid-service (Kimi UX audit). */}
-            {row.tasting_notes && (
-              <section
-                aria-label="Tasting notes"
-                className="mt-md rounded-lg card-surface p-md"
-              >
-                <h3 className="text-caption font-medium uppercase text-grey mb-sm">Tasting notes</h3>
-                <p className="text-[13px] text-ink-soft leading-relaxed whitespace-pre-wrap">
-                  {row.tasting_notes}
-                </p>
-              </section>
-            )}
-
-            {row.retail_median != null && (
-              <PricingSection row={row} canManage={canManage} />
-            )}
-
-            {row.drink_window_end != null && (
-              <DrinkWindowSection row={row} />
-            )}
-            {row.serving_temp_label && row.serving_temp_min != null && row.serving_temp_max != null && (
-              <ServingTempSection row={row} />
-            )}
-            {row.decant_minutes != null && row.decant_minutes > 0 && (
-              <DecantTimeSection row={row} />
-            )}
 
             {/* Add a hero image — quiet hairline row at the drawer's foot;
                 a merchandising task, not a service task, so it no longer

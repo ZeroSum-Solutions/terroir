@@ -321,9 +321,13 @@ describe("checked-in API contract gate", () => {
       // Keeping a bottle scan's own photo added
       // POST /api/wines/[id]/label-photo — 107 + 1 = 108.
       // SCAN-10's grounded lane added GET /api/assistant — 108 + 1 = 109.
-      discoveredOperationCount: 109,
+      // SCAN-04 / D6 added DELETE /api/scans/[id], the first delete handler
+      // for a scan or an invoice anywhere in the product — 109 + 1 = 110.
+      // GLOBAL-04 added GET /api/wines/[id]/profile, the per-wine corpus read
+      // the drawer falls back to when a row has no picture — 110 + 1 = 111.
+      discoveredOperationCount: 111,
       plannedOperationCount: 15,
-      classificationCount: 109,
+      classificationCount: 111,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,

@@ -1,13 +1,12 @@
-import { useMemo, useState } from "react";
-import { SlidersHorizontal, X } from "lucide-react";
-import {
-  hasSelectableOptions,
-  type CellarFacets,
-  type CellarGroupBy,
-  type FacetCount,
-  type FacetCounts,
+import { useMemo } from "react";
+import { X } from "lucide-react";
+import type {
+  CellarFacets,
+  CellarGroupBy,
+  FacetCounts,
 } from "@/lib/cellar-facets";
 import type { CellarHealthSegment } from "@/lib/cellar-health/classify";
+import { CELLAR_SORT_LABELS, type CellarSort } from "@/lib/cellar-facets/sort";
 import { CellarFilterSheet } from "./cellar-filter-sheet";
 
 export type CellarFacetPatch = Partial<
@@ -53,109 +52,62 @@ const GROUP_BY_LABELS: Record<CellarGroupBy, string> = {
 type AppliedChip = { key: string; label: string; onRemove: () => void };
 
 /**
- * M2-15 §2.4 — filter consolidation.
+ * CELLAR-01 — applied-filter chips, plus the one filter surface they come from.
  *
- * The ~8 dropdowns this bar used to render inline (Producer, Region,
- * Country, Varietal, Vintage from, Vintage to, Format, Group by) wrapped
- * across 4+ lines on mobile, several with only one useful choice on a
- * given cellar. Now: Producer/Region — the two most commonly used
- * filters — stay in one compact row (auto-hidden if the current result
- * set only has one value for them); everything else moves into a single
- * "Filters" sheet; and every active filter (from either surface, plus any
- * that arrived via a deep link like `?health=`) shows as one removable
- * chip so the whole filter state is visible and clearable at a glance.
+ * This used to render its own control row: Producer, Region and a "Filters"
+ * button, stacked under the shell's own two rows. Producer and Region now live
+ * inside the sheet with every other facet, the sort and the grouping, and the
+ * button that opens it belongs to the shell's single control row — so what is
+ * left here is the state readout: one removable chip per applied filter,
+ * wherever it came from (including a deep link like `?health=`).
  */
 export function CellarFacetBar({
   facets,
   counts,
   groupBy,
+  sort,
+  open,
+  onOpenChange,
   onFacetsChange,
   onGroupByChange,
+  onSortChange,
+  onEnterSelectMode,
 }: {
   facets: CellarFacets;
   counts: FacetCounts;
   groupBy: CellarGroupBy | null;
+  sort: CellarSort | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onFacetsChange: (patch: CellarFacetPatch) => void;
   onGroupByChange: (groupBy: CellarGroupBy | null) => void;
+  onSortChange: (sort: CellarSort | null) => void;
+  /** Absent when this cellar has no sections to assign wines to. */
+  onEnterSelectMode?: () => void;
 }) {
-  const [sheetOpen, setSheetOpen] = useState(false);
-
-  const showProducer = hasSelectableOptions(counts.producer);
-  const showRegion = hasSelectableOptions(counts.region);
-  const showCountry = hasSelectableOptions(counts.country);
-  const showVarietal = hasSelectableOptions(counts.varietal);
-  const showVintage = hasSelectableOptions(counts.vintage);
-  const showFormat = hasSelectableOptions(counts.format);
-  const hasAnySecondaryControl = showCountry || showVarietal || showVintage || showFormat;
-
-  const secondaryActiveCount =
-    (facets.country ? 1 : 0) +
-    (facets.varietal ? 1 : 0) +
-    (facets.vintageMin != null || facets.vintageMax != null ? 1 : 0) +
-    (facets.format != null ? 1 : 0) +
-    (groupBy ? 1 : 0);
-
   const appliedChips = useMemo(
-    () => buildAppliedChips({ facets, groupBy, onFacetsChange, onGroupByChange }),
-    [facets, groupBy, onFacetsChange, onGroupByChange],
+    () =>
+      buildAppliedChips({
+        facets,
+        groupBy,
+        sort,
+        onFacetsChange,
+        onGroupByChange,
+        onSortChange,
+      }),
+    [facets, groupBy, sort, onFacetsChange, onGroupByChange, onSortChange],
   );
 
-  if (!showProducer && !showRegion && !hasAnySecondaryControl && appliedChips.length === 0) {
-    // Nothing here would do anything useful — a single-value cellar (or an
-    // empty one) has no facet worth showing a control for.
-    return null;
-  }
+  if (appliedChips.length === 0 && !open) return null;
 
   return (
     <div data-cellar-facet-bar className="mb-md flex max-w-full flex-col gap-sm">
-      {/*
-        M2-15 §2.4 follow-up (residuals audit) — Producer/Region + the
-        Filters button must read as ONE compact row, never a wrapped
-        multi-row block, down to 320px. `flex-nowrap` plus each select's
-        narrower mobile cap (below) keeps all three controls on one line
-        at 320–430px with room to spare; `overflow-x-auto` is a safety net
-        for unusually long producer/region text, not the primary UX.
-      */}
-      <div className="flex flex-nowrap items-center gap-xs overflow-x-auto">
-        {showProducer && (
-          <FacetSelect
-            label="Producer"
-            value={facets.producer}
-            options={counts.producer}
-            onChange={(producer) => onFacetsChange({ producer })}
-          />
-        )}
-        {showRegion && (
-          <FacetSelect
-            label="Region"
-            value={facets.region}
-            options={counts.region}
-            onChange={(region) => onFacetsChange({ region })}
-          />
-        )}
-        {hasAnySecondaryControl && (
-          <button
-            type="button"
-            onClick={() => setSheetOpen(true)}
-            className="inline-flex h-11 shrink-0 items-center gap-xs rounded-pill border border-edge bg-surface px-sm text-[12px] font-medium text-ink hover:bg-wash focus-ring"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            Filters
-            {secondaryActiveCount > 0 && (
-              <span className="tabular inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-pill bg-primary px-xs text-[10px] text-seal-ink">
-                {secondaryActiveCount}
-              </span>
-            )}
-          </button>
-        )}
-      </div>
-
       {appliedChips.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-2xs gap-y-lg">
           {appliedChips.map((chip) => (
             <span
               key={chip.key}
-              className="inline-flex h-8 items-center gap-2xs rounded-pill bg-wash pl-sm pr-2xs text-[11.5px] font-medium text-ink-soft"
+              className="inline-flex h-8 items-center gap-2xs rounded-pill bg-wash pl-sm pr-2xs text-caption font-medium tracking-normal text-ink-soft"
             >
               {chip.label}
               <button
@@ -164,7 +116,7 @@ export function CellarFacetBar({
                 aria-label={`Remove ${chip.label} filter`}
                 className="flex h-11 w-11 shrink-0 -my-[6px] items-center justify-center rounded-pill text-grey hover:bg-surface hover:text-ink-soft focus-ring"
               >
-                <X className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                <X className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
               </button>
             </span>
           ))}
@@ -173,35 +125,42 @@ export function CellarFacetBar({
             onClick={() => {
               onFacetsChange(CLEAR_ALL_PATCH);
               onGroupByChange(null);
+              onSortChange(null);
             }}
-            className="flex h-11 shrink-0 -my-[6px] items-center justify-center rounded-pill px-sm text-[11.5px] font-medium text-grey hover:bg-wash focus-ring"
+            className="flex h-11 shrink-0 -my-[6px] items-center justify-center rounded-pill px-sm text-caption font-medium tracking-normal text-grey hover:bg-wash focus-ring"
           >
             Clear all
           </button>
         </div>
       )}
 
-      {sheetOpen && (
-      <CellarFilterSheet
-        facets={{
-          country: facets.country ?? null,
-          varietal: facets.varietal ?? null,
-          vintageMin: facets.vintageMin ?? null,
-          vintageMax: facets.vintageMax ?? null,
-          format: facets.format ?? null,
-        }}
-        counts={counts}
-        groupBy={groupBy}
-        onApply={(patch, nextGroupBy) => {
-          onFacetsChange(patch);
-          onGroupByChange(nextGroupBy);
-        }}
-        onReset={() => {
-          onFacetsChange(CLEAR_ALL_PATCH);
-          onGroupByChange(null);
-        }}
-        onClose={() => setSheetOpen(false)}
-      />
+      {open && (
+        <CellarFilterSheet
+          facets={{
+            producer: facets.producer ?? null,
+            region: facets.region ?? null,
+            country: facets.country ?? null,
+            varietal: facets.varietal ?? null,
+            vintageMin: facets.vintageMin ?? null,
+            vintageMax: facets.vintageMax ?? null,
+            format: facets.format ?? null,
+          }}
+          counts={counts}
+          groupBy={groupBy}
+          sort={sort}
+          onApply={(patch, nextGroupBy, nextSort) => {
+            onFacetsChange(patch);
+            onGroupByChange(nextGroupBy);
+            onSortChange(nextSort);
+          }}
+          onReset={() => {
+            onFacetsChange(CLEAR_ALL_PATCH);
+            onGroupByChange(null);
+            onSortChange(null);
+          }}
+          onEnterSelectMode={onEnterSelectMode}
+          onClose={() => onOpenChange(false)}
+        />
       )}
     </div>
   );
@@ -210,13 +169,17 @@ export function CellarFacetBar({
 function buildAppliedChips({
   facets,
   groupBy,
+  sort,
   onFacetsChange,
   onGroupByChange,
+  onSortChange,
 }: {
   facets: CellarFacets;
   groupBy: CellarGroupBy | null;
+  sort: CellarSort | null;
   onFacetsChange: (patch: CellarFacetPatch) => void;
   onGroupByChange: (groupBy: CellarGroupBy | null) => void;
+  onSortChange: (sort: CellarSort | null) => void;
 }): AppliedChip[] {
   const chips: AppliedChip[] = [];
 
@@ -282,57 +245,16 @@ function buildAppliedChips({
       onRemove: () => onGroupByChange(null),
     });
   }
+  // Sort moved into the filter sheet with the grouping, so it needs the same
+  // visible, removable readout — otherwise a non-default sort would be applied
+  // with nothing on the page saying so.
+  if (sort) {
+    chips.push({
+      key: "sort",
+      label: `Sort: ${CELLAR_SORT_LABELS[sort]}`,
+      onRemove: () => onSortChange(null),
+    });
+  }
 
   return chips;
 }
-
-function FacetSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string | null | undefined;
-  options: FacetCount[];
-  onChange: (value: string | null) => void;
-}) {
-  const selected = options.find(
-    (option) => option.value.toLocaleLowerCase() === value?.toLocaleLowerCase(),
-  );
-  const renderedOptions =
-    value && !selected
-      ? [...options, { value, label: value, count: 0, isUnknown: false }]
-      : options;
-  return (
-    <label className="shrink-0">
-      <span className="sr-only">{label}</span>
-      <select
-        aria-label={label}
-        value={selected?.value ?? value ?? ""}
-        onChange={(event) => onChange(event.target.value || null)}
-        className={selectClassName}
-      >
-        {/* The unfiltered option shows just the category word — "All
-            producer" clipped to "All produc…" inside the mobile width cap
-            (Kimi audit 2026-08-26). */}
-        <option value="">{label}</option>
-        {renderedOptions.map((option) => (
-          <option
-            key={option.value}
-            value={option.value}
-            disabled={option.isUnknown}
-          >
-            {option.label} ({option.count})
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-// Capped narrower on mobile so Producer + Region + the Filters button share
-// one row down to 320px (each select would otherwise size toward its widest
-// option's text); md: restores the roomier desktop width.
-const selectClassName =
-  "h-11 max-w-[104px] md:max-w-[180px] rounded-pill border border-edge bg-surface px-sm text-[12px] text-ink hover:bg-wash focus-ring";

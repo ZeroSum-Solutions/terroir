@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 92,
+    "extensionDiscoveredCount": 94,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -709,6 +709,12 @@
       "semanticAliasContext": []
     },
     {
+      "operationId": "api:DELETE:/api/scans/{param}",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
       "operationId": "api:POST:/api/scans/{param}/commit",
       "classification": "extension",
       "concreteRequirementId": null,
@@ -950,6 +956,12 @@
     },
     {
       "operationId": "api:PATCH:/api/wines/{param}/pricing-targets",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/wines/{param}/profile",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []

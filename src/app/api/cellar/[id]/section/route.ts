@@ -12,8 +12,13 @@ type Params = Promise<{ id: string }>;
 
 const ParamsSchema = z.strictObject({ id: z.string().uuid() });
 
+// A wine can legitimately be moved BACK to "no section" — that is what the
+// Uncategorized group in the cellar list is. The old `.min(1)` rejected the
+// empty string the client sends for that drop with a 400, so every drag into
+// Uncategorized was rolled back and read as "the move did not stick"
+// (CELLAR-04). `null` and `""` both mean "clear it".
 const SectionSchema = z.object({
-  section: z.string().trim().min(1).max(100),
+  section: z.string().trim().max(100).nullable(),
 });
 
 /**
@@ -38,7 +43,7 @@ export async function PATCH(
 
     const parsed = await parseJson(request, SectionSchema);
     if (!parsed.ok) return parsed.response;
-    const { section } = parsed.data;
+    const section = parsed.data.section === "" ? null : parsed.data.section;
 
     // Verify the wine belongs to this restaurant
     const { data: wine } = await supabase

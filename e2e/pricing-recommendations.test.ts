@@ -93,6 +93,12 @@ test.describe("@opp-9 wine-aware pricing timing", () => {
     const { error: itemError } = await admin.from("wine_list_items").insert({
       section_id: section.id,
       wine_id: wineId,
+      // wine_list_items.restaurant_id is NOT NULL as of 0080 (denormalized,
+      // composite-FK'd to wines(id, restaurant_id) and cross-checked against
+      // the section's own restaurant by a BEFORE INSERT trigger) — must equal
+      // both this wine's and this list's tenant, both of which are
+      // restaurantId here.
+      restaurant_id: restaurantId,
       glass_price: 28,
       glass_pour_ml: 148,
       bottle_price: 92,

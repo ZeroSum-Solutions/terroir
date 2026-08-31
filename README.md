@@ -11,17 +11,43 @@ Single Next.js 16 (App Router) deployable backed by Supabase (Postgres + Auth). 
 - A Supabase project (URL + publishable key + service-role key)
 - An Anthropic API key
 - Azure Document Intelligence endpoint + key
+- (Optional) An AssemblyAI API key — speech-to-text for voice cellar search
+  (`ASSEMBLYAI_API_KEY`). Without it the voice-resolve route fails closed.
+- (Optional) A Wine-Searcher API key — retail-price enrichment
+  (`WINE_SEARCHER_API_KEY`). Without it pricing intelligence degrades rather than
+  breaking; the refresh route returns a "not configured" message.
 - (Optional) A Sentry project for error monitoring
 
 ## Development
 
+There are two env templates and they are **not** interchangeable:
+
+| Template | What it is | Use it for |
+|---|---|---|
+| `.env.local.example` | The **local-stack** template. Ships the well-known supabase-cli local defaults — loopback URL, local publishable and service-role keys. Committed on purpose; none of it is a secret. | Local development. This is the one you copy. |
+| `.env.example` | The **deployment variable inventory** — every variable the app reads, with notes and no values. | Filling in Railway service variables, or auditing what the app needs. It is not a local-dev starting point. |
+
+This distinction is load-bearing. On a configured machine **`.env.local` holds
+*production* credentials** — a hosted Supabase URL and a production service-role key
+(`AGENTS.md` non-negotiable #1) — and `pnpm dev` resolves that file silently, with
+nothing in the terminal to tell you which database you are on. Copying `.env.example`
+and "filling in the keys" is exactly how a local stack ends up pointed at production
+data. Start from the local template and the local stack instead:
+
 ```bash
 pnpm install
-cp .env.example .env.local  # fill in the keys
-pnpm dev
+cp .env.local.example .env.local   # local Supabase defaults; no production keys
+scripts/local/dev-stack.sh         # boots local Supabase, resets + seeds it
+pnpm dev -p 3000
 ```
 
-Open http://localhost:3000.
+`dev-stack.sh` creates `.env.local` from `.env.local.example` itself if it is missing,
+and refuses to run at all if the configured Supabase URL is not loopback.
+
+Open http://localhost:3000. See
+[`docs/runbooks/local-stack.md`](docs/runbooks/local-stack.md) for the full local stack
+and [`docs/runbooks/investor-demo.md`](docs/runbooks/investor-demo.md) for why a bare
+`pnpm dev` is the wrong entry point.
 
 ## Common commands
 
@@ -47,11 +73,17 @@ completion and status ledger for all 269 active core requirements. Run
 CI runs the same verification before the typecheck, lint, and test gates. Never
 hand-edit the ledger.
 
-The original requirement inventory
-([`docs/_archive/app_spec.txt`](docs/_archive/app_spec.txt)) and the session diary
-([`docs/_archive/claude-progress.txt`](docs/_archive/claude-progress.txt)) were moved
-to [`docs/_archive/`](docs/_archive/README.md) on 2026-08-29. Both are historical
-evidence only, both contain drifted claims, and neither determines completion status.
+The original requirement inventory ([`app_spec.txt`](app_spec.txt)) and the session
+diary ([`claude-progress.txt`](claude-progress.txt)) both live at the **repo root**.
+They are historical evidence only, both contain drifted claims, and neither determines
+completion status.
+
+**Do not move them into `docs/_archive/`.** They are machine-read, not prose:
+`scripts/verify-feature-ledger.mjs` sets `SOURCE_FILE = "app_spec.txt"` and
+`src/lib/feature-ledger/verify-feature-ledger.test.ts` resolves both repo-root-relative,
+so relocating either reds `pnpm verify:feature-ledger` and with it the required merge
+check. That move was attempted on 2026-08-29 and reverted the same day. See
+[`docs/_archive/README.md`](docs/_archive/README.md).
 
 [`docs/PRODUCT-CONTRACT-CONFORMANCE.md`](docs/PRODUCT-CONTRACT-CONFORMANCE.md)
 defines the separate product-conformance classification artifact and drift
@@ -71,6 +103,8 @@ Before your first deploy, set these as Railway service variables:
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - `ANTHROPIC_API_KEY`
 - `AZURE_DOC_INTELLIGENCE_ENDPOINT`, `AZURE_DOC_INTELLIGENCE_KEY`
+- `ASSEMBLYAI_API_KEY` (optional; enables voice cellar search)
+- `WINE_SEARCHER_API_KEY` (optional; enables retail-price enrichment)
 - `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `NEXT_PUBLIC_SENTRY_ENVIRONMENT`, `SENTRY_AUTH_TOKEN` (optional; enables monitoring and source-map uploads)
 
 See `.env.example` for the full list with notes.

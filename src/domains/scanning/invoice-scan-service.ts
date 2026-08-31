@@ -33,6 +33,18 @@ const AI_STATUS = {
   unknown: 500,
 } as const;
 
+/**
+ * The machine code persisted to `invoice_scans.status_reason` when a scan
+ * fails (0143). Prefixed by stage so the ledger says WHERE it broke, not
+ * only that it did; `src/lib/scanner/scan-status-reason.ts` renders these
+ * as prose.
+ */
+function failureReason(error: unknown): string {
+  if (error instanceof OcrError) return `ocr_${error.code}`;
+  if (error instanceof AiExtractError) return `ai_${error.code}`;
+  return "unexpected_error";
+}
+
 export type ProcessInvoiceScanInput = {
   supabase: SupabaseClient<Database>;
   restaurantId: string;
@@ -134,9 +146,13 @@ export async function processInvoiceScanOnce(
     );
 
     if (parsed.lineItems.length === 0) {
+      // SCAN-04 / D6 rule 1: this row stays in the ledger forever, so it
+      // has to be able to say why it is empty. Without status_reason a
+      // 0-item "complete" scan and a 0-item "failed" scan render
+      // identically, which is the confusion the decision names.
       const { error: completionError } = await supabase
         .from("invoice_scans")
-        .update({ status: "complete", item_count: 0 })
+        .update({ status: "complete", item_count: 0, status_reason: "no_wines_extracted" })
         .eq("id", scanId);
       if (completionError) throw completionError;
       return {
@@ -248,6 +264,9 @@ export async function processInvoiceScanOnce(
       accuracy_score: arithmetic.ok ? (quality.avgConfidence ?? null) : 0,
       item_count: items.length,
       status: arithmetic.ok ? "complete" : "review",
+      // D6 rule 1 again: "review" is a state the operator has to act on,
+      // so the ledger states which deterministic check put it there.
+      status_reason: arithmetic.ok ? null : "arithmetic_mismatch",
     };
     if (preUploadedPath) {
       updatePayload.raw_image_path = preUploadedPath;
@@ -298,7 +317,12 @@ export async function processInvoiceScanOnce(
       // affordance (src/app/(app)/scan/[id]/components/re-extract-button.tsx).
       // An OCR-stage failure still has nothing to persist and stays a
       // genuine terminal failure, which is correct.
-      const failurePayload: Record<string, unknown> = { status: "failed" };
+      const failurePayload: Record<string, unknown> = {
+        status: "failed",
+        // D6 rule 1: a failed scan stays in the ledger, so it carries the
+        // stage and code that failed rather than a bare "Failed" badge.
+        status_reason: failureReason(error),
+      };
       if (ocr) {
         failurePayload.ocr_text = JSON.parse(JSON.stringify(ocr));
       }

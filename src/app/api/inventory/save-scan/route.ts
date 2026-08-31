@@ -15,10 +15,14 @@ import {
   parseMultipart,
 } from "@/lib/api/validation";
 import { validateLineItemsArithmetic } from "@/domains/scanning/invoice-arithmetic";
+import {
+  claimOrCreateInvoiceScanRow,
+  markInvoiceScanSaveFailed,
+} from "@/domains/scanning/invoice-scan-ledger";
 import { SaveInvoiceScanBodySchema } from "@/lib/scanner/request-schemas";
 import { SCORED_FIELDS } from "@/lib/scanner/scored-fields";
 import type { LineItem, Scan } from "@/lib/scanner/types";
-import type { Database, Json } from "@/types/database";
+import type { Database } from "@/types/database";
 
 export const runtime = "nodejs";
 
@@ -40,21 +44,6 @@ function computeAccuracy(scan: Scan): number {
 
   const editedFields = Object.keys(scan.edits).length;
   return Math.max(0, (totalFields - editedFields) / totalFields);
-}
-
-/**
- * Parse an invoice date string into an ISO date or null.
- * Accepts ISO strings ("2024-03-15"), slash-delimited ("03/15/2024"),
- * and gracefully returns null for placeholder values like "—".
- */
-function parseInvoiceDate(raw: string): string | null {
-  if (!raw || raw === "—" || raw === "-") return null;
-
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return null;
-
-  // Return YYYY-MM-DD
-  return date.toISOString().slice(0, 10);
 }
 
 export async function POST(request: NextRequest) {
@@ -157,38 +146,32 @@ async function saveScanOnce(opts: {
   // ── Accuracy score ───────────────────────────────────────────────
   const accuracyScore = computeAccuracy(scan);
 
-  // ── Insert invoice_scans row ─────────────────────────────────────
-  const { data: invoiceScan, error: scanInsertError } = await supabase
-    .from("invoice_scans")
-    .insert({
-      restaurant_id: restaurantId,
-      distributor_name: scan.source.distributor,
-      invoice_number: scan.source.invoiceNo === "—" ? null : scan.source.invoiceNo,
-      invoice_date: parseInvoiceDate(scan.source.invoiceDate),
-      parsed_line_items: JSON.parse(JSON.stringify(originalItems)) as Json,
-      final_line_items: JSON.parse(JSON.stringify(scan.items)) as Json,
-      edits: JSON.parse(JSON.stringify(scan.edits)) as Json,
-      accuracy_score: accuracyScore,
-      item_count: scan.items.length,
-      // Arithmetic reconciled (or had nothing to check) by this point —
-      // the row is a settled, human-confirmed record, not an in-flight
-      // one. Previously left unset, which defaulted to "processing"
-      // forever for every scan saved through this path.
-      status: "complete",
-    })
-    .select("id")
-    .single();
+  // ── Claim (or create) the invoice_scans ledger row ───────────────
+  // T2: this used to INSERT unconditionally, producing a second, orphan
+  // row for every scan that came through POST /api/scan — see
+  // src/domains/scanning/invoice-scan-ledger.ts for the full defect.
+  const ledger = await claimOrCreateInvoiceScanRow({
+    supabase,
+    restaurantId,
+    scan,
+    originalItems,
+    accuracyScore,
+  });
 
-  if (scanInsertError || !invoiceScan) {
-    console.error("invoice_scans insert failed:", scanInsertError);
-    Sentry.captureException(scanInsertError ?? new Error("invoiceScan null without error"), {
-      tags: { surface: "save-scan", phase: "invoice_scans-insert" },
-      extra: { restaurantId, itemCount: scan.items.length },
-    });
-    return { status: 500, body: { error: "Failed to save invoice scan." } };
+  if (!ledger.ok) {
+    if (ledger.status === 500) {
+      const detail = ledger.body as { error: unknown; scanId: string | null };
+      console.error("invoice_scans ledger claim failed:", detail.error);
+      Sentry.captureException(detail.error ?? new Error("invoice_scans claim returned no row"), {
+        tags: { surface: "save-scan", phase: "invoice_scans-claim" },
+        extra: { restaurantId, itemCount: scan.items.length, scanId: detail.scanId },
+      });
+      return { status: 500, body: { error: "Failed to save invoice scan." } };
+    }
+    return { status: ledger.status, body: ledger.body };
   }
 
-  const scanId = invoiceScan.id;
+  const scanId = ledger.scanId;
 
   // ── Upload invoice image to storage (non-blocking) ──────────────
   if (file) {
@@ -259,7 +242,10 @@ async function saveScanOnce(opts: {
       tags: { surface: "save-scan", phase: "find_or_create_wines_batch" },
       extra: { restaurantId, wineCount: winesPayload.length, scanId },
     });
-    await supabase.from("invoice_scans").delete().eq("id", scanId);
+    // D6 rule 1: the ledger row STAYS and states why nothing reached
+    // inventory. The delete this replaces was a silent no-op anyway —
+    // invoice_scans had no DELETE policy before 0143.
+    await markInvoiceScanSaveFailed(supabase, restaurantId, scanId);
     return { status: 500, body: { error: "Failed to save wines." } };
   }
 
@@ -287,8 +273,9 @@ async function saveScanOnce(opts: {
       tags: { surface: "save-scan", phase: "inventory_items-insert" },
       extra: { restaurantId, scanId, rowCount: inventoryInserts.length },
     });
-    // Roll back: delete the invoice_scans row so the user can retry
-    await supabase.from("invoice_scans").delete().eq("id", scanId);
+    // Same as above: keep the row, state the reason, release the claim so
+    // the user can retry.
+    await markInvoiceScanSaveFailed(supabase, restaurantId, scanId);
     return { status: 500, body: { error: "Failed to save inventory items." } };
   }
 

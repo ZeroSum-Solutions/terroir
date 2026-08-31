@@ -6,18 +6,31 @@ vi.mock("@/lib/api/auth", () => ({
   requireMembership: (...args: unknown[]) => mockRequireMembership(...args),
 }));
 
+const { captureException } = vi.hoisted(() => ({ captureException: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({ captureException }));
+
 const { GET } = await import("./route");
 
 function makeSupabase(options?: {
   wines?: Array<Record<string, unknown>>;
+  // SCAN-06: the fuzzy fallback issues a SECOND wines query for the RPC's
+  // candidate ids, so a test that exercises it has to be able to answer the
+  // two calls differently.
+  winesByCall?: Array<Array<Record<string, unknown>>>;
   openBottles?: Array<Record<string, unknown>>;
   inventory?: Array<Record<string, unknown>>;
+  fuzzy?: Array<{ wine_id: string; score: number }>;
+  fuzzyError?: { message: string } | null;
 }) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const wines = options?.wines ?? [{ id: "wine-1" }];
   const inventory = options?.inventory ?? [];
+  let winesCall = 0;
   function makeChain(table: string) {
-    const rows = table === "inventory_items" ? inventory : wines;
+    const rows =
+      table === "inventory_items"
+        ? inventory
+        : (options?.winesByCall?.[winesCall++] ?? wines);
     const chain = {
       select: (...args: unknown[]) => record(`${table}.select`, args),
       eq: (...args: unknown[]) => record(`${table}.eq`, args),
@@ -42,7 +55,11 @@ function makeSupabase(options?: {
   return {
     supabase: {
       from: vi.fn((table: string) => makeChain(table)),
-      rpc: vi.fn(async () => ({ data: options?.openBottles ?? [], error: null })),
+      rpc: vi.fn(async (name: string) =>
+        name === "search_wines_fuzzy"
+          ? { data: options?.fuzzy ?? [], error: options?.fuzzyError ?? null }
+          : { data: options?.openBottles ?? [], error: null },
+      ),
     },
     calls,
   };
@@ -230,5 +247,147 @@ describe("GET /api/wines/search", () => {
     );
     expect(response.status).toBe(400);
     expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  // SCAN-06 — the fuzzy fallback's wiring. What the matching itself actually
+  // returns is not mockable and is proved against a real Postgres in
+  // ./fuzzy-search-live.test.ts; these assert the route's half of the
+  // contract: when it asks, what it asks with, and how it merges the answer.
+  describe("SCAN-06 fuzzy fallback", () => {
+    it("falls back to search_wines_fuzzy when the exact pass finds nothing", async () => {
+      const { supabase } = makeSupabase({
+        winesByCall: [[], [{ id: "w-b" }, { id: "w-a" }]],
+        fuzzy: [
+          { wine_id: "w-a", score: 1 },
+          { wine_id: "w-b", score: 0.6 },
+        ],
+      });
+      mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r1" });
+
+      const response = await GET(
+        new NextRequest("http://localhost/api/wines/search?q=Fredric%20savart"),
+      );
+
+      expect(response.status).toBe(200);
+      expect(supabase.rpc).toHaveBeenCalledWith("search_wines_fuzzy", {
+        p_restaurant_id: "r1",
+        p_query: "Fredric savart",
+        // Load-bearing, and asserted as a literal on purpose: 'fredric' scores
+        // 0.545455 against 'Frédéric', which clears 0.5 and fails pg_trgm's
+        // 0.6 default. Letting this default anywhere reinstates the bug.
+        p_threshold: 0.5,
+        p_limit: 20,
+      });
+      // Ranked by the RPC's ordering, not by the `producer` order Postgres
+      // returned the rows in.
+      expect(await response.json()).toEqual([{ id: "w-a" }, { id: "w-b" }]);
+    });
+
+    it("keeps exact hits first and never re-fetches or duplicates them", async () => {
+      const { supabase, calls } = makeSupabase({
+        winesByCall: [[{ id: "w-exact" }], [{ id: "w-fuzzy" }]],
+        fuzzy: [
+          { wine_id: "w-exact", score: 1 },
+          { wine_id: "w-fuzzy", score: 0.7 },
+        ],
+      });
+      mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r1" });
+
+      const response = await GET(
+        new NextRequest("http://localhost/api/wines/search?q=savart"),
+      );
+
+      expect(await response.json()).toEqual([{ id: "w-exact" }, { id: "w-fuzzy" }]);
+      expect(calls).toContainEqual({ method: "wines.in", args: ["id", ["w-fuzzy"]] });
+    });
+
+    it("re-applies every facet predicate to the fuzzy candidates", async () => {
+      // A fuzzy name match that ignored the caller's vintage or format filter
+      // would be a different bug from the one SCAN-06 fixes.
+      const { supabase, calls } = makeSupabase({
+        winesByCall: [[], [{ id: "w-a" }]],
+        fuzzy: [{ wine_id: "w-a", score: 1 }],
+      });
+      mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r1" });
+
+      const response = await GET(
+        new NextRequest(
+          "http://localhost/api/wines/search?q=savart&format=750&vintage_min=2016&region=Champagne",
+        ),
+      );
+
+      expect(response.status).toBe(200);
+      const count = (method: string, args: unknown[]) =>
+        calls.filter(
+          (call) =>
+            call.method === method && JSON.stringify(call.args) === JSON.stringify(args),
+        ).length;
+      expect(count("wines.eq", ["size_ml", 750])).toBe(2);
+      expect(count("wines.gte", ["vintage", 2016])).toBe(2);
+      expect(count("wines.ilike", ["region", "Champagne"])).toBe(2);
+      // The free-text ILIKE belongs to the exact pass only; re-applying it to
+      // the fuzzy candidates would filter out every row the RPC just found.
+      expect(calls.filter((call) => call.method === "wines.or")).toHaveLength(1);
+    });
+
+    it("does not reach for the RPC when there is no query", async () => {
+      const { supabase } = makeSupabase({ winesByCall: [[]] });
+      mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r1" });
+
+      const response = await GET(
+        new NextRequest("http://localhost/api/wines/search"),
+      );
+
+      expect(response.status).toBe(200);
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        "search_wines_fuzzy",
+        expect.anything(),
+      );
+    });
+
+    it("does not reach for the RPC when the exact pass already answered", async () => {
+      const { supabase } = makeSupabase({
+        winesByCall: [
+          [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }, { id: "e" }],
+        ],
+      });
+      mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r1" });
+
+      const response = await GET(
+        new NextRequest("http://localhost/api/wines/search?q=savart"),
+      );
+
+      expect(response.status).toBe(200);
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        "search_wines_fuzzy",
+        expect.anything(),
+      );
+    });
+
+    it("degrades to the exact result when the RPC is unavailable, and reports it", async () => {
+      // AGENTS.md non-negotiable #7: migrations do not ride along with a
+      // merge, so this route can be live before 0144 is applied. A missing
+      // function must not 500 every search with fewer than five substring
+      // hits — it must fall back to exactly the answer the route gave before
+      // SCAN-06, and say so in Sentry.
+      const { supabase } = makeSupabase({
+        winesByCall: [[{ id: "w-exact" }]],
+        fuzzyError: { message: "function does not exist" },
+      });
+      mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r1" });
+
+      const response = await GET(
+        new NextRequest("http://localhost/api/wines/search?q=savart"),
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual([{ id: "w-exact" }]);
+      expect(captureException).toHaveBeenCalledWith(
+        { message: "function does not exist" },
+        expect.objectContaining({
+          tags: { surface: "wines-search", phase: "fuzzy-fallback" },
+        }),
+      );
+    });
   });
 });

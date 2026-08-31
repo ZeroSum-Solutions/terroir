@@ -52,6 +52,16 @@ describe("ReconcileList variance presentation", () => {
     expect(note.className).toContain("h-11");
   });
 
+  it("opens the wine from the row's name", async () => {
+    await act(async () => root.render(<ReconcileList initialItems={[item]} />));
+    const link = container.querySelector<HTMLAnchorElement>(
+      'a[href="/cellar?wine=wine-1"]',
+    );
+    expect(link).not.toBeNull();
+    expect(link?.textContent).toContain("Test Producer");
+    expect(link?.className).toContain("min-h-11");
+  });
+
   it.each([
     {
       name: "subthreshold over",

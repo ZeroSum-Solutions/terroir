@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Check, Loader2, Plus, Search, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Loader2, Plus, Search } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { WineThumb } from "@/components/wine-thumb";
 import { sectionIdForColour } from "@/domains/wine-lists/section-for-colour";
+import { listSectionNames, type AddWineRequest } from "../use-add-wine";
+import { AddWinePricing } from "./add-wine-pricing";
 import type { LwinWine, PricingSuggestion, SearchWine } from "./add-wine-modal.types";
 
 interface AddWineModalProps {
   sections: { id: string; name: string }[];
   activeSectionId: string;
-  onAdd: (wineId: string, glassPrice: number | null, bottlePrice: number | null, sectionIds: string[]) => void;
+  onAdd: (request: AddWineRequest) => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -113,7 +115,21 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
         );
         if (!res.ok) throw new Error(`Failed (${res.status}).`);
         const data = (await res.json()) as PricingSuggestion;
-        if (!cancelled) setSuggestion(data);
+        if (cancelled) return;
+        setSuggestion(data);
+        // LIST-03 — the suggestion IS the starting price. Only fill a field the
+        // user has not already typed into, so this changes the default and
+        // nothing else.
+        if (data.suggestedGlass != null) {
+          setGlassPrice((current) =>
+            current === "" ? String(data.suggestedGlass) : current,
+          );
+        }
+        if (data.suggestedBottle != null) {
+          setBottlePrice((current) =>
+            current === "" ? String(data.suggestedBottle) : current,
+          );
+        }
       } catch (err) {
         if (!cancelled) {
           setSuggestError(err instanceof Error ? err.message : "Suggestion failed.");
@@ -204,7 +220,14 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
     setAdding(true);
     const glass = glassPrice ? parseFloat(glassPrice) : null;
     const bottle = bottlePrice ? parseFloat(bottlePrice) : null;
-    await onAdd(selected.id, glass, bottle, Array.from(selectedSectionIds));
+    await onAdd({
+      wine: selected,
+      glassPrice: Number.isFinite(glass as number) ? glass : null,
+      bottlePrice: Number.isFinite(bottle as number) ? bottle : null,
+      suggestedGlassPrice: suggestion?.suggestedGlass ?? null,
+      suggestedBottlePrice: suggestion?.suggestedBottle ?? null,
+      sectionIds: Array.from(selectedSectionIds),
+    });
     setAdding(false);
   };
 
@@ -244,10 +267,20 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
     }
   };
 
-  const activeSectionName =
-    sections.find((s) => s.id === activeSectionId)?.name ?? "section";
-
-  const selectedCount = selectedSectionIds.size;
+  /**
+   * LIST-06 (cause B) — the heading names the section(s) this wine will
+   * actually land in. It used to name `activeSectionId` unconditionally, which
+   * after LIST-02 is frequently NOT where the wine goes: adding a red while
+   * viewing Sparkling filed it under Red and told the user "Sparkling".
+   */
+  const destinationName = useMemo(() => {
+    const names = sections
+      .filter((section) => selectedSectionIds.has(section.id))
+      .map((section) => section.name);
+    if (names.length === 0) return "section";
+    if (names.length > 2) return `${names.length} sections`;
+    return listSectionNames(names);
+  }, [sections, selectedSectionIds]);
 
   return (
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- backdrop-click-to-dismiss is a mouse-only convenience; this dialog already has full keyboard access via useFocusTrap (Escape + a visible Close button).
@@ -269,10 +302,12 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
       >
         <div className="shrink-0 border-b border-rule px-lg py-md">
           <h2 id="add-wine-title" className="font-serif text-[20px] text-ink">
-            Add wine to {activeSectionName}
+            Add wine to {destinationName}
           </h2>
           <p className="mt-xs text-[13px] text-grey">
-            Search your inventory or the LWIN catalog.
+            {selected
+              ? "Filed by the wine's own style — change the section below."
+              : "Search your inventory or the LWIN catalog."}
           </p>
         </div>
 
@@ -444,7 +479,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
             {sections.length > 1 && (
               <div className="mt-md">
                 <div className="text-caption font-medium uppercase text-grey">
-                  Add to {selectedCount > 1 ? `${selectedCount} sections` : "section"}
+                  Add to {destinationName}
                 </div>
                 <div className="mt-sm flex flex-col gap-2xs">
                   {sections.map((s) => {
@@ -482,114 +517,16 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
               </div>
             )}
 
-            {/* BND-040 — Pricing suggestion panel. Renders when retail data
-                is available; falls back to a brief unavailable note otherwise.
-                One tap to fill both inputs; user can override anything. */}
-            {suggesting && (
-              <div className="mt-md flex items-center gap-xs text-[12px] text-grey">
-                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} aria-hidden />
-                Computing suggestion…
-              </div>
-            )}
-            {!suggesting && suggestion && suggestion.hasRetailData && (
-              <div
-                className="mt-md rounded-md bg-wash p-sm"
-                style={{ borderLeft: "2px solid var(--color-primary)" }}
-              >
-                <div className="flex items-baseline justify-between">
-                  <div className="text-caption font-medium uppercase text-grey">
-                    Suggested prices
-                  </div>
-                  <button
-                    type="button"
-                    onClick={applySuggestion}
-                    className="inline-flex min-h-11 items-center gap-2xs text-[11px] font-medium text-accent hover:underline"
-                  >
-                    <Sparkles className="h-3 w-3" strokeWidth={2} aria-hidden />
-                    Use these
-                  </button>
-                </div>
-                <div className="mt-xs grid grid-cols-2 gap-sm text-[12px] text-grey">
-                  <div>
-                    <span className="font-mono text-[16px] font-medium text-ink">
-                      {suggestion.suggestedGlass != null
-                        ? `$${suggestion.suggestedGlass}`
-                        : "—"}
-                    </span>
-                    <div className="mt-2xs text-[10px] text-grey">
-                      glass · target {Math.round(suggestion.targetPourCostPct)}% pour cost
-                    </div>
-                  </div>
-                  <div>
-                    <span className="font-mono text-[16px] font-medium text-ink">
-                      {suggestion.suggestedBottle != null
-                        ? `$${suggestion.suggestedBottle}`
-                        : "—"}
-                    </span>
-                    <div className="mt-2xs text-[10px] text-grey">
-                      bottle · target {suggestion.targetMarkupRatio.toFixed(1)}× retail
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-xs text-[10px] text-grey">
-                  Source: Wine-Searcher · {suggestion.retailRetailerCount ?? 0} retailers ·
-                  median ${Math.round(suggestion.retailMedian ?? 0)}
-                  {suggestion.categoryBandApplied && " · category band applied"}
-                </div>
-              </div>
-            )}
-            {!suggesting && suggestion && !suggestion.hasRetailData && (
-              <div className="mt-md rounded-md bg-wash p-sm text-[11px] italic text-grey">
-                Pricing data unavailable for this wine. Refresh retail data from
-                Insights to enable suggestions.
-              </div>
-            )}
-            {suggestError && (
-              <p role="alert" className="mt-sm text-[11px] text-risk-ink">
-                {suggestError}
-              </p>
-            )}
-
-            <div className="mt-md grid grid-cols-2 gap-md">
-              <div>
-                <label htmlFor="add-wine-glass-price" className="mb-xs block text-caption font-medium uppercase text-grey">
-                  Glass price
-                </label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-sm top-1/2 -translate-y-1/2 font-mono text-[14px] text-grey">
-                    $
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    id="add-wine-glass-price"
-                    value={glassPrice}
-                    onChange={(e) => setGlassPrice(e.target.value)}
-                    placeholder="—"
-                    className="h-11 w-full rounded-pill border border-rule bg-surface pl-md pr-sm text-right font-mono text-[16px] text-ink placeholder:text-grey focus:border-accent focus-ring md:text-[14px]"
-                  />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="add-wine-bottle-price" className="mb-xs block text-caption font-medium uppercase text-grey">
-                  Bottle price
-                </label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-sm top-1/2 -translate-y-1/2 font-mono text-[14px] text-grey">
-                    $
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    id="add-wine-bottle-price"
-                    value={bottlePrice}
-                    onChange={(e) => setBottlePrice(e.target.value)}
-                    placeholder="—"
-                    className="h-11 w-full rounded-pill border border-rule bg-surface pl-md pr-sm text-right font-mono text-[16px] text-ink placeholder:text-grey focus:border-accent focus-ring md:text-[14px]"
-                  />
-                </div>
-              </div>
-            </div>
+            <AddWinePricing
+              suggesting={suggesting}
+              suggestion={suggestion}
+              suggestError={suggestError}
+              glassPrice={glassPrice}
+              bottlePrice={bottlePrice}
+              onGlassPriceChange={setGlassPrice}
+              onBottlePriceChange={setBottlePrice}
+              onApplySuggestion={applySuggestion}
+            />
           </div>
         )}
 
@@ -621,7 +558,7 @@ export function AddWineModal({ sections, activeSectionId, onAdd, onClose }: AddW
                 disabled={adding || selectedSectionIds.size === 0}
                 className="min-h-11 rounded-pill bg-primary px-md text-[14px] font-medium text-seal-ink hover:bg-primary-hover focus-ring disabled:opacity-60"
               >
-                {adding ? "Adding..." : `Add to ${selectedCount > 1 ? `${selectedCount} sections` : "list"}`}
+                {adding ? "Adding..." : `Add to ${destinationName}`}
               </button>
             )}
           </div>

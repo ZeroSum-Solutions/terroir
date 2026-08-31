@@ -108,6 +108,34 @@ describe("CellarRow", () => {
     expect(markup).toContain("2019");
   });
 
+  it("BUG-01: renders the producer once when the name also starts with it", () => {
+    // The shape migration 0137 leaves behind: `producer` recovered from
+    // lwin_catalog, `name` still carrying it at the front. Rendering both
+    // verbatim is the "Benoit Ente Benoit Ente, Puligny-Montrachet" Devin
+    // photographed. This row appears twice in the markup (mobile + desktop
+    // layouts), so count occurrences rather than asserting on one.
+    const markup = renderToStaticMarkup(
+      <CellarRow
+        row={row({ producer: "Esporão", name: "Esporão Reserva Tinto", vintage: 2019 })}
+        onSelect={() => {}}
+      />,
+    );
+    expect(markup).toContain("Reserva Tinto");
+    expect(markup).not.toContain("Esporão Reserva Tinto");
+    // Twice for the two layouts, and no more: once as the producer line in each.
+    expect(markup.split("Esporão").length - 1).toBe(2);
+  });
+
+  it("BUG-01: leaves a name alone when a word merely starts like the producer", () => {
+    const markup = renderToStaticMarkup(
+      <CellarRow
+        row={row({ producer: "Oberrotweil", name: "Oberrotweiler Spätburgunder" })}
+        onSelect={() => {}}
+      />,
+    );
+    expect(markup).toContain("Oberrotweiler Spätburgunder");
+  });
+
   it("renders the 86'd chip for an eightysixed wine", () => {
     const markup = renderToStaticMarkup(
       <CellarRow row={row({ is_eightysixed: true })} onSelect={() => {}} />,

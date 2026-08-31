@@ -257,13 +257,17 @@ test.describe("BND-038 pour → reconcile", () => {
       })
       .first();
     if (await lineageHeader.count()) await lineageHeader.click();
-    // Since the One Accent row-anatomy pass (2d631a8) the row button no
-    // longer carries a "~N glass" chip — glass counts live in the
-    // wine-detail drawer now. Pick the row by wine name alone.
-    const row = page
-      .getByRole("button")
-      .filter({ hasText: nameLabel })
-      .first();
+    // Pick the row by WINE ID, not by name. The comment this replaces said the
+    // name was "the only reliable discriminator"; it is not one at all. The
+    // helper sorts pour-tracked wines by open volume, and the winner is
+    // routinely called "Moscatel" — a name three seeded wines share. Whichever
+    // of them happened to render first won `.first()`, so the drawer opened on
+    // a wine with no `glass_pour_ml` and the glass count was legitimately
+    // absent. That made the test a coin-toss on which bottle other suites had
+    // poured from most recently, and it came up tails today.
+    // `cellar-row.tsx:49` carries `data-cellar-row={row.wine_id}`, so the exact
+    // row is addressable and no text matching is needed.
+    const row = page.locator(`[data-cellar-row="${wine.wine_id}"]`).first();
     await expect(row).toBeVisible();
     await assertNoSeriousA11yViolations(page, "/cellar wine list");
 

@@ -159,7 +159,7 @@ frozen to the partner cellar's own editions.* Proper licensing happens before re
       re-scoped to hard negatives / out-of-corpus abstention material + domain-gap
       reference. Gate-0's labeled denominator must come from partner-cellar photos (already
       specified). Fold into SPEC-06 eval wording when tickets are cut.
-- [x] Spike resource setup — 2026-08-25: `docs/plans/2026-08-25-spike-resources-status.md`.
+- [x] Spike resource setup — 2026-08-25: `docs/plans/_archive/2026-08-25-spike-resources-status.md`.
       Ready: Brave key (plan check pending), RunPod key + live GPU pricing (RTX 4090
       $0.74/hr; balance $0 → needs top-up), X-Wines full (MD5-verified, CC0) +
       WineSensed metadata downloaded to `~/projects/terroir-data/`. Findings:

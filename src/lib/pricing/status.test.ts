@@ -13,6 +13,8 @@ import {
   resolveMarkupTarget,
   resolvePourCostTarget,
   suggestBottlePrice,
+  isGlassPricePlausible,
+  MIN_PLAUSIBLE_POUR_COST_PCT,
   suggestGlassPrice,
   DEFAULT_TARGET_MARKUP_RATIO,
   DEFAULT_TARGET_POUR_COST_PCT,
@@ -74,6 +76,38 @@ describe("suggestGlassPrice", () => {
   it("returns null on bad target pour cost (>= 100)", () => {
     expect(suggestGlassPrice(85, 750, 148, 100)).toBeNull();
     expect(suggestGlassPrice(85, 750, 148, 0)).toBeNull();
+  });
+
+  // The $7,203-a-glass regression. The local seed held 0.24 in a column that
+  // means 24, and the old `> 0` bound honoured it: a nonsensically SMALL pour
+  // cost produced a nonsensically LARGE price, and the list editor rendered it.
+  it("refuses a pour-cost target written as a fraction instead of a percent", () => {
+    // The exact numbers off the seeded row: unit_cost 87.60, 750ml, 148ml pour.
+    // 87.60 × 148/750 = 17.29/pour. 17.29 / 0.0024 = $7,203.
+    expect(suggestGlassPrice(87.6, 750, 148, 0.24)).toBeNull();
+    // …and the same wine at the value that was meant is ordinary.
+    expect(suggestGlassPrice(87.6, 750, 148, 24)).toBe(72);
+  });
+
+  it("treats anything under the 1% floor as unusable input", () => {
+    expect(suggestGlassPrice(85, 750, 148, MIN_PLAUSIBLE_POUR_COST_PCT)).not.toBeNull();
+    expect(suggestGlassPrice(85, 750, 148, 0.99)).toBeNull();
+    expect(suggestGlassPrice(85, 750, 148, 0.01)).toBeNull();
+  });
+});
+
+describe("isGlassPricePlausible", () => {
+  it("rejects a glass at or above the bottle it is poured from", () => {
+    expect(isGlassPricePlausible(7203, 285)).toBe(false);
+    expect(isGlassPricePlausible(285, 285)).toBe(false);
+  });
+  it("accepts an ordinary glass price", () => {
+    expect(isGlassPricePlausible(72, 285)).toBe(true);
+  });
+  it("accepts when there is no anchor to judge against", () => {
+    expect(isGlassPricePlausible(72, null)).toBe(true);
+    expect(isGlassPricePlausible(72, 0)).toBe(true);
+    expect(isGlassPricePlausible(null, 285)).toBe(true);
   });
 });
 
@@ -215,6 +249,41 @@ describe("resolvePourCostTarget", () => {
     expect(resolvePourCostTarget(18, 22)).toBe(18);
     expect(resolvePourCostTarget(null, 22)).toBe(22);
     expect(resolvePourCostTarget(null, null)).toBe(DEFAULT_TARGET_POUR_COST_PCT);
+  });
+
+  // Finding E: before this fix, resolvePourCostTarget returned an implausible
+  // stored value (0.24, the same fraction-instead-of-percent bug
+  // suggestGlassPrice guards against) raw. suggestGlassPrice would then
+  // return null for that row (dash in the UI) while getGlassStatus, fed the
+  // same 0.24 by this function, computed a huge deviationPct and flagged the
+  // row an "outlier" — two surfaces disagreeing about the same wine.
+  it("treats an implausible per-wine target (0.24) as absent, not honoured", () => {
+    expect(resolvePourCostTarget(0.24, 22)).toBe(22);
+    expect(resolvePourCostTarget(0.24, null)).toBe(DEFAULT_TARGET_POUR_COST_PCT);
+  });
+
+  it("treats an implausible restaurant default (0.24) as absent, not honoured", () => {
+    expect(resolvePourCostTarget(null, 0.24)).toBe(DEFAULT_TARGET_POUR_COST_PCT);
+  });
+
+  it("pins the 0.24 case: suggestion and status agree instead of disagreeing", () => {
+    // Same wine, same bad stored target (0.24), both surfaces reading it
+    // through resolvePourCostTarget — the single source of truth this
+    // file's header comment claims to be.
+    const target = resolvePourCostTarget(0.24, null);
+    expect(target).toBe(DEFAULT_TARGET_POUR_COST_PCT);
+
+    const suggestion = suggestGlassPrice(87.6, 750, 148, target);
+    expect(suggestion).not.toBeNull();
+
+    // A glass actually priced at that suggestion is on-target by
+    // construction. Before this fix, `target` here was the raw 0.24: the
+    // same actual pour cost would have deviated from it by ~9,000% and
+    // getGlassStatus would have flagged the row an "outlier" — the exact
+    // disagreement with suggestGlassPrice's null (dash) that finding E
+    // describes.
+    const actualPourCostPct = getPourCostPct(87.6, 750, 148, suggestion!);
+    expect(getGlassStatus(actualPourCostPct, target)).toBe("on_target");
   });
 });
 

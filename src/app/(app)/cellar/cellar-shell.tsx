@@ -1,16 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Search, SlidersHorizontal, LayoutGrid, List as ListIcon, X, ChevronDown } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Search, X } from "lucide-react";
 import { isClosingWindow, isHolding } from "@/lib/drink-window/status";
-import {
-  CELLAR_SORTS,
-  CELLAR_SORT_LABELS,
-  type CellarSort,
-} from "@/lib/cellar-facets/sort";
 import type { OpenBottleRow } from "@/lib/wine-list/shapes";
 import type { CellarWineRow } from "./types";
 import { CellarList, FILTER_LABELS } from "./cellar-list";
@@ -21,7 +14,8 @@ import { CellarGridView, CellarSetup } from "./cellar-grid";
 import type { GridData } from "./grid-types";
 import { resolveCellarNavigationIntent } from "./cellar-navigation";
 import { useCellarUrlState } from "./use-cellar-url-state";
-import { buildCellarCounters, CellarCounters } from "./cellar-counters";
+import { buildCellarCounters } from "./cellar-counters";
+import { CellarControlBar } from "./cellar-control-bar";
 import { VoiceCellarControl } from "./voice-cellar-control";
 
 type CellarSection = { id: string; name: string };
@@ -99,8 +93,10 @@ export function CellarShell({
     return () => clearTimeout(id);
   }, [qDraft, replaceUrlState, urlStateRef]);
 
-  const [initialMode] = useState(() => mode ?? "");
-  const [view, setView] = useState<"list" | "grid">("list");
+  // The view is URL state (CELLAR-08): `/cellar?view=grid` is linkable, and
+  // the bin grid stops being unreachable on a phone, where the List/Grid
+  // toggle used to be the only door in and was `md:` only.
+  const view = urlState.view;
 
   // D2 (Kimi audit 2026-08-26) — the hero keeps its ceremony, then hands
   // off to a compact sticky masthead once it scrolls away: count, active
@@ -134,9 +130,9 @@ export function CellarShell({
   );
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(
-    initialMode === "pour" || initialMode === "eightysix",
-  );
+  // CELLAR-01 — every facet, the sort and the grouping now live behind one
+  // surface, opened from the single control row.
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const canManage = role === "owner" || role === "manager";
   const isOwner = role === "owner";
@@ -150,7 +146,9 @@ export function CellarShell({
     if (!intent.shouldConsumeParams) return;
 
     const frame = requestAnimationFrame(() => {
-      if (intent.shouldFocusSearch) setSearchOpen(true);
+      // Search is always on screen now, so the FAB's intent focuses it rather
+      // than raising an overlay that duplicated the same input.
+      if (intent.shouldFocusSearch) searchInputRef.current?.focus();
       replaceUrlState({ filter: intent.filter ?? urlState.filter });
     });
 
@@ -170,12 +168,8 @@ export function CellarShell({
       }
       e.preventDefault();
       const input = searchInputRef.current;
-      if (input) {
-        input.focus();
-        input.select();
-      } else {
-        setSearchOpen(true);
-      }
+      input?.focus();
+      input?.select();
     }
     document.addEventListener("keydown", handleSlash);
     return () => document.removeEventListener("keydown", handleSlash);
@@ -208,13 +202,24 @@ export function CellarShell({
   }, [rows]);
 
   const counters = useMemo(() => buildCellarCounters(alerts), [alerts]);
+  // Everything the one filter surface now owns: the facets, the grouping and
+  // the sort. Counted from the URL alone so the badge needs no row data.
+  const activeFilterCount =
+    (urlState.producer ? 1 : 0) +
+    (urlState.region ? 1 : 0) +
+    (urlState.country ? 1 : 0) +
+    (urlState.varietal ? 1 : 0) +
+    (urlState.vintageMin != null || urlState.vintageMax != null ? 1 : 0) +
+    (urlState.format != null ? 1 : 0) +
+    (urlState.health ? 1 : 0) +
+    (urlState.groupBy ? 1 : 0) +
+    (urlState.sort ? 1 : 0);
   const selectCounter = useCallback(
     (filter: (typeof counters)[number]["id"]) => {
-      replaceUrlState({ filter });
       // Counters stay visible (and functional) in Grid view too, since
       // they're also the hero's KPI display — tapping one switches back
       // to the filtered List view rather than looking like a dead control.
-      setView("list");
+      replaceUrlState({ filter, view: "list" });
     },
     [replaceUrlState],
   );
@@ -229,54 +234,29 @@ export function CellarShell({
         <h1 className="mt-xs max-w-[560px] font-serif text-heading-sm font-light leading-[1.1] text-ink max-[359px]:mt-2xs max-[359px]:text-[22px] md:text-heading lg:max-w-[820px] lg:text-display">
           A cellar beyond the <em className="italic font-normal text-mark">ordinary</em>
         </h1>
-
-        {/* Counters-as-navigation — one compact row is both the hero's KPI
-            display and the filter tabs (M2-15 §2.2/§2.3). */}
-        <div className="mt-md max-[359px]:mt-xs">
-          <CellarCounters
-            counters={counters}
-            activeFilter={urlState.filter}
-            onSelect={selectCounter}
-          />
-        </div>
       </div>
 
-      {/* Bridge Band */}
-      <div className="-mx-md mb-md flex flex-wrap items-center gap-sm bg-surface-sunken px-md py-sm md:-mx-lg md:px-lg">
-        <div className="flex w-full flex-wrap items-center gap-xs md:ml-auto md:w-auto md:flex-nowrap">
-          <Link
-            href="/cellar/open"
-            className="inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill border border-edge px-md text-[12.5px] font-medium text-ink hover:bg-surface/60 focus-ring"
-          >
-            Open bottles {alerts.openCount}
-          </Link>
-
-          <div className="hidden md:block">
+      {/* Search — GLOBAL-02 lifts it out of the control row and puts it above,
+          on its own, at every width. The mobile search icon and its overlay are
+          gone with it: they existed only because the input had no room in the
+          old four-row stack. */}
+      <div className="-mx-md bg-surface-sunken px-md pt-sm md:-mx-lg md:px-lg">
+        <div className="flex items-center gap-xs">
+          <div className="min-w-0 flex-1 md:max-w-[420px]">
             <SearchInput
               value={qDraft}
               onChange={setQDraft}
               inputRef={searchInputRef}
             />
           </div>
-
-          <button
-            type="button"
-            onClick={() => setSearchOpen(true)}
-            aria-label="Search wines"
-            className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-ring md:hidden"
-          >
-            <Search className="h-5 w-5" strokeWidth={2} aria-hidden />
-          </button>
-
           <VoiceCellarControl
             onResolve={(wineId) => {
-              setView("list");
-              openWine(wineId);
+              applyUrlState({ view: "list", wine: wineId }, "push");
             }}
             onFilter={(filters) => {
-              setView("list");
               applyUrlState(
                 {
+                  view: "list",
                   ...(filters.country !== undefined ? { country: filters.country } : {}),
                   ...(filters.region !== undefined ? { region: filters.region } : {}),
                   ...(filters.varietal !== undefined ? { varietal: filters.varietal } : {}),
@@ -287,104 +267,85 @@ export function CellarShell({
               );
             }}
           />
-
-          {view === "list" && (
-            <SortSelect
-              value={urlState.sort}
-              onChange={(sort) => replaceUrlState({ sort })}
-            />
-          )}
-
-          {cellarConfig && (
-            <div className="hidden items-center overflow-hidden rounded-pill border border-edge md:inline-flex">
-              <ViewToggleButton
-                active={view === "list"}
-                onClick={() => setView("list")}
-                label="List"
-                Icon={ListIcon}
-              />
-              <ViewToggleButton
-                active={view === "grid"}
-                onClick={() => setView("grid")}
-                label="Grid"
-                Icon={LayoutGrid}
-              />
-            </div>
-          )}
-
-          {isOwner && (
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              aria-label="Cellar settings"
-              className="flex h-11 w-11 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-ring"
-            >
-              {/* Sliders, not a second gear — the header's gear is app
-                  settings; two identical gears on one screen were
-                  indistinguishable (Kimi audit 2026-08-26). */}
-              <SlidersHorizontal className="h-5 w-5" strokeWidth={2} aria-hidden />
-            </button>
-          )}
-
-          {view === "list" && canManage && reconcileItems.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setReconcileOpen(true)}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-pill bg-primary px-md text-[12.5px] font-medium text-seal-ink hover:bg-primary-hover focus-ring"
-            >
-              Reconcile {reconcileItems.length} open bottle
-              {reconcileItems.length === 1 ? "" : "s"} →
-            </button>
-          )}
         </div>
       </div>
+
+      {/* The one control row (CELLAR-01 / GLOBAL-01) */}
+      <CellarControlBar
+        counters={counters}
+        activeFilter={urlState.filter}
+        onSelectFilter={selectCounter}
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={() => setFiltersOpen(true)}
+        openBottleCount={alerts.openCount}
+        reconcileCount={
+          view === "list" && canManage ? reconcileItems.length : 0
+        }
+        onReconcile={() => setReconcileOpen(true)}
+        view={view}
+        onViewChange={(next) => replaceUrlState({ view: next })}
+        showViewToggle={cellarConfig !== null}
+        showSettings={isOwner}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
 
       {/* Sticky-masthead sentinel — when this scrolls under the app
           header, the hero has left the stage and the compact masthead
           takes over. */}
       {view === "list" && <div ref={sentinelRef} aria-hidden className="h-px" />}
 
-      {/* Compact sticky masthead (D2) */}
+      {/* Compact sticky masthead (D2) — the same two exempt/primary controls
+          the page leads with: search, and the one filter surface. */}
       {view === "list" && stuck && (
         <div className="glass fixed inset-x-0 top-[var(--chrome-header-total)] z-[var(--z-chrome)]">
-          <div className="mx-auto flex w-full max-w-[1160px] items-center gap-sm px-md py-xs md:px-lg">
-            <p className="min-w-0 flex-1 truncate text-[12px] text-grey">
-              <span className="font-mono text-[14px] font-medium tabular text-ink">
+          {/* Marked as a control row so the runtime gate can SEE it. The
+              static gate counts this and CellarControlBar as two rows; they
+              never coexist in a frame, because `stuck` only becomes true once
+              the control bar has scrolled off. e2e/cellar-control-row.test.ts
+              is what actually enforces Devin's rule — exactly one control row
+              intersecting the viewport, at any scroll position. */}
+          <div
+            data-cellar-control-row
+            data-cellar-masthead
+            className="mx-auto flex w-full max-w-[1160px] items-center gap-sm px-md py-xs md:px-lg"
+          >
+            <p className="hidden min-w-0 flex-1 truncate text-ledger text-grey sm:block">
+              <span className="font-medium tabular text-ink">
                 {(filteredCount ?? rows.length).toLocaleString()}
               </span>{" "}
               {urlState.filter === "all"
                 ? "wines"
                 : FILTER_LABELS[urlState.filter].toLocaleLowerCase()}
             </p>
-            {urlState.filter !== "all" && (
-              <button
-                type="button"
-                onClick={() => replaceUrlState({ filter: "all" })}
-                className="inline-flex h-11 shrink-0 items-center gap-2xs whitespace-nowrap rounded-pill border border-edge px-sm text-[11.5px] font-medium text-ink hover:bg-surface/60 focus-ring"
-              >
-                {FILTER_LABELS[urlState.filter]}
-                <X className="h-3 w-3" strokeWidth={2} aria-hidden />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setSearchOpen(true)}
-              aria-label="Search wines"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill text-ink-soft hover:bg-surface/60 focus-ring md:hidden"
-            >
-              <Search className="h-4 w-4" strokeWidth={2} aria-hidden />
-            </button>
-            <div className="hidden md:block">
+            <div className="min-w-0 flex-1 sm:max-w-[280px]">
               <SearchInput
                 value={qDraft}
                 onChange={setQDraft}
                 inputRef={mastheadSearchRef}
               />
             </div>
-            <SortSelect
-              value={urlState.sort}
-              onChange={(sort) => replaceUrlState({ sort })}
-            />
+            {urlState.filter !== "all" && (
+              <button
+                type="button"
+                onClick={() => replaceUrlState({ filter: "all" })}
+                className="inline-flex h-11 shrink-0 items-center gap-2xs whitespace-nowrap rounded-pill border border-edge px-sm text-caption font-medium tracking-normal text-ink hover:bg-surface/60 focus-ring"
+              >
+                {FILTER_LABELS[urlState.filter]}
+                <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(true)}
+              className="inline-flex h-11 shrink-0 items-center gap-xs whitespace-nowrap rounded-pill border border-edge bg-surface px-sm text-ledger font-medium text-ink hover:bg-wash focus-ring"
+            >
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="tabular inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-pill bg-primary px-xs text-micro text-seal-ink">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
       )}
@@ -444,35 +405,16 @@ export function CellarShell({
           sort={urlState.sort}
           onFacetsChange={replaceUrlState}
           onGroupByChange={(groupBy) => replaceUrlState({ groupBy })}
+          onSortChange={(sort) => replaceUrlState({ sort })}
           onFilteredCountChange={setFilteredCount}
+          filtersOpen={filtersOpen}
+          onFiltersOpenChange={setFiltersOpen}
           sections={cellarSections}
         />
       ) : cellarConfig ? (
         <CellarGridView config={cellarConfig} gridData={gridData} onSelectWine={openWine} />
       ) : (
         <CellarSetup restaurantName={restaurantName} />
-      )}
-
-      {/* Mobile search overlay — floating chrome, carries the glass recipe */}
-      {searchOpen && (
-        <div className="glass fixed inset-x-0 top-[var(--chrome-header-total)] z-[var(--z-overlay)] px-md py-sm md:hidden">
-          <div className="flex items-center gap-sm">
-            <SearchInput
-              value={qDraft}
-              onChange={setQDraft}
-              inputRef={searchInputRef}
-              autoFocus
-              onEscape={() => setSearchOpen(false)}
-            />
-            <button
-              type="button"
-              onClick={() => setSearchOpen(false)}
-              className="min-h-11 rounded-pill px-sm text-[13px] font-medium text-ink-soft hover:bg-surface/60"
-            >
-              Done
-            </button>
-          </div>
-        </div>
       )}
 
       {/* Drawer + modals */}
@@ -528,7 +470,7 @@ function SearchInput({
   const [focused, setFocused] = useState(false);
   const showHint = !value && !focused;
   return (
-    <div className="relative w-full md:w-[280px]">
+    <div className="relative w-full">
       <Search
         className="pointer-events-none absolute left-sm top-1/2 h-4 w-4 -translate-y-1/2 text-grey"
         strokeWidth={2}
@@ -579,72 +521,5 @@ function SearchInput({
         )
       )}
     </div>
-  );
-}
-
-function SortSelect({
-  value,
-  onChange,
-}: {
-  value: CellarSort | null;
-  onChange: (sort: CellarSort | null) => void;
-}) {
-  return (
-    <label className="relative inline-flex min-w-0 shrink items-center">
-      <span className="sr-only">Sort wines</span>
-      <select
-        value={value ?? ""}
-        onChange={(e) => onChange((e.target.value || null) as CellarSort | null)}
-        className={cn(
-          // max-w keeps a long selected label from pushing the control
-          // off a 320px masthead (Sol audit, 2026-08-27).
-          // 44px is the touch floor and the compact masthead is not exempt:
-          // the sticky row used to drop this select to 36px (DESIGN.md —
-          // Mobile). Eight pixels of a 692px scroll band is not worth a
-          // control a sommelier holding a bottle can miss.
-          "h-11 max-w-[44vw] appearance-none truncate rounded-pill border border-edge bg-surface/70 pl-sm pr-[28px] text-[12px] font-medium text-ink focus-ring md:max-w-none",
-        )}
-      >
-        <option value="">Name A–Z</option>
-        {CELLAR_SORTS.map((s) => (
-          <option key={s} value={s}>
-            {CELLAR_SORT_LABELS[s]}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        className="pointer-events-none absolute right-[10px] h-3.5 w-3.5 text-grey"
-        strokeWidth={2}
-        aria-hidden
-      />
-    </label>
-  );
-}
-
-function ViewToggleButton({
-  active,
-  onClick,
-  label,
-  Icon,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  Icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      aria-label={`${label} view`}
-      className={cn(
-        "flex h-11 w-11 items-center justify-center text-ink-soft transition-colors",
-        active && "bg-ink text-on-inverse",
-        !active && "hover:bg-surface/60 focus-ring",
-      )}
-    >
-      <Icon className="h-4 w-4" strokeWidth={2} aria-hidden />
-    </button>
   );
 }

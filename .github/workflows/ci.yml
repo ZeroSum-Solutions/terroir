@@ -194,6 +194,18 @@ jobs:
         # debt down with `pnpm check:file-size:update` after splitting.
         run: pnpm run check:file-size
 
+      - name: Control-row ratchet
+        # GLOBAL-01 — "if you cannot fit all the buttons horizontally in one
+        # frame, then there are too many buttons." Its own step rather than a
+        # fifth gate inside check:design, because that chain is the token
+        # contract (palette, contrast, token-sync, type scale) and this is a
+        # layout rule; a separate step also names it in the CI log. Routes over
+        # one row are frozen in scripts/check-control-rows-baseline.json — a
+        # baselined route may shrink but never grow, and a route not in it may
+        # not cross the budget at all. Re-record with
+        # `pnpm check:control-rows:update` after consolidating.
+        run: pnpm run check:control-rows
+
       - name: Down migrations check
         # INT-006 — every forward migration from 0011 onward must have a
         # paired .down.sql sibling. Catches PRs that add a forward

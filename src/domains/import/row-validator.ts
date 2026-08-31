@@ -15,6 +15,7 @@ import {
   type CanonicalHeader,
 } from "./constants";
 import { normalizeVintage, MIN_VINTAGE, CURRENT_YEAR } from "../identity/normalize";
+import { detectSourcePreset, presetColumns, type SourcePresetId } from "./source-presets";
 
 export type FieldError = { field: string; message: string };
 
@@ -33,6 +34,14 @@ export type FieldsInput = Partial<Record<CanonicalHeader, string>>;
 export type ValidRow = {
   state: "valid";
   raw: RawRowFields;
+  /** True when this row carries no producer at all. NOT an error — the
+   * importer deliberately allows it (real exports embed the producer in
+   * the wine name) — but it is the exact condition that left 1,277
+   * production wines unresolvable to the identity spine, because identity
+   * resolution is producer-first (AGENTS.md, "two identity systems"). The
+   * preview counts these and warns, so a repeat is at least visible at the
+   * boundary that writes it. */
+  producerMissing: boolean;
   /** The exact (trimmed) input text validateFields was given for every
    * canonical field, valid or not — round-trips into an inline-edit form
    * so a UI can prefill it, unlike `raw`, which normalizes/nulls a field
@@ -56,24 +65,38 @@ export type ValidatedRow = ValidRow | InvalidRow;
  * Map a CSV header row to canonical field names. Unknown columns are
  * ignored (not an error — an operator's export may carry extra columns
  * this importer doesn't use). Returns which required canonical headers,
- * if any, are missing.
+ * if any, are missing, plus which vendor the header row looks like.
+ *
+ * SCAN-03 / D1: the source preset is resolved HERE, from the header row
+ * alone, so every caller gets it for free — preview and confirm, a
+ * single-file upload and every chunk of a split one — with no new request
+ * field and no new `content_sha256` namespace, because a mapping derived
+ * from the file's own bytes is already inside the file's own digest.
+ *
+ * LOOKUP ORDER IS THE SAFETY PROPERTY: HEADER_SYNONYMS first, preset
+ * second. A preset can therefore only ever claim a column the generic path
+ * was going to ignore; it can never redirect one the generic path already
+ * mapped correctly. See source-presets.ts for why that rule exists.
  */
 export function mapHeader(header: string[]): {
   columnToField: Map<number, CanonicalHeader>;
   missingRequired: CanonicalHeader[];
+  detectedSource: SourcePresetId | null;
 } {
   const columnToField = new Map<number, CanonicalHeader>();
   const seen = new Set<CanonicalHeader>();
+  const detectedSource = detectSourcePreset(header);
+  const fromPreset = presetColumns(detectedSource);
   header.forEach((rawName, index) => {
     const key = rawName.trim().toLowerCase();
-    const field = HEADER_SYNONYMS[key];
+    const field = HEADER_SYNONYMS[key] ?? fromPreset[key];
     if (field && !seen.has(field)) {
       columnToField.set(index, field);
       seen.add(field);
     }
   });
   const missingRequired = REQUIRED_HEADERS.filter((f) => !seen.has(f));
-  return { columnToField, missingRequired };
+  return { columnToField, missingRequired, detectedSource };
 }
 
 function cell(cells: string[], columnToField: Map<number, CanonicalHeader>, field: CanonicalHeader): string {
@@ -314,7 +337,7 @@ export function validateFields(fields: FieldsInput): ValidatedRow {
     return { state: "error", raw, rawText, errors };
   }
 
-  return { state: "valid", raw, rawText, costMissing, producer, name };
+  return { state: "valid", raw, rawText, costMissing, producerMissing: producer === "", producer, name };
 }
 
 /**

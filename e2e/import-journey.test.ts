@@ -121,7 +121,15 @@ test.describe("G1-4 CSV import journey", () => {
     expect(await controlHeight(applyButton)).toBeGreaterThanOrEqual(44);
     await applyButton.click();
 
-    await expect(page.getByText("Completed")).toBeVisible({ timeout: 15_000 });
+    // The scan-ledger status_reason work (src/lib/scanner/scan-status-reason.ts)
+    // shipped alongside seeded CSV import batches whose "Recent imports" rows
+    // (recent-imports.tsx) render `{b.status}` verbatim — lowercase
+    // "completed". Playwright's getByText is case-insensitive by default, so
+    // a bare getByText("Completed") now also matches those rows and trips
+    // strict mode. StatusBadge (batch-step.tsx) renders THIS batch's own
+    // status as exact title-case "Completed" — `exact: true` scopes to that
+    // one element without weakening what the assertion actually proves.
+    await expect(page.getByText("Completed", { exact: true })).toBeVisible({ timeout: 15_000 });
 
     // Verify inventory: the imported wine now has a real inventory row.
     const admin = localAdminClient();

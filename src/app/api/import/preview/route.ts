@@ -61,5 +61,12 @@ async function postPreview(request: NextRequest) {
     return apiError(422, preview.error.code, preview.error.message, details);
   }
 
-  return NextResponse.json({ rows: preview.rows, summary: preview.summary });
+  // SCAN-03: `detectedSource` is derived server-side from the header row
+  // alone, so it is the same on every chunk and identical on confirm — the
+  // client is told which mapping profile was used, it never chooses one.
+  return NextResponse.json({
+    rows: preview.rows,
+    summary: preview.summary,
+    detectedSource: preview.detectedSource,
+  });
 }

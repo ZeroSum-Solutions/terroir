@@ -12,6 +12,11 @@ import {
   parseStoredProposals,
 } from "@/lib/branding/theme";
 import type { BrandKitView } from "./components/brand-kit-panel";
+import {
+  latestUnitCostByWine,
+  suggestPricesForWine,
+  type PricingWine,
+} from "@/domains/wine-lists/list-item-pricing";
 
 export const metadata: Metadata = { title: "Edit list" };
 
@@ -67,7 +72,7 @@ export default async function WineListEditorPage({
     : null;
 
   // Sort sections by position, items by position within each section
-  const sections: WineListEditorSection[] = ((list.wine_list_sections ?? []) as Array<{
+  const rawSections = (list.wine_list_sections ?? []) as Array<{
     id: string;
     name: string;
     position: number;
@@ -92,17 +97,18 @@ export default async function WineListEditorPage({
       name_override?: string | null;
       blurb?: string | null;
       hidden?: boolean | null;
-      wines: {
-        id: string;
+      // LIST-03 reads rating / retail_median / the two pricing_target_*
+      // columns off this same row; `wines(*)` already returns them.
+      wines: PricingWine & {
         name: string;
         producer: string;
         vintage: number | null;
-        varietal: string | null;
-        region: string | null;
         restaurant_id: string;
         size_ml: number;
         country: string | null;
         lwin_id: string | null;
+        colour: string | null;
+        hero_image_url: string | null;
         drink_window_start: number | null;
         drink_window_end: number | null;
         serving_temp_min: number | null;
@@ -112,16 +118,54 @@ export default async function WineListEditorPage({
         updated_at: string;
       };
     }>;
-  }>)
+  }>;
+
+  // LIST-03 — one query for the whole list's invoice costs, then a suggested
+  // glass + bottle price per row so a null price renders a suggestion instead
+  // of a dash. Same resolution chain as /api/wines/[id]/pricing-suggestion.
+  const wineIds = [
+    ...new Set(
+      rawSections.flatMap((section) =>
+        (section.wine_list_items ?? []).map((item) => item.wine_id),
+      ),
+    ),
+  ];
+  const { data: restaurant } = await supabase
+    .from("restaurants")
+    .select("default_target_markup_ratio, default_target_pour_cost_pct")
+    .eq("id", restaurantId)
+    .single();
+  const { data: costRows } = wineIds.length
+    ? await supabase
+        .from("inventory_items")
+        .select("wine_id, unit_cost, added_at")
+        .eq("restaurant_id", restaurantId)
+        .in("wine_id", wineIds)
+        .order("added_at", { ascending: false })
+    : { data: [] };
+  const unitCosts = latestUnitCostByWine(costRows ?? []);
+
+  const sections: WineListEditorSection[] = rawSections
     .sort((a, b) => a.position - b.position)
     .map((s) => ({
       ...s,
-      wine_list_items: [...(s.wine_list_items ?? [])].map((item) => ({
-        ...item,
-        name_override: item.name_override ?? null,
-        blurb: item.blurb ?? null,
-        hidden: item.hidden ?? false,
-      })).sort(
+      wine_list_items: [...(s.wine_list_items ?? [])].map((item) => {
+        const suggested = suggestPricesForWine(
+          item.wines,
+          restaurant ?? null,
+          unitCosts.get(item.wine_id) ?? null,
+          item.glass_pour_ml,
+          item.bottle_price,
+        );
+        return {
+          ...item,
+          name_override: item.name_override ?? null,
+          blurb: item.blurb ?? null,
+          hidden: item.hidden ?? false,
+          suggested_glass_price: suggested.suggestedGlass,
+          suggested_bottle_price: suggested.suggestedBottle,
+        };
+      }).sort(
         (a, b) => a.position - b.position,
       ),
     }));

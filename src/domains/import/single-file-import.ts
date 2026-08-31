@@ -6,10 +6,20 @@
 
 import { buildApprovedLwinRows, matchedRowsFromPreviewRows } from "./lwin-approval";
 import type { PreviewRow, PreviewSummary } from "./preview-service";
+import type { SourcePresetId } from "./source-presets";
 import type { RejectedLwinRows, RowOverrides } from "./review-types";
 
 export type SingleFilePreviewResult =
-  | { ok: true; preview: { rows: PreviewRow[]; summary: PreviewSummary } }
+  | {
+      ok: true;
+      preview: {
+        rows: PreviewRow[];
+        summary: PreviewSummary;
+        /** SCAN-03: which mapping profile the SERVER recognised from the
+         * header row. Reported, never chosen by the client. */
+        detectedSource: SourcePresetId | null;
+      };
+    }
   | { ok: false; error: string };
 
 export async function requestSingleFilePreview(file: File): Promise<SingleFilePreviewResult> {

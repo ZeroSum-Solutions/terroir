@@ -3,11 +3,12 @@ import Link from "next/link";
 import { ArrowLeft, ExternalLink, Star } from "lucide-react";
 import { StatusChip } from "@/components/status-chip";
 import { WineThumb } from "@/components/wine-thumb";
+import { CORPUS_IMAGE_NOTE } from "@/lib/wine-intelligence/corpus-image";
+import { wineDisplayName } from "@/lib/wine-display-name";
 import type {
   CorpusRead,
   TasteAxis,
   VintageRating,
-  XWinesImageKind,
   XWinesProfile,
 } from "@/lib/wine-intelligence/xwines-profile";
 
@@ -50,17 +51,6 @@ const HERO_GLOW = {
     "radial-gradient(60% 55% at 22% 42%, color-mix(in oklab, var(--t-mark) 22%, transparent) 0%, transparent 70%)",
 } as const;
 
-// A corpus photograph is only sometimes a photograph of THIS wine (0138), so
-// showing one silently would put a stranger's Chianti under this bottle's
-// name. Every kind but "label" is captioned with what it actually is, and the
-// alt text degrades the same way — a screen reader must not be told the row's
-// producer over a picture of somebody else's.
-const CORPUS_IMAGE_NOTE: Record<XWinesImageKind, string> = {
-  label: "Reference label for this wine",
-  producer: "A bottle from this producer — not this cuvée",
-  representative: "Representative bottle — not this wine's label",
-};
-
 export function WineDetailView({
   wine,
   bottleCount,
@@ -79,7 +69,7 @@ export function WineDetailView({
   const heroSrc = wine.hero_image_url ?? corpusImage?.url ?? null;
   const heroAlt =
     corpusImage === null || corpusImage.kind === "label"
-      ? `${wine.producer} ${wine.name}`
+      ? `${wine.producer} ${wineDisplayName(wine.producer, wine.name)}`
       : CORPUS_IMAGE_NOTE[corpusImage.kind];
 
   const facets = [wine.country, wine.region, profile?.type ?? null, wine.varietal].filter(
@@ -153,7 +143,7 @@ export function WineDetailView({
           <div className="flex flex-col justify-center">
             <p className="text-caption uppercase text-mark">{wine.producer}</p>
             <h1 className="mt-sm font-serif text-heading-sm leading-[1.06] text-ink md:text-heading lg:text-display">
-              {wine.name}
+              {wineDisplayName(wine.producer, wine.name)}
             </h1>
             {wine.vintage !== null && (
               <p className="mt-xs font-serif text-heading-sm text-grey">{wine.vintage}</p>

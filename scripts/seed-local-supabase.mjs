@@ -223,7 +223,12 @@ function buildRows(userIds = DRY_USER_IDS) {
     eightysix_ml_threshold: 180,
     eightysix_strategy: "mark",
     default_target_markup_ratio: 3.2,
-    default_target_pour_cost_pct: 0.24,
+    // A PERCENTAGE, not a fraction — the column is numeric(5,2) with a
+    // CHECK (> 0 AND < 100) and a 22.00 default (0026_pricing_intelligence_
+    // metadata.sql). This read 0.24, which made every suggested glass price
+    // exactly 100x too large ($7,203 a glass) the moment the list editor
+    // started rendering suggestions.
+    default_target_pour_cost_pct: 24.0,
     created_at: dayOffset(120),
     updated_at: now,
   };

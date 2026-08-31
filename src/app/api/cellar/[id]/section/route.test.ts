@@ -136,7 +136,7 @@ describe("PATCH /api/cellar/[id]/section", () => {
     const supabase = makeSupabase();
     allow(supabase);
 
-    const response = await PATCH(request({ section: "" }), {
+    const response = await PATCH(request({ section: "x".repeat(101) }), {
       params: Promise.resolve({ id: WINE_ID }),
     });
 
@@ -149,6 +149,28 @@ describe("PATCH /api/cellar/[id]/section", () => {
     });
     expect(supabase.from).not.toHaveBeenCalled();
   });
+
+  it.each([["" as const], [null]])(
+    "clears the section when the client sends %j (CELLAR-04)",
+    async (section) => {
+      // Dragging a wine into the cellar list's "Uncategorized" group is a
+      // legitimate move. This used to 400, so the optimistic move rolled back
+      // and the wine visibly snapped home — "it does not stick".
+      const supabase = makeSupabase();
+      allow(supabase);
+
+      const response = await PATCH(request({ section }), {
+        params: Promise.resolve({ id: WINE_ID }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ wine_id: WINE_ID, section: null });
+      expect(supabase.calls).toContainEqual({
+        method: "update",
+        args: [{ section: null }],
+      });
+    },
+  );
 
   it("trims the section and preserves both tenant predicates", async () => {
     const supabase = makeSupabase();

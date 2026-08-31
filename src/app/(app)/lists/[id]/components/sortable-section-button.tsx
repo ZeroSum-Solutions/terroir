@@ -134,12 +134,24 @@ export function SortableSectionButton({
             isActive ? "text-ink font-medium" : "text-grey",
           )}
         >
-          <span className="truncate text-[14px]" title={section.name}>
+          {/* BUG-03. `truncate` on a single line left ~50px for the name once
+              the drag handle and the two 44px action buttons had taken their
+              132px of a 248px sidebar — about seven characters, which rendered
+              "Sparkl…", "Desse…", and, worst of all, TWO sections both reading
+              "Reds - …". A sidebar whose only job is to name sections was not
+              naming them. The column is now 288px and the name wraps to two
+              lines rather than clipping, which is what actually buys the
+              characters: shrinking the controls would have put them back under
+              the 44px touch floor. */}
+          <span
+            className="line-clamp-2 min-w-0 break-words text-[14px]"
+            title={section.name}
+          >
             {section.name}
           </span>
           <span
             className={cn(
-              "tabular text-[12px] ml-xs",
+              "tabular text-[12px] ml-xs shrink-0",
               isActive ? "text-ink" : "text-grey",
             )}
           >

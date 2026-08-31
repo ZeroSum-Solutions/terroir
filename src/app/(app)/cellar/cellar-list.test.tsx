@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
-function renderList(rows: CellarWineRow[]) {
+function renderList(rows: CellarWineRow[], sections?: { id: string; name: string }[]) {
   return renderToStaticMarkup(
     <ToastProvider>
       <CellarList
@@ -22,6 +22,10 @@ function renderList(rows: CellarWineRow[]) {
         sort={null}
         onFacetsChange={() => {}}
         onGroupByChange={() => {}}
+        onSortChange={() => {}}
+        filtersOpen={false}
+        onFiltersOpenChange={() => {}}
+        sections={sections}
       />
     </ToastProvider>,
   );
@@ -53,6 +57,21 @@ describe("CellarList row thumbnails", () => {
     const markup = renderList([row({ wine_id: "wine-1", hero_image_url: null })]);
 
     expect(markup).not.toContain("<img");
+  });
+});
+
+describe("CellarList section groups", () => {
+  it("renders a configured section that has no wines, so it can be dragged into", () => {
+    // CELLAR-04: empty groups used to be filtered out, which made a newly
+    // created section impossible to drop the FIRST wine into.
+    const markup = renderList([row({ wine_id: "wine-1", section: "Reds" })], [
+      { id: "s1", name: "Reds" },
+      { id: "s2", name: "Whites" },
+    ]);
+
+    expect(markup).toContain('data-cellar-section="Reds"');
+    expect(markup).toContain('data-cellar-section="Whites"');
+    expect(markup).toContain("No wines in this section.");
   });
 });
 

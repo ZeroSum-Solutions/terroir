@@ -1,3 +1,7 @@
+import {
+  corpusImageFromEmbed,
+} from "@/lib/wine-intelligence/corpus-image";
+import type { XWinesImageKind } from "@/lib/wine-intelligence/xwines-profile";
 import type { CellarHealthSegment } from "@/lib/cellar-health/classify";
 
 /**
@@ -30,6 +34,11 @@ export type CellarWineRow = {
   eightysixed_at: string | null;
   tasting_notes: string | null;
   hero_image_url: string | null;
+  /**
+   * GLOBAL-04 — the corpus stand-in for a wine with no photograph of its own,
+   * from its identity link. Optional so existing row fixtures stay valid.
+   */
+  corpus_image?: { url: string; kind: XWinesImageKind } | null;
   healthSegment: CellarHealthSegment | null;
 
   // OPP-1 (wave 0) — lineage identity. lineage_id groups vintage siblings
@@ -132,3 +141,19 @@ export type CellarWineRow = {
   restaurant_default_target_pour_cost_pct: number | null;
   restaurant_default_target_markup_ratio: number | null;
 };
+
+/**
+ * The two image fields of a row, from a `wines` select that embeds the
+ * identity link's corpus entry. Kept beside the row shape because that is
+ * what it produces — and because it lets the cellar page fill both fields
+ * from one spread.
+ */
+export function wineRowImages(wine: {
+  hero_image_url: string | null;
+  canonical_wines: unknown;
+}): Pick<CellarWineRow, "hero_image_url" | "corpus_image"> {
+  return {
+    hero_image_url: wine.hero_image_url ?? null,
+    corpus_image: corpusImageFromEmbed(wine.canonical_wines),
+  };
+}

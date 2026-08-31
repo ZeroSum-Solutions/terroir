@@ -3,7 +3,16 @@ import Link from "next/link";
 import { getAuthContext } from "@/lib/auth-context";
 import { ArrowLeft, ChevronLeft, ChevronRight, FileText, ScanLine } from "lucide-react";
 import { RouteDataEmpty } from "@/components/route-data-state";
+import { describeScanStatusReason } from "@/lib/scanner/scan-status-reason";
 import { ExportCsvButton } from "./export-csv-button";
+import {
+  buildQuery,
+  parseStatus,
+  statusBadge,
+  statusLabel,
+  STATUS_FILTERS,
+  type StatusFilter,
+} from "./scan-list-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,57 +29,11 @@ type ScanRow = {
   status: string;
   item_count: number;
   accuracy_score: number | null;
+  status_reason: string | null;
   created_at: string;
 };
 
-type StatusFilter = "all" | "complete" | "processing" | "failed";
-
-const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "complete", label: "Complete" },
-  { value: "processing", label: "Processing" },
-  { value: "failed", label: "Failed" },
-];
-
-function parseStatus(raw: string | undefined): StatusFilter {
-  if (raw === "complete" || raw === "processing" || raw === "failed") return raw;
-  return "all";
-}
-
-function buildQuery(params: { page?: number; status?: StatusFilter }) {
-  const parts: string[] = [];
-  if (params.page && params.page > 1) parts.push(`page=${params.page}`);
-  if (params.status && params.status !== "all") parts.push(`status=${params.status}`);
-  return parts.length ? `?${parts.join("&")}` : "";
-}
-
 type SearchParams = Promise<{ page?: string; status?: string }>;
-
-function statusLabel(status: string) {
-  switch (status) {
-    case "complete":
-      return "Complete";
-    case "processing":
-      return "Processing";
-    case "failed":
-      return "Failed";
-    default:
-      return status.charAt(0).toUpperCase() + status.slice(1);
-  }
-}
-
-function statusBadge(status: string) {
-  switch (status) {
-    case "complete":
-      return "bg-ready-wash text-ready-ink";
-    case "processing":
-      return "bg-hold-wash text-hold-ink";
-    case "failed":
-      return "bg-primary text-seal-ink";
-    default:
-      return "bg-wash text-grey";
-  }
-}
 
 export default async function ScansPage({
   searchParams,
@@ -89,7 +52,7 @@ export default async function ScansPage({
   let query = supabase
     .from("invoice_scans")
     .select(
-      "id, distributor_name, invoice_number, invoice_date, status, item_count, accuracy_score, created_at",
+      "id, distributor_name, invoice_number, invoice_date, status, item_count, accuracy_score, status_reason, created_at",
       { count: "exact" },
     )
     .eq("restaurant_id", restaurantId);
@@ -293,6 +256,15 @@ export default async function ScansPage({
                   >
                     {s.distributor_name}
                   </Link>
+                  {/* D6 rule 1: nothing vanishes on its own, so a row that
+                      found nothing or failed has to say WHY here — a 0-item
+                      "complete" and a 0-item "failed" were otherwise
+                      indistinguishable. */}
+                  {describeScanStatusReason(s.status_reason) && (
+                    <p className="mt-2xs text-ledger text-grey">
+                      {describeScanStatusReason(s.status_reason)}
+                    </p>
+                  )}
                 </td>
                 <td className="px-md py-sm">
                   <Link
@@ -360,6 +332,11 @@ export default async function ScansPage({
                   </>
                 )}
               </div>
+              {describeScanStatusReason(s.status_reason) && (
+                <p className="mt-2xs text-ledger text-grey">
+                  {describeScanStatusReason(s.status_reason)}
+                </p>
+              )}
             </div>
             <div className="flex shrink-0 flex-col items-end gap-xs">
               <span className="font-mono text-[14px] tabular text-ink">

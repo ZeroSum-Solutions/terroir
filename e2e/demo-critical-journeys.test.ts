@@ -166,6 +166,23 @@ test.describe("mobile demo critical journeys", () => {
       const invitePath = new URL(invitation.inviteUrl).pathname;
 
       await page.context().clearCookies();
+      // Real (non-bypass) sign-in redirects are pinned to a single canonical
+      // origin by design — src/lib/auth/redirects.ts's getAppOrigin() never
+      // reflects the request's Host, and src/app/auth/signout/route.ts spells
+      // out why: an auth redirect derived from a caller-controlled Host is a
+      // redirect an attacker chooses. So every hop of a real sign-in has to
+      // start on the SAME origin the app redirects to, or the session cookie
+      // the login response sets is scoped to a host the next hop never visits,
+      // /api/team/accept-invite answers 401, and the invite page bounces to
+      // /login. (/api/dev-login sidesteps this by reflecting the request's own
+      // host — see its docstring; the real sign-in form does not, and should
+      // not.)
+      //
+      // That canonical origin is 127.0.0.1:3000 — the spelling CI exports as
+      // NEXT_PUBLIC_APP_URL (.github/workflows/ci.yml, e2e-full.yml) and the
+      // one scripts/local/dev-local.sh now pins to match. `localhost` and
+      // `127.0.0.1` are the same machine and DIFFERENT origins to a browser;
+      // using either spelling inconsistently is what breaks this flow.
       await page.goto(
         `http://127.0.0.1:3000/login?mode=password&next=${encodeURIComponent(invitePath)}`,
       );

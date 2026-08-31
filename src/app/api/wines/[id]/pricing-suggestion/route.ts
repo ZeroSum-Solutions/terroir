@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import {
+  isGlassPricePlausible,
   resolveMarkupTarget,
   resolvePourCostTarget,
   suggestBottlePrice,
@@ -104,12 +105,18 @@ export async function GET(
     // Suggested glass price uses invoice cost ÷ target pour cost. Falls back
     // to retail median when invoice cost unknown.
     const costPerBottle = invoiceCost ?? wine.retail_median;
-    const suggestedGlass = suggestGlassPrice(
+    const rawGlass = suggestGlassPrice(
       costPerBottle,
       wine.size_ml,
       glassPourMl,
       targetPourCostPct,
     );
+    // A glass at or above the bottle it is poured from is not a usable
+    // suggestion — the modal must not offer one any more than the row may
+    // render one.
+    const suggestedGlass = isGlassPricePlausible(rawGlass, suggestedBottle)
+      ? rawGlass
+      : null;
 
     return NextResponse.json({
       wineId: wine.id,

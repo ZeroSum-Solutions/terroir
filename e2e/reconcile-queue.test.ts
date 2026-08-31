@@ -111,7 +111,17 @@ test.describe("@opp-5 reconciliation queue", () => {
     expect(await scanSnapshot(adminClient(), scanId)).not.toEqual(scanBefore);
     await page.getByRole("button", { name: "Undo latest batch" }).click();
     await expect(page.getByText("Latest batch undone", { exact: true })).toBeVisible();
-    expect(await scanSnapshot(adminClient(), scanId)).toEqual(scanBefore);
+    // Not a bare toEqual(scanBefore): migration 0089 put a `set_updated_at`
+    // trigger on invoice_scans (every UPDATE bumps it, on purpose — it's the
+    // optimistic-concurrency fence for /api/scans/[id]/re-extract) so a row
+    // touched by accept then undo can never have its ORIGINAL updated_at
+    // back. "Restores byte-for-byte" means every column undo is responsible
+    // for; updated_at is asserted to have genuinely advanced instead, which
+    // is a strictly stronger proof that undo really executed a write than a
+    // vacuous "differs somehow" would be.
+    const afterUndo = await scanSnapshot(adminClient(), scanId);
+    expect(omit(afterUndo, "updated_at")).toEqual(omit(scanBefore, "updated_at"));
+    expect(Date.parse(afterUndo.updated_at as string)).toBeGreaterThan(Date.parse(scanBefore.updated_at as string));
   });
 });
 
@@ -233,6 +243,11 @@ async function scanSnapshot(admin: Admin, id: string): Promise<Record<string, un
   return structuredClone(rows[0]) as Record<string, unknown>;
 }
 
+function omit(row: Record<string, unknown>, field: string): Record<string, unknown> {
+  const { [field]: _dropped, ...rest } = row;
+  return rest;
+}
+
 async function findBatchId(admin: Admin, subjectId: string): Promise<string | null> {
   if (!subjectId) return null;
   const rows = await checked(admin.from("reconcile_actions").select("batch_id")
@@ -251,5 +266,9 @@ async function waitForBatchId(admin: Admin, subjectId: string): Promise<string> 
 }
 
 function formatRisk(value: number): string {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
+  // Must mirror reconcile-queue-client.tsx's own formatRisk exactly
+  // (minimumFractionDigits: 2 too) — this fixture's unit costs are whole
+  // dollars, so atRisk sums to a round number, and without the matching
+  // minimum this rendered "80" against the page's real "80.00".
+  return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
