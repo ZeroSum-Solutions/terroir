@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { XWinesProfile } from "@/lib/wine-intelligence/xwines-profile";
+import { resolveWineFacts } from "@/lib/wine-intelligence/wine-reference-facts";
 import { WineDetailView, type WineDetailViewProps } from "./wine-detail-view";
 
 /** A corpus read that succeeded. The failed one is spelled out where used. */
@@ -37,9 +38,6 @@ const WINE: WineDetailViewProps["wine"] = {
   name: "Koonunga Hill Shiraz-Cabernet",
   producer: "Penfolds",
   vintage: 2018,
-  varietal: "Shiraz Cabernet",
-  region: "South Australia",
-  country: "Australia",
   size_ml: 750,
   colour: "red",
   hero_image_url: null,
@@ -81,6 +79,18 @@ const BASE: WineDetailViewProps = {
   wine: WINE,
   bottleCount: 0,
   locations: [],
+  // Run through the real resolver rather than hand-built, so these cases keep
+  // exercising the precedence the page actually applies. The wine's own values
+  // stand in for what the row used to carry directly.
+  facts: resolveWineFacts({
+    wine: {
+      region: "South Australia",
+      country: "Australia",
+      varietal: "Shiraz Cabernet",
+    },
+    lwin: null,
+    profile: null,
+  }),
   profile: ok(null),
   vintageRatings: ok([]),
 };

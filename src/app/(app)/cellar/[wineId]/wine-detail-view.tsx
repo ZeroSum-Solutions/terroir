@@ -4,6 +4,7 @@ import { ArrowLeft, ExternalLink, Star } from "lucide-react";
 import { StatusChip } from "@/components/status-chip";
 import { WineThumb } from "@/components/wine-thumb";
 import { CORPUS_IMAGE_NOTE } from "@/lib/wine-intelligence/corpus-image";
+import type { ResolvedWineFacts } from "@/lib/wine-intelligence/wine-reference-facts";
 import { wineDisplayName } from "@/lib/wine-display-name";
 import type {
   CorpusRead,
@@ -17,9 +18,6 @@ type WineRow = {
   name: string;
   producer: string;
   vintage: number | null;
-  varietal: string | null;
-  region: string | null;
-  country: string | null;
   size_ml: number | null;
   colour: string | null;
   hero_image_url: string | null;
@@ -38,6 +36,7 @@ export type WineDetailViewProps = {
   wine: WineRow;
   bottleCount: number;
   locations: string[];
+  facts: ResolvedWineFacts;
   profile: CorpusRead<XWinesProfile | null>;
   vintageRatings: CorpusRead<VintageRating[]>;
 };
@@ -55,6 +54,7 @@ export function WineDetailView({
   wine,
   bottleCount,
   locations,
+  facts,
   profile: profileRead,
   vintageRatings: ratingsRead,
 }: WineDetailViewProps) {
@@ -72,7 +72,7 @@ export function WineDetailView({
       ? `${wine.producer} ${wineDisplayName(wine.producer, wine.name)}`
       : CORPUS_IMAGE_NOTE[corpusImage.kind];
 
-  const facets = [wine.country, wine.region, profile?.type ?? null, wine.varietal].filter(
+  const facets = [facts.country, facts.region, profile?.type ?? null, facts.varietal].filter(
     (value): value is string => Boolean(value),
   );
 
@@ -211,10 +211,10 @@ export function WineDetailView({
         <Section title="Facts about the wine">
           <dl className="card-surface grid gap-0 rounded-card px-lg py-xs sm:grid-cols-2 sm:gap-x-2xl">
             <Fact label="Producer" value={wine.producer} />
-            <Fact label="Grapes" value={profile?.grapes.join(", ") || wine.varietal} />
+            <Fact label="Grapes" value={profile?.grapes.join(", ") || facts.varietal} />
             <Fact
               label="Region"
-              value={[wine.region, wine.country].filter(Boolean).join(", ") || null}
+              value={[facts.region, facts.country].filter(Boolean).join(", ") || null}
             />
             <Fact label="Style" value={profile?.elaborate ?? profile?.type ?? null} />
             <Fact
