@@ -2689,6 +2689,20 @@ export type Database = {
           slug: string
         }[]
       }
+      xwines_search: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: {
+          country: string
+          image_kind: string
+          image_url: string
+          name: string
+          region_name: string
+          score: number
+          type: string
+          wine_id: number
+          winery_name: string
+        }[]
+      }
     }
     Enums: {
       added_via: "manual" | "invoice_scan" | "bottle_scan"

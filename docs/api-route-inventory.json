@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 95,
-  "discoveredOperationCount": 111,
+  "routeFileCount": 96,
+  "discoveredOperationCount": 112,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/assistant",
@@ -728,6 +728,17 @@
         "file": "src/app/api/scans/[id]/re-extract/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:GET:/api/search",
+      "method": "GET",
+      "path": "/api/search",
+      "source": {
+        "file": "src/app/api/search/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "GET",
         "moduleSpecifier": null
       }
     },

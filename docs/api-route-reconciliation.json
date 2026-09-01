@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 94,
+    "extensionDiscoveredCount": 95,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -728,6 +728,12 @@
     },
     {
       "operationId": "api:POST:/api/scans/{param}/re-extract",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:GET:/api/search",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []

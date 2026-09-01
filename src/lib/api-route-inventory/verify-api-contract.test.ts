@@ -325,9 +325,12 @@ describe("checked-in API contract gate", () => {
       // for a scan or an invoice anywhere in the product — 109 + 1 = 110.
       // GLOBAL-04 added GET /api/wines/[id]/profile, the per-wine corpus read
       // the drawer falls back to when a row has no picture — 110 + 1 = 111.
-      discoveredOperationCount: 111,
+      // P1 slice 1 (unified search program) added GET /api/search, the
+      // merged cellar + two-corpus tier-1 endpoint the palette will consume
+      // — 111 + 1 = 112.
+      discoveredOperationCount: 112,
       plannedOperationCount: 15,
-      classificationCount: 111,
+      classificationCount: 112,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,
