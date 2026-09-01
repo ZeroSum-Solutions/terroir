@@ -160,8 +160,38 @@ async function fetchCellar(
     }
   }
 
+  // Availability (D4: cellar rows add qty/bin) — one aggregate read over the
+  // hit set. A failed read leaves quantity null (unknown), never zero: "0 on
+  // hand" is a stock claim, and inventing it out of an outage is the same
+  // lie the CorpusRead type exists to prevent.
+  const availability = new Map<string, { quantity: number; bin: string | null }>();
+  let availabilityKnown = true;
+  if (rows.length > 0) {
+    const { data: inventory, error: inventoryError } = await supabase
+      .from("inventory_items")
+      .select("wine_id, quantity, bin_location")
+      .eq("restaurant_id", restaurantId)
+      .in("wine_id", rows.map((row) => row.id))
+      .order("added_at", { ascending: false });
+    if (inventoryError) {
+      availabilityKnown = false;
+      reportDegradation("cellar-availability", inventoryError, { restaurantId, q });
+    } else {
+      for (const item of inventory ?? []) {
+        if (item.wine_id === null) continue;
+        const entry = availability.get(item.wine_id) ?? { quantity: 0, bin: null };
+        entry.quantity += item.quantity ?? 0;
+        // Rows arrive most-recently-stocked first; the first bin wins, the
+        // same convention the /cellar list uses.
+        if (entry.bin === null && item.bin_location) entry.bin = item.bin_location;
+        availability.set(item.wine_id, entry);
+      }
+    }
+  }
+
   return rows.map((row) => {
     const identity = row.canonical_wine_id !== null ? identityByCanonical.get(row.canonical_wine_id) : undefined;
+    const stock = availability.get(row.id);
     return {
       id: row.id,
       name: row.name,
@@ -173,6 +203,8 @@ async function fetchCellar(
       colour: row.colour,
       heroImageUrl: row.hero_image_url,
       isEightysixed: row.is_eightysixed,
+      quantity: availabilityKnown ? (stock?.quantity ?? 0) : null,
+      bin: stock?.bin ?? null,
       lwin7: identity?.lwin7 ?? null,
       xwinesWineId: identity?.xwines_wine_id ?? null,
       score: row.score,

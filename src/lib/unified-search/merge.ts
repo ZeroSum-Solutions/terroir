@@ -30,6 +30,10 @@ export type CellarHit = {
   colour: string | null;
   heroImageUrl: string | null;
   isEightysixed: boolean;
+  /** Bottles on hand; null when the inventory read degraded (unknown ≠ zero). */
+  quantity: number | null;
+  /** Most recently stocked bin; null when unknown or unbinned. */
+  bin: string | null;
   /** From the wine's canonical_wines row, when resolved. */
   lwin7: string | null;
   xwinesWineId: number | null;
@@ -75,6 +79,9 @@ export type UnifiedResult = {
   colour: string | null;
   imageUrl: string | null;
   isEightysixed: boolean | null;
+  /** Availability is a tenant fact: null on catalogue rows and degraded reads. */
+  quantity: number | null;
+  bin: string | null;
   wineId: string | null;
   lwinId: string | null;
   xwinesWineId: number | null;
@@ -133,6 +140,8 @@ export function mergeUnifiedResults(input: MergeInput): UnifiedResult[] {
       colour: hit.colour,
       imageUrl: absorbed?.imageUrl ?? null,
       isEightysixed: null,
+      quantity: null,
+      bin: null,
       wineId: null,
       lwinId: hit.lwinId,
       xwinesWineId: linkedWineId,
@@ -154,6 +163,8 @@ export function mergeUnifiedResults(input: MergeInput): UnifiedResult[] {
       colour: hit.type,
       imageUrl: hit.imageUrl,
       isEightysixed: null,
+      quantity: null,
+      bin: null,
       wineId: null,
       lwinId: linkedLwinId,
       xwinesWineId: hit.wineId,
@@ -205,6 +216,8 @@ export function mergeUnifiedResults(input: MergeInput): UnifiedResult[] {
       colour: hit.colour,
       imageUrl: hit.heroImageUrl,
       isEightysixed: hit.isEightysixed,
+      quantity: hit.quantity,
+      bin: hit.bin,
       wineId: hit.id,
       lwinId: lwinKeys.size > 0 ? [...lwinKeys].sort()[0] : null,
       xwinesWineId: xwinesKeys.size > 0 ? [...xwinesKeys].sort((a, b) => a - b)[0] : null,

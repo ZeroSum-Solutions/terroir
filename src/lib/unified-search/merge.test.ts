@@ -30,6 +30,8 @@ function cellar(over: Partial<CellarHit> = {}): CellarHit {
     colour: "Red",
     heroImageUrl: null,
     isEightysixed: false,
+    quantity: null,
+    bin: null,
     lwin7: null,
     xwinesWineId: null,
     score: 1,
@@ -68,6 +70,36 @@ function xwines(over: Partial<XwinesHit> = {}): XwinesHit {
 const NO_LINKS = new Map<string, number>();
 
 describe("mergeUnifiedResults", () => {
+  it("carries cellar availability through and leaves catalogue rows unknown", () => {
+    // Slice 2b (D4: cellar rows add qty/bin). Availability is a tenant fact,
+    // so a catalogue row's is unknown (null) — never an invented zero.
+    const results = mergeUnifiedResults({
+      cellar: [cellar({ quantity: 3, bin: "A4" })],
+      lwin: [lwin()],
+      xwines: [],
+      acceptedLinks: NO_LINKS,
+      limit: 10,
+    });
+    const cellarRow = results.find((r) => r.kind === "cellar")!;
+    expect(cellarRow.quantity).toBe(3);
+    expect(cellarRow.bin).toBe("A4");
+    const catalogueRow = results.find((r) => r.kind === "catalogue")!;
+    expect(catalogueRow.quantity).toBeNull();
+    expect(catalogueRow.bin).toBeNull();
+  });
+
+  it("keeps a genuine zero-bottle count distinct from unknown availability", () => {
+    const results = mergeUnifiedResults({
+      cellar: [cellar({ quantity: 0, bin: null })],
+      lwin: [],
+      xwines: [],
+      acceptedLinks: NO_LINKS,
+      limit: 10,
+    });
+    expect(results[0].quantity).toBe(0);
+    expect(results[0].bin).toBeNull();
+  });
+
   it("ranks by score descending across sources", () => {
     const results = mergeUnifiedResults({
       cellar: [cellar({ id: "w-lo", score: 0.6 })],

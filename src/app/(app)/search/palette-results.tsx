@@ -14,7 +14,7 @@
 import { createPortal } from "react-dom";
 import { WineThumb } from "@/components/wine-thumb";
 import { cn } from "@/lib/utils";
-import { wineDisplayName } from "@/lib/wine-display-name";
+import { catalogueWineTitle, wineDisplayName } from "@/lib/wine-display-name";
 
 /** The row shape GET /api/search returns (src/lib/unified-search/merge.ts). */
 export type UnifiedResult = {
@@ -31,6 +31,9 @@ export type UnifiedResult = {
   colour: string | null;
   imageUrl: string | null;
   isEightysixed: boolean | null;
+  /** Availability is a tenant fact: null on catalogue rows and degraded reads. */
+  quantity: number | null;
+  bin: string | null;
   wineId: string | null;
   lwinId: string | null;
   xwinesWineId: number | null;
@@ -190,13 +193,6 @@ export function PaletteResultsPanel({
   );
 }
 
-function catalogueTitle(row: UnifiedResult): string {
-  if (!row.producer) return row.name;
-  return row.name.toLowerCase().includes(row.producer.toLowerCase())
-    ? row.name
-    : `${row.producer} ${row.name}`;
-}
-
 function ResultRow({
   row,
   index,
@@ -217,7 +213,11 @@ function ResultRow({
   const badge = PROVENANCE_LABEL[row.provenance];
   const addState = row.lwinId !== null ? addStates.get(row.lwinId) : undefined;
   const canAdd = row.kind === "catalogue" && row.lwinId !== null;
+  // Availability leads a cellar row (D4). quantity null means the inventory
+  // read degraded — say nothing rather than invent a zero.
   const meta = [
+    row.kind === "cellar" && row.quantity !== null ? `${row.quantity} btl` : null,
+    row.kind === "cellar" ? row.bin : null,
     row.vintage !== null ? String(row.vintage) : null,
     row.region,
     row.country,
@@ -252,11 +252,7 @@ function ResultRow({
                   {row.vintage !== null ? ` ${row.vintage}` : ""}
                 </>
               ) : (
-                // A catalogue row's identity IS producer + cuvée: twenty
-                // appellation-named rows are indistinguishable without the
-                // château. LWIN display names already open with the producer;
-                // X-Wines names rarely do — prefix only when absent.
-                catalogueTitle(row)
+                catalogueWineTitle(row.producer, row.name)
               )}
             </span>
             <span className="block truncate text-ledger font-light text-grey">{meta}</span>

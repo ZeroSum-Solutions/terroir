@@ -35,6 +35,8 @@ function makeSupabase(options?: {
   lwinError?: { message: string } | null;
   xwines?: Row[];
   xwinesError?: { message: string } | null;
+  inventory?: Row[];
+  inventoryError?: { message: string } | null;
   fuzzy?: Array<{ wine_id: string; score: number }>;
 }) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
@@ -44,8 +46,15 @@ function makeSupabase(options?: {
         ? (options?.canonical ?? [])
         : table === "lwin_xwines_links"
           ? (options?.links ?? [])
-          : (options?.wines ?? []);
-    const error = table === "lwin_xwines_links" ? (options?.linksError ?? null) : null;
+          : table === "inventory_items"
+            ? (options?.inventory ?? [])
+            : (options?.wines ?? []);
+    const error =
+      table === "lwin_xwines_links"
+        ? (options?.linksError ?? null)
+        : table === "inventory_items"
+          ? (options?.inventoryError ?? null)
+          : null;
     const chain: Record<string, unknown> = {};
     for (const method of ["select", "eq", "in", "or", "order", "limit"]) {
       chain[method] = (...args: unknown[]) => {
@@ -161,6 +170,36 @@ describe("GET /api/search", () => {
     const rpcNames = supabase.rpc.mock.calls.map((c) => c[0]);
     expect(rpcNames).not.toContain("lwin_search");
     expect(rpcNames).not.toContain("xwines_search");
+  });
+
+  it("sums bottle counts and carries the most recent bin on cellar rows", async () => {
+    // Slice 2b (D4: cellar rows add qty/bin). Two inventory rows for the same
+    // wine sum; the bin shown is the most recently stocked one, which is the
+    // first row because the route orders by added_at descending.
+    const { supabase } = makeSupabase({
+      wines: [{ id: "w-1", name: "Koonunga Hill", producer: "Penfolds", vintage: 2019, varietal: null, region: null, country: null, colour: null, hero_image_url: null, is_eightysixed: false, canonical_wine_id: null }],
+      inventory: [
+        { wine_id: "w-1", quantity: 2, bin_location: "A4" },
+        { wine_id: "w-1", quantity: 1, bin_location: "B2" },
+      ],
+    });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    const res = await GET(request("q=koonunga&scope=cellar"));
+    const body = await res.json();
+    expect(body.results[0]).toMatchObject({ kind: "cellar", quantity: 3, bin: "A4" });
+  });
+
+  it("degrades availability to unknown — never a zero-stock claim — when inventory can't be read", async () => {
+    const { supabase } = makeSupabase({
+      wines: [{ id: "w-1", name: "Koonunga Hill", producer: "Penfolds", vintage: 2019, varietal: null, region: null, country: null, colour: null, hero_image_url: null, is_eightysixed: false, canonical_wine_id: null }],
+      inventoryError: { message: "read timed out" },
+    });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    const res = await GET(request("q=koonunga&scope=cellar"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.results[0]).toMatchObject({ kind: "cellar", quantity: null, bin: null });
+    expect(captureException).toHaveBeenCalled();
   });
 
   it("degrades to cellar-only when a catalogue RPC is unavailable, and reports it", async () => {
