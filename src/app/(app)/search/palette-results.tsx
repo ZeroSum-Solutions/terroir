@@ -4,8 +4,7 @@
 // and catalogue as separate sections with cellar first, provenance badges,
 // the single "My cellar" scope chip, recents chips under an empty field, and
 // the honest empty states — a cellar-scope miss routes to the scanner, an
-// all-scope miss points at the companion (its CTA wires up when the
-// assistant entry point is consolidated in slice 2c).
+// all-scope miss hands the query to the companion (slice 2c).
 //
 // The active-row index is FLAT across both sections, in the exact order the
 // unified endpoint ranked the rows — the sections are presentation, not a
@@ -64,6 +63,7 @@ export function PaletteResultsPanel({
   onToggleScope,
   onRunRecent,
   onScanInstead,
+  onAskCompanion,
 }: {
   anchor: { top: number; left: number; width: number };
   listboxId: string;
@@ -80,6 +80,7 @@ export function PaletteResultsPanel({
   onToggleScope: () => void;
   onRunRecent: (term: string) => void;
   onScanInstead: () => void;
+  onAskCompanion: () => void;
 }) {
   if (typeof document === "undefined") return null;
 
@@ -146,10 +147,19 @@ export function PaletteResultsPanel({
             </button>
           </div>
         ) : (
-          <p className="px-md py-sm text-body-sm font-light text-grey">
-            Nothing matched in the cellar or the catalogue — the companion can help with
-            open-ended questions.
-          </p>
+          <div className="px-md py-sm">
+            <p className="text-body-sm font-light text-grey">
+              Nothing matched in the cellar or the catalogue — the companion can help
+              with open-ended questions.
+            </p>
+            <button
+              type="button"
+              onClick={onAskCompanion}
+              className="mt-xs text-body-sm text-ink-soft underline-offset-2 hover:underline focus-ring"
+            >
+              Ask the companion
+            </button>
+          </div>
         )
       ) : null}
 

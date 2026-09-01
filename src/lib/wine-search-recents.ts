@@ -12,7 +12,7 @@
 // The storage key keeps its historical "scan" prefix — renaming it would
 // throw away everyone's existing list for a cosmetic win.
 
-export const RECENT_SEARCH_LIMIT = 5;
+const RECENT_SEARCH_LIMIT = 5;
 const STORAGE_KEY = "terroir.scan.recentSearches";
 
 /** Most-recent-first, de-duplicated case-insensitively, capped. */

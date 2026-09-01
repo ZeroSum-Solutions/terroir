@@ -16,7 +16,7 @@
 // discoverable wine must never look pullable). Catalogue rows carry a
 // provenance badge; a pair the P0 linkage accepted renders once. The single
 // "My cellar" chip narrows scope (D4: one chip, no radiogroup). Recents are
-// shared with the scan panel via src/lib/wine-search-recents.
+// carried over from the scan panel's day via src/lib/wine-search-recents.
 //
 // Catalogue rows (slice 2b): a click opens /catalogue/[source]/[id] — the
 // detail view that renders identity plus any linked X-Wines features, with
@@ -27,6 +27,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { requestAssistant } from "../assistant-open";
 import { addRecentSearch, readRecentSearches } from "@/lib/wine-search-recents";
 import { PaletteResultsPanel, type AddState, type UnifiedResult } from "./palette-results";
 
@@ -341,6 +342,13 @@ export function SearchPalette({ className }: { className?: string }) {
             close();
             router.push("/scan");
           }}
+          onAskCompanion={() => {
+            // The query already missed both corpora; hand it to the
+            // companion as asked rather than making the user retype it.
+            const text = query.trim();
+            close();
+            requestAssistant(text === "" ? null : text);
+          }}
         />
       ) : null}
     </form>
@@ -348,7 +356,12 @@ export function SearchPalette({ className }: { className?: string }) {
 }
 
 /** True when the current route renders a search control that is not this one. */
-function pageHasItsOwnSearch(): boolean {
+/**
+ * Exported for the /scan suite: deleting that page's search panel (P1 slice
+ * 2c) is what un-shadows "/" there, and the test pins it with this exact
+ * probe rather than a copy that could drift.
+ */
+export function pageHasItsOwnSearch(): boolean {
   const candidates = document.querySelectorAll(
     'input[type="search"], [aria-label*="Search"], [aria-label*="search"]',
   );

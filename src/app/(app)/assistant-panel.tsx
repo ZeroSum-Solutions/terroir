@@ -15,13 +15,9 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { MessageCircleQuestion, Search, X } from "lucide-react";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
-import { WineThumb } from "@/components/wine-thumb";
-import type {
-  AssistantCellarWine,
-  AssistantCorpusWine,
-  AssistantResponse,
-} from "@/lib/wine-intelligence/assistant-types";
-import { wineTitle } from "@/lib/wine-display-name";
+import { onAssistantRequest } from "./assistant-open";
+import type { AssistantResponse } from "@/lib/wine-intelligence/assistant-types";
+import { CellarResult, CorpusResult } from "./assistant-results";
 
 const EXAMPLES = [
   "a bold red that pairs with beef",
@@ -52,28 +48,58 @@ function chipsFor(query: AssistantResponse["query"]): string[] {
 
 export function AssistantPanel() {
   const [open, setOpen] = useState(false);
+  const [seed, setSeed] = useState<string | null>(null);
+
+  // The palette's all-scope miss hands its query here (P1 slice 2c) — see
+  // assistant-open.ts for why this is an event rather than context.
+  useEffect(
+    () =>
+      onAssistantRequest((question) => {
+        setSeed(question);
+        setOpen(true);
+      }),
+    [],
+  );
+
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setSeed(null);
+          setOpen(true);
+        }}
         aria-haspopup="dialog"
         aria-label="Ask about your cellar"
         className="grid h-11 w-11 place-items-center rounded-pill text-ink transition-colors hover:bg-wash focus-ring"
       >
         <MessageCircleQuestion className="h-5 w-5" strokeWidth={1.75} aria-hidden />
       </button>
-      {open ? <AssistantDialog onClose={() => setOpen(false)} /> : null}
+      {/* Keyed on the seed so a request arriving while the dialog is
+          already open still lands as a fresh, seeded dialog. */}
+      {open ? (
+        <AssistantDialog
+          key={seed ?? ""}
+          seedQuestion={seed}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
     </>
   );
 }
 
-function AssistantDialog({ onClose }: { onClose: () => void }) {
+function AssistantDialog({
+  seedQuestion = null,
+  onClose,
+}: {
+  seedQuestion?: string | null;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const titleId = useId();
   const inputId = useId();
   const trapRef = useRef<HTMLDivElement>(null);
-  const [question, setQuestion] = useState("");
+  const [question, setQuestion] = useState(seedQuestion ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AssistantResponse | null>(null);
@@ -107,6 +133,16 @@ function AssistantDialog({ onClose }: { onClose: () => void }) {
       if (ticket === latest.current) setPending(false);
     }
   }, []);
+
+  // A seeded question was already typed and submitted at the palette;
+  // running it on open is the request the user made, not a new one. Deferred
+  // into a promise continuation because ask() sets state synchronously and
+  // react-hooks/set-state-in-effect (rightly) rejects that in an effect body
+  // — the same pattern import-client.tsx uses for its spreadsheet hand-off.
+  useEffect(() => {
+    if (seedQuestion === null || seedQuestion.trim() === "") return;
+    void Promise.resolve().then(() => ask(seedQuestion));
+  }, [seedQuestion, ask]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -304,96 +340,5 @@ function AssistantDialog({ onClose }: { onClose: () => void }) {
       </div>
     </div>,
     document.body,
-  );
-}
-
-function Rating({ avg, count }: { avg: number | null; count: number | null }) {
-  if (avg == null) return null;
-  return (
-    <span className="tabular">
-      {avg.toFixed(1)}/5
-      {count != null ? (
-        <span className="text-grey"> from {count.toLocaleString()} ratings</span>
-      ) : null}
-    </span>
-  );
-}
-
-function CellarResult({
-  wine,
-  onOpen,
-}: {
-  wine: AssistantCellarWine;
-  onOpen: () => void;
-}) {
-  const facts = [
-    wine.grapes[0] ?? wine.varietal,
-    wine.region ?? wine.country,
-    wine.body,
-  ].filter(Boolean);
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex w-full items-start gap-sm rounded-md border border-edge px-md py-sm text-left transition-colors hover:bg-wash focus-ring"
-    >
-      {/* The label is the fastest way a sommelier recognises a bottle, so it
-          leads the row. WineThumb rather than a bare <img>: it falls back to
-          the producer's initials tinted by wine colour, which keeps the list
-          even instead of ragged when a wine has no photograph. */}
-      <WineThumb
-        src={wine.imageUrl}
-        producer={wine.producer}
-        name={wine.name}
-        colour={wine.colour}
-        size={44}
-      />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-baseline justify-between gap-sm">
-          <span className="text-control text-ink">
-            {wineTitle(wine.producer, wine.name)}
-            {wine.vintage ? ` ${wine.vintage}` : ""}
-          </span>
-          {wine.price != null ? (
-            <span className="shrink-0 text-body-sm tabular text-ink-soft">
-              ${wine.price.toFixed(0)}
-            </span>
-          ) : null}
-        </span>
-        <span className="mt-2xs flex flex-wrap items-center gap-x-sm text-ledger font-light text-grey">
-          {facts.length > 0 ? <span>{facts.join(" · ")}</span> : null}
-          <Rating avg={wine.ratingAvg} count={wine.ratingCount} />
-          <span className={wine.onHand > 0 ? "text-ready-ink" : "text-risk-ink"}>
-            {wine.onHand > 0 ? `${wine.onHand} on hand` : "none on hand"}
-          </span>
-        </span>
-      </span>
-    </button>
-  );
-}
-
-function CorpusResult({ wine }: { wine: AssistantCorpusWine }) {
-  const facts = [wine.grapes[0], wine.region ?? wine.country, wine.body].filter(Boolean);
-  return (
-    <div className="flex items-start gap-sm rounded-md border border-edge px-md py-sm">
-      <WineThumb
-        src={wine.imageUrl}
-        producer={wine.winery}
-        name={wine.name}
-        colour={wine.type}
-        size={44}
-      />
-      <div className="min-w-0 flex-1">
-        <p className="text-control text-ink">
-          {wine.winery ? `${wine.winery} ` : ""}
-          {wine.name}
-        </p>
-        <p className="mt-2xs flex flex-wrap items-center gap-x-sm text-ledger font-light text-grey">
-          {facts.length > 0 ? <span>{facts.join(" · ")}</span> : null}
-          <Rating avg={wine.ratingAvg} count={wine.ratingCount} />
-        </p>
-      </div>
-    </div>
   );
 }
