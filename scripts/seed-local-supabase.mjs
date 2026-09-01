@@ -9,6 +9,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { sectionNameFor } from "./local/wine-sections.mjs";
 import { config } from "dotenv";
 import { readFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
@@ -361,7 +362,10 @@ function buildRows(userIds = DRY_USER_IDS) {
       // also ran to 24, past the 16 the config declares. The 5 is coprime
       // with 16 so the columns cycle fully instead of repeating early.
       bin_location: `${String.fromCharCode(65 + (i % 12))}${1 + ((i * 5) % 16)}`,
-      section: sections[i % sections.length],
+      // Filed by the wine's own colour and origin (scripts/local/wine-sections.mjs),
+      // not dealt round-robin: /cellar groups by this column, and a "Sparkling"
+      // section holding a red is the first thing a sommelier sees.
+      section: sectionNameFor(wine)[0],
       format: wine.size_ml === 1500 ? "magnum" : wine.size_ml === 375 ? "half" : "750ml",
       currency: "USD",
       added_via: i <= 240 ? "invoice_scan" : "manual",
