@@ -332,7 +332,11 @@ function buildRows(userIds = DRY_USER_IDS) {
       edits: i % 11 === 0 ? { corrected_fields: ["producer", "quantity"] } : {},
       accuracy_score: cents(0.84 + (i % 14) / 100),
       item_count: lineItems.length,
-      status: i % 13 === 0 ? "needs_review" : "committed",
+      // The app's own vocabulary (src/app/(app)/scans/scan-list-status.ts):
+      // complete | processing | review | failed. "committed"/"needs_review"
+      // were seed-only words the scan-history chips could not count.
+      status: i % 13 === 0 ? "review" : "complete",
+      status_reason: i % 13 === 0 ? "arithmetic_mismatch" : null,
       ocr_text: {
         engine: "local_seed",
         pages: i % 5 === 0 ? 2 : 1,
@@ -480,7 +484,10 @@ function buildRows(userIds = DRY_USER_IDS) {
           itemIndex % 8 === 0
             ? "Local fixture note for public menu and print rendering."
             : null,
-        name_override: itemIndex % 19 === 0 ? `${wine.producer} Reserve Pour` : null,
+        // Never an invented name: name_override renders VERBATIM on the public
+        // guest menu and always wins over the wine's real name (render.ts), so
+        // a seeded "<producer> Reserve Pour" put a fake wine in front of guests.
+        name_override: null,
         blurb: itemIndex % 11 === 0 ? "Sanitized menu blurb for editor/public state." : null,
         hidden: itemIndex % 43 === 0,
         is_available: !wine.is_eightysixed,
