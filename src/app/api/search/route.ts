@@ -31,6 +31,7 @@ import {
 } from "@/lib/unified-search/merge";
 import { parseSearchQuery } from "@/lib/unified-search/query-parse";
 import { planSource, type SourcePlan } from "@/lib/unified-search/search-filters";
+import { companionHint } from "@/lib/unified-search/companion-hint";
 import { fetchLwinFiltered, fetchXwinesFiltered } from "./catalogue-pass";
 
 export const runtime = "nodejs";
@@ -253,7 +254,13 @@ export async function GET(request: NextRequest) {
   if (!parsed.ok) return parsed.response;
   const { q, scope, limit } = parsed.data;
 
-  if (q.length < 2) return NextResponse.json({ results: [] });
+  // Additive, and computed on the raw query alone (companion-hint.ts):
+  // price and pairing are dimensions this route cannot filter on at all, so
+  // whether to offer the companion does not depend on what the rest of this
+  // handler manages to answer.
+  const companion = companionHint(q);
+
+  if (q.length < 2) return NextResponse.json({ results: [], companion });
 
   // Slice 3b: the query is read before it is searched. What the parser
   // recognises becomes predicates in each corpus's OWN vocabulary
@@ -271,7 +278,7 @@ export async function GET(request: NextRequest) {
   // question. Trigram-matching the raw text instead would answer it with rows
   // that merely share a word, which is how "a crisp white from Portugal"
   // used to come back full of things that were none of those.
-  if (!hasFilters && intent.text === "") return NextResponse.json({ results: [] });
+  if (!hasFilters && intent.text === "") return NextResponse.json({ results: [], companion });
 
   const cellarPlan = planSource("cellar", intent);
 
@@ -365,5 +372,5 @@ export async function GET(request: NextRequest) {
       : new Map<string, number>();
 
   const results = mergeUnifiedResults({ cellar, lwin, xwines, acceptedLinks, limit });
-  return NextResponse.json({ results });
+  return NextResponse.json({ results, companion });
 }
