@@ -34,6 +34,18 @@
 // of VoiceFilterPayload.
 
 import { foldAccents } from "./name-resolver";
+import {
+  BLEND_PHRASES,
+  BODY_PHRASES,
+  FILLER_WORDS,
+  PAIRING_PHRASES,
+  SINGLE_VARIETAL_PHRASES,
+  TYPE_PHRASES,
+  isNegated,
+  matchPhrases,
+  normalize,
+  phraseWordIndex,
+} from "./assistant-lexicon";
 
 /** The caller's own DISTINCT values — never arbitrary user text. */
 export interface AssistantVocabulary {
@@ -66,119 +78,22 @@ export interface AssistantQuery {
   unrecognized: string[];
 }
 
-function normalize(s: string): string {
-  return foldAccents(s)
-    .toLowerCase()
-    .replace(/['’-]/g, " ")
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** True when `phrase` appears in `text` on word boundaries — so "red" does
- * not fire inside "shredded". Both arguments are already normalized. */
-function containsPhrase(text: string, phrase: string): boolean {
-  if (!phrase) return false;
-  return ` ${text} `.includes(` ${phrase} `);
-}
-
-// ── Closed corpus vocabularies ───────────────────────────────────────────
-// xwines_catalog.type and .body are closed sets (6 and 5 values). The phrase
-// lists map how people actually ask onto the exact stored value. Order
-// matters: the first entry whose phrase is present wins, so more specific
-// phrases ("full bodied") precede the words they contain ("full").
-
-const TYPE_PHRASES: ReadonlyArray<{ value: string; phrases: readonly string[] }> = [
-  { value: "Dessert/Port", phrases: ["port", "tawny", "vintage port"] },
-  { value: "Sparkling", phrases: ["sparkling", "champagne", "bubbles", "bubbly", "prosecco", "cava", "espumante"] },
-  { value: "Rosé", phrases: ["rose", "rosado", "pink"] },
-  { value: "Dessert", phrases: ["dessert wine", "sweet wine", "pudding wine"] },
-  { value: "White", phrases: ["white", "blanc", "branco"] },
-  { value: "Red", phrases: ["red", "tinto", "rouge"] },
-];
-
-const BODY_PHRASES: ReadonlyArray<{ value: string; phrases: readonly string[] }> = [
-  { value: "Very full-bodied", phrases: ["very full bodied", "very full"] },
-  { value: "Very light-bodied", phrases: ["very light bodied", "very light"] },
-  { value: "Full-bodied", phrases: ["full bodied", "fullbodied", "bold", "big", "heavy", "powerful", "rich"] },
-  { value: "Light-bodied", phrases: ["light bodied", "lightbodied", "light", "crisp", "delicate", "easy drinking"] },
-  { value: "Medium-bodied", phrases: ["medium bodied", "mediumbodied", "medium"] },
-];
-
-// xwines_catalog.harmonize's vocabulary, plus the everyday words people use
-// for them. A word that genuinely covers two stored values (fish, cheese,
-// meat) maps to ALL of them — collapsing to one would silently drop honest
-// answers, so `pairing` is a list.
-const PAIRING_PHRASES: ReadonlyArray<{ values: readonly string[]; phrases: readonly string[] }> = [
-  { values: ["Beef"], phrases: ["beef", "steak", "ribeye", "sirloin", "burger"] },
-  { values: ["Poultry"], phrases: ["poultry", "chicken", "turkey", "duck"] },
-  { values: ["Lamb"], phrases: ["lamb", "mutton"] },
-  { values: ["Pork"], phrases: ["pork", "ham", "bacon"] },
-  { values: ["Veal"], phrases: ["veal"] },
-  { values: ["Game Meat"], phrases: ["game meat", "game", "venison", "boar"] },
-  { values: ["Cured Meat"], phrases: ["cured meat", "charcuterie", "salami", "prosciutto"] },
-  { values: ["Shellfish"], phrases: ["shellfish", "shrimp", "prawns", "lobster", "crab", "oysters", "scallops"] },
-  { values: ["Rich Fish", "Lean Fish"], phrases: ["fish", "seafood"] },
-  { values: ["Rich Fish"], phrases: ["rich fish", "salmon", "tuna", "mackerel"] },
-  { values: ["Lean Fish"], phrases: ["lean fish", "cod", "sole", "halibut", "white fish"] },
-  { values: ["Pasta"], phrases: ["pasta", "spaghetti", "risotto", "lasagna"] },
-  { values: ["Vegetarian"], phrases: ["vegetarian", "vegan", "vegetables", "veggie"] },
-  { values: ["Spicy Food"], phrases: ["spicy food", "spicy", "curry", "chilli", "chili"] },
-  { values: ["Goat Cheese"], phrases: ["goat cheese", "chevre"] },
-  { values: ["Blue Cheese"], phrases: ["blue cheese", "roquefort", "stilton", "gorgonzola"] },
-  { values: ["Soft Cheese"], phrases: ["soft cheese", "brie", "camembert"] },
-  { values: ["Hard Cheese"], phrases: ["hard cheese", "cheddar", "manchego"] },
-  { values: ["Maturated Cheese"], phrases: ["maturated cheese", "aged cheese", "parmesan"] },
-  { values: ["Soft Cheese", "Hard Cheese", "Maturated Cheese"], phrases: ["cheese", "cheese board"] },
-  { values: ["Mushrooms"], phrases: ["mushrooms", "mushroom", "truffle"] },
-  { values: ["Sweet Dessert"], phrases: ["sweet dessert", "dessert", "chocolate", "cake"] },
-  { values: ["Fruit Dessert"], phrases: ["fruit dessert", "fruit tart"] },
-  { values: ["Appetizer"], phrases: ["appetizer", "starter", "canapes"] },
-  { values: ["Snack"], phrases: ["snack", "snacks", "nibbles"] },
-  { values: ["Barbecue"], phrases: ["barbecue", "bbq", "grill", "grilled"] },
-  { values: ["Beef", "Lamb", "Pork", "Game Meat", "Veal"], phrases: ["meats", "meat", "red meat"] },
-];
-
-// xwines_catalog.elaborate splits the corpus into "Varietal/100%" and the
-// "Assemblage/..." family. Two phrase lists rather than one flag, because
-// "single varietal" and "blend" are both things people ask for and neither is
-// the absence of the other.
-const BLEND_PHRASES: readonly string[] = ["blend", "blends", "blended", "assemblage", "cuvee"];
-const SINGLE_VARIETAL_PHRASES: readonly string[] = [
-  "single varietal", "single variety", "100", "varietal only", "pure", "straight",
-];
-
-// Words that carry no facet. Kept tight for the same reason
-// voice-filter-intent's list is: under-stripping costs a stray "did not
-// understand" chip, over-stripping hides that the query was misread.
-const FILLER_WORDS = new Set([
-  "a", "an", "the", "of", "for", "to", "in", "on", "at", "by", "with", "and", "or",
-  "from", "please", "show", "me", "us", "pull", "up", "find", "get", "bring",
-  "any", "some", "all", "list", "give", "have", "got", "want", "need", "looking",
-  "wine", "wines", "bottle", "bottles", "cellar", "tonight", "today", "something",
-  "anything", "good", "nice", "nicely", "great", "best", "hey", "hi", "hello",
-  "there", "im", "i", "is", "it", "that", "what", "goes", "go", "pair", "pairs",
-  "pairing", "might", "would", "could", "like", "about", "between", "range",
-  "under", "over", "below", "above", "less", "more", "than", "around", "near",
-  "dollars", "dollar", "bucks", "usd", "price", "priced", "costs", "cost",
-  "drink", "drinking", "serve", "serving", "recommend", "recommendation",
-  "we", "you", "my", "our", "your", "can", "do", "does", "please",
-  "should", "pour", "pouring", "glass", "dinner", "night", "evening",
-  "meal", "dish", "eating", "having", "suggest", "suggestion", "match",
-]);
-
 /** Longest vocabulary value present in the text, or undefined. Longer wins so
  * "Napa Valley" beats "Napa" when both are held. */
 function bestVocabularyMatch(
   vocabulary: readonly string[],
-  text: string,
+  words: readonly string[],
 ): { value: string; normalized: string } | undefined {
   let winner: { value: string; normalized: string } | undefined;
   for (const raw of vocabulary) {
     const value = raw?.trim();
     if (!value) continue;
     const norm = normalize(value);
-    if (!norm || !containsPhrase(text, norm)) continue;
+    if (!norm) continue;
+    const index = phraseWordIndex(words, norm);
+    if (index < 0) continue;
+    // A ruled-out value is not a constraint. Left unconsumed on purpose.
+    if (isNegated(words, index)) continue;
     if (!winner || norm.length > winner.normalized.length) {
       winner = { value, normalized: norm };
     }
@@ -263,14 +178,17 @@ const VINTAGE_LOOKAHEAD_YEARS = 2;
  * budget, not a bottling. Matches a BARE four-digit token, so "1500ml" is a
  * bottle size and stays out.
  */
-function parseVintages(text: string, priceSpans: readonly string[]): number[] {
+function parseVintages(words: readonly string[], priceSpans: readonly string[]): number[] {
   const spent = new Set(priceSpans);
   const newest = new Date().getUTCFullYear() + VINTAGE_LOOKAHEAD_YEARS;
   const years: number[] = [];
-  for (const word of text.split(" ")) {
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i]!;
     if (!/^\d{4}$/.test(word) || spent.has(word)) continue;
     const year = Number(word);
     if (year < OLDEST_VINTAGE || year > newest) continue;
+    // "a Bordeaux but not 2016" rules the year out; it does not ask for it.
+    if (isNegated(words, i)) continue;
     if (!years.includes(year)) years.push(year);
   }
   return years;
@@ -291,6 +209,11 @@ export function parseAssistantQuery(
   const query: AssistantQuery = { understood: [], unrecognized: [] };
   if (!text) return query;
 
+  // Facets are matched against the word list rather than the whole string, so
+  // every match knows its position and can be checked for a negation in front
+  // of it (see NEGATION_PHRASES).
+  const words = text.split(" ").filter(Boolean);
+
   // Words consumed by a recognised facet, so they are not later reported as
   // unrecognised.
   const consumed: string[] = [];
@@ -299,32 +222,33 @@ export function parseAssistantQuery(
   };
 
   for (const { value, phrases } of TYPE_PHRASES) {
-    const hit = phrases.find((p) => containsPhrase(text, normalize(p)));
-    if (hit) {
-      query.type = value;
-      query.understood.push("type");
-      consume(normalize(hit));
-      break;
-    }
+    const match = matchPhrases(words, phrases);
+    if (match === null) continue;
+    // Negated: leave it unconsumed and keep looking. "Not sparkling, a red"
+    // must still reach Red rather than stopping at the refused type.
+    if (match.negated) continue;
+    query.type = value;
+    query.understood.push("type");
+    consume(match.hit);
+    break;
   }
 
   for (const { value, phrases } of BODY_PHRASES) {
-    const hit = phrases.find((p) => containsPhrase(text, normalize(p)));
-    if (hit) {
-      query.body = value;
-      query.understood.push("body");
-      consume(normalize(hit));
-      break;
-    }
+    const match = matchPhrases(words, phrases);
+    if (match === null || match.negated) continue;
+    query.body = value;
+    query.understood.push("body");
+    consume(match.hit);
+    break;
   }
 
   // Pairing accumulates: "beef and mushrooms" is two honest constraints.
   const pairings = new Set<string>();
   for (const { values, phrases } of PAIRING_PHRASES) {
-    const hit = phrases.find((p) => containsPhrase(text, normalize(p)));
-    if (!hit) continue;
+    const match = matchPhrases(words, phrases);
+    if (match === null || match.negated) continue;
     for (const v of values) pairings.add(v);
-    consume(normalize(hit));
+    consume(match.hit);
   }
   if (pairings.size > 0) {
     query.pairing = [...pairings];
@@ -333,33 +257,35 @@ export function parseAssistantQuery(
 
   // Single-varietal is checked first: "single varietal" contains no blend
   // word, but "100% Malbec" and "a blend" must not both fire on one question.
-  const singleHit = SINGLE_VARIETAL_PHRASES.find((p) => containsPhrase(text, normalize(p)));
-  const blendHit = BLEND_PHRASES.find((p) => containsPhrase(text, normalize(p)));
-  if (singleHit) {
+  const singleMatch = matchPhrases(words, SINGLE_VARIETAL_PHRASES);
+  const blendMatch = matchPhrases(words, BLEND_PHRASES);
+  // A negated hit sets nothing: "not a blend" implies a single varietal only
+  // if you are willing to guess, and guessing is what this module does not do.
+  if (singleMatch !== null && !singleMatch.negated) {
     query.blend = false;
     query.understood.push("blend");
-    consume(normalize(singleHit));
-  } else if (blendHit) {
+    consume(singleMatch.hit);
+  } else if (blendMatch !== null && !blendMatch.negated) {
     query.blend = true;
     query.understood.push("blend");
-    consume(normalize(blendHit));
+    consume(blendMatch.hit);
   }
 
-  const region = bestVocabularyMatch(vocabulary.region, text);
+  const region = bestVocabularyMatch(vocabulary.region, words);
   if (region) {
     query.region = region.value;
     query.understood.push("region");
     consume(region.normalized);
   }
 
-  const country = bestVocabularyMatch(vocabulary.country, text);
+  const country = bestVocabularyMatch(vocabulary.country, words);
   if (country) {
     query.country = country.value;
     query.understood.push("country");
     consume(country.normalized);
   }
 
-  const grape = bestVocabularyMatch(vocabulary.grape, text);
+  const grape = bestVocabularyMatch(vocabulary.grape, words);
   if (grape) {
     query.grape = grape.value;
     query.understood.push("grape");
@@ -377,7 +303,7 @@ export function parseAssistantQuery(
   }
   for (const s of price.spans) consume(s);
 
-  const vintages = parseVintages(text, price.spans);
+  const vintages = parseVintages(words, price.spans);
   if (vintages.length > 0) {
     query.vintages = vintages;
     query.understood.push("vintage");
@@ -385,8 +311,7 @@ export function parseAssistantQuery(
   }
 
   const consumedSet = new Set(consumed);
-  query.unrecognized = text
-    .split(" ")
+  query.unrecognized = words
     .filter(
       (w) =>
         w.length > 2 &&

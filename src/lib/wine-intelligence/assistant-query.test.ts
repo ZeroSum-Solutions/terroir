@@ -229,3 +229,91 @@ describe("parseAssistantQuery", () => {
     });
   });
 });
+
+// A negated facet was AFFIRMED before this: "a red that isn't cabernet"
+// returned grape: "Cabernet Sauvignon", so the reader was handed the exact
+// wine they asked to avoid — and `understood` listed it, so the panel
+// presented the inversion as a constraint it had confidently parsed. That is
+// the confident-wrong-answer class this module's own header (D-006b) and the
+// D2 grounding contract exist to prevent, and it is worse than not parsing at
+// all: an unparsed word says "I did not understand", an inverted one lies.
+//
+// Scope of the fix, deliberately narrow: a negated facet is NOT SET, and its
+// words fall through to `unrecognized` so the panel's existing "I did not
+// understand that part" notice fires. Actually EXCLUDING on a negated facet
+// (a real NOT predicate) is follow-up work — saying so honestly is not.
+describe("parseAssistantQuery — negation is never read as affirmation", () => {
+  it("does not return the grape the question rules out", () => {
+    const q = parse("a red that isn't cabernet sauvignon");
+    expect(q.grape).toBeUndefined();
+    expect(q.understood).not.toContain("grape");
+    // The rest of the question still parses — only the negated part drops.
+    expect(q.type).toBe("Red");
+  });
+
+  it("does not return the grape after a plain 'but not'", () => {
+    const q = parse("a red but not pinot noir");
+    expect(q.grape).toBeUndefined();
+    expect(q.type).toBe("Red");
+  });
+
+  it("does not return the country the question excludes", () => {
+    const q = parse("a red from anywhere except italy");
+    expect(q.country).toBeUndefined();
+    expect(q.type).toBe("Red");
+  });
+
+  it("does not return the very type the question opens by refusing", () => {
+    // The worst case found: this returned type "Sparkling" with unrecognized
+    // EMPTY, so there was not even a caveat on screen — total confidence,
+    // exactly inverted.
+    const q = parse("no sparkling please");
+    expect(q.type).toBeUndefined();
+    expect(q.understood).not.toContain("type");
+    expect(q.unrecognized).toContain("sparkling");
+  });
+
+  it("does not read a negated vintage as the vintage asked for", () => {
+    const q = parse("a bordeaux but not 2016");
+    expect(q.vintages ?? []).not.toContain(2016);
+  });
+
+  it("still affirms the same facets when nothing negates them", () => {
+    // The regression guard: negation detection must not cost the ordinary
+    // affirmative reading, which is the overwhelmingly common case.
+    const q = parse("a red that is cabernet sauvignon");
+    expect(q.grape).toBe("Cabernet Sauvignon");
+    expect(q.type).toBe("Red");
+  });
+
+  it("stops the negation at the phrase it applies to", () => {
+    // "not sparkling" must not suppress the "red" and "Italy" that follow it;
+    // a negation that leaks forward would trade one silent wrong answer for
+    // another.
+    const q = parse("not sparkling, a red from italy");
+    expect(q.type).toBe("Red");
+    expect(q.country).toBe("Italy");
+  });
+
+  it("reaches its object across small words, but not across a content word", () => {
+    // These two put the negation the same distance from the facet, and only
+    // one of them negates it. A fixed lookback window gets one or the other
+    // wrong: in "not sparkling, a red" the refusal has already landed on
+    // "sparkling", so the red is genuinely wanted.
+    expect(parse("anything other than a malbec").grape).toBeUndefined();
+    expect(parse("not sparkling, a malbec").grape).toBe("Malbec");
+  });
+
+  it("leaves an unrelated facet alone when the negation lands on a non-facet", () => {
+    const q = parse("something white without oak");
+    expect(q.type).toBe("White");
+  });
+
+  it("does not mangle a contraction into a stray token", () => {
+    // normalize() turned every apostrophe into a space, so "isn't" became the
+    // words "isn" and "t" and surfaced as unrecognized noise.
+    const q = parse("a red that isn't cabernet sauvignon");
+    expect(q.unrecognized).not.toContain("isn");
+  });
+});
+
