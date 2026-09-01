@@ -78,7 +78,7 @@ pnpm exec tsc --noEmit          # type-check
 pnpm lint                       # ESLint + jsx-a11y
 pnpm test                       # Vitest (live-DB suites self-skip locally, run in CI)
 pnpm check:design               # palette, contrast, token-sync, typography ratchet
-pnpm check:file-size            # file-size ratchet — baselined files may shrink, never grow
+pnpm check:file-size            # file-size ratchet — 400 source / 1000 test; baselined files may shrink, never grow
 pnpm check:control-rows         # GLOBAL-01 control-row ratchet
 pnpm eval:vwp                   # VWP eval traceability (docs/evals/vwp-evals.yaml)
 pnpm verify:feature-ledger

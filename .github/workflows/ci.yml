@@ -194,10 +194,12 @@ jobs:
 
       - name: File-size ratchet
         # "No monoliths" was a stated rule with nothing enforcing it: 62 files
-        # in src/ are over 400 lines and one is 3,149. Those are frozen in
+        # in src/ were over budget and one is 3,149. Those are frozen in
         # scripts/file-size-baseline.json — a baselined file may shrink but
         # never grow, and a new file may not cross the budget at all. Pay the
         # debt down with `pnpm check:file-size:update` after splitting.
+        # Two budgets: 400 lines for application code, 1000 for a vitest suite,
+        # because a long table-driven suite is cases, not a tangled module.
         run: pnpm run check:file-size
 
       - name: Control-row ratchet
