@@ -63,6 +63,7 @@ import { createClient } from "@supabase/supabase-js";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { sectionNameFor } from "./wine-sections.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../..");
@@ -88,29 +89,6 @@ if (!SERVICE_KEY) {
 }
 
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
-
-/** Old World / New World, for splitting reds across the two red sections. */
-const OLD_WORLD = new Set([
-  "France", "Italy", "Spain", "Portugal", "Germany", "Austria", "Greece",
-  "Hungary", "Switzerland", "Croatia", "Slovenia", "Romania", "Bulgaria",
-  "Georgia", "Moldova", "Israel", "Lebanon", "Turkey", "Czech Republic",
-]);
-
-/** Which section name should hold a wine of this colour. */
-function sectionNameFor(wine) {
-  switch (wine.colour) {
-    case "sparkling": return ["Sparkling"];
-    case "white":     return ["Whites"];
-    case "rose":      return ["Rose"];
-    case "dessert":
-    case "fortified": return ["Dessert & Fortified"];
-    case "red":
-    default:
-      return OLD_WORLD.has(wine.country ?? "")
-        ? ["Reds - Old World", "Reds - New World"]
-        : ["Reds - New World", "Reds - Old World"];
-  }
-}
 
 const { data: lists } = await db
   .from("wine_lists")

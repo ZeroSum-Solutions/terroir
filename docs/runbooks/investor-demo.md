@@ -135,6 +135,7 @@ scripts/local/relink-demo-identities.sh # identity layer -> real wines
 scripts/local/seed-demo-drink-windows.mjs
 scripts/local/seed-demo-tasting-notes.mjs
 scripts/local/fix-demo-wine-lists.mjs
+scripts/local/fix-demo-cellar-sections.mjs   # cellar sections by colour, not round-robin
 scripts/seed-local-operational.ts --place-inventory
 scripts/local/enable-demo-login.mjs     # confirm the user, join the venue
 ```
