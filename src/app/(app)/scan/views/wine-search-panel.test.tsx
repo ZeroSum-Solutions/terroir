@@ -2,7 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WineSearchPanel } from "./wine-search-panel";
-import { mergeRecentSearch } from "./wine-search-recents";
+import { mergeRecentSearch } from "@/lib/wine-search-recents";
 
 /**
  * SCAN-09 — "type in any wine, search for it, get the information I want,

@@ -110,7 +110,7 @@ describe("GLOBAL-02 — search is on every page", () => {
 
     expect(form.getAttribute("aria-label")).toBe("Search all wines");
     const input = form.querySelector<HTMLInputElement>("input")!;
-    expect(input.getAttribute("placeholder")).toBe("Search all wines…");
+    expect(input.getAttribute("placeholder")).toBe("Search cellar and catalogue…");
     // Not a trigger that opens a dialog: the field itself is in the document.
     expect(input.getAttribute("type")).toBe("search");
   });

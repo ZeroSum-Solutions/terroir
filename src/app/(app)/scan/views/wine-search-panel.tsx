@@ -35,7 +35,7 @@ import {
   RECENT_SEARCH_LIMIT,
   addRecentSearch,
   readRecentSearches,
-} from "./wine-search-recents";
+} from "@/lib/wine-search-recents";
 
 export type SearchScope = "cellar" | "catalogue";
 

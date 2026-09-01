@@ -1,13 +1,16 @@
-// SCAN-09 — the "recent searches" half of the scan-page search panel's
-// empty state (the structure the reference screenshot
-// docs/screenshots/2026-08-29-field-notes/vivino-search-empty-state.png
-// shows). Kept out of the component so the list logic is unit-testable
-// without rendering a React tree, and so the panel stays under the
-// file-size budget.
+// Recent searches for wine search surfaces. Originated as SCAN-09's
+// scan-panel empty state (reference screenshot
+// docs/screenshots/2026-08-29-field-notes/vivino-search-empty-state.png);
+// ported to src/lib for P1 so the unified search palette shares one list
+// with the scan panel until that panel is deleted at parity. Kept out of
+// the components so the list logic is unit-testable without rendering a
+// React tree.
 //
 // Per-browser, per-device convenience only. Deliberately localStorage and
 // not a table: a search someone typed is not cellar data, and syncing it
 // would mean a migration and a write on every keystroke for no benefit.
+// The storage key keeps its historical "scan" prefix — renaming it would
+// throw away everyone's existing list for a cosmetic win.
 
 export const RECENT_SEARCH_LIMIT = 5;
 const STORAGE_KEY = "terroir.scan.recentSearches";
