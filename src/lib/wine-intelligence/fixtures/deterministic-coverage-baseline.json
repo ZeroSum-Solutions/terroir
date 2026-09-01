@@ -2,11 +2,11 @@
   "measuredAt": "2026-09-01",
   "totalCases": 180,
   "counts": {
-    "answered": 87,
-    "partial": 29,
-    "tier2": 10,
+    "answered": 98,
+    "partial": 26,
+    "tier2": 9,
     "tier3": 45,
-    "missed": 7,
+    "missed": 0,
     "wrong": 0,
     "knownWrong": 2
   }

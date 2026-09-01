@@ -73,6 +73,15 @@ describe("companionHint", () => {
     expect(companionHint("")).toEqual({ suggested: false, reasons: [] });
   });
 
+  it("matches pairing words token-for-token, so a wine word that merely contains one never trips it", () => {
+    // "porto" / "port" share letters with "pork"; "lambrusco" contains "lamb".
+    // The lexicon matcher is whole-token equality, and this pins that a
+    // substring matcher can never be swapped in silently.
+    for (const query of ["porto", "quinta do noval 10 year old tawny port", "lambrusco", "duckhorn merlot"]) {
+      expect(companionHint(query), query).toEqual({ suggested: false, reasons: [] });
+    }
+  });
+
   it("is not tripped up by a bare vintage year", () => {
     expect(companionHint("a 2018 Malbec")).toEqual({
       suggested: false,

@@ -16,6 +16,16 @@ local Supabase stack but does not carry a provider key, and without
 The script now warns on start when the key is missing; the dev server also logs the
 real error to the terminal outside production (it used to be silent).
 
+**Do the export before the room, not in it.** It needs the Railway CLI logged in and
+the network up; if either is doubtful, put `ANTHROPIC_API_KEY=…` into `.env.local`
+instead — that file already holds the production credentials, so the production
+provider key belongs there too — and skip the export line. And keep the terminal off
+the big screen while scanning: a provider error is now printed in full locally.
+
+**Do not re-seed before the demo.** The seeded database on this machine was audited
+and corrected on 2026-09-01 (cellar sections, scan statuses, guest-menu names). The
+re-seed chain at the bottom of this file takes hours and is for a fresh machine.
+
 Then open http://localhost:3000 and hit **`/api/dev-login`** once — it signs in as
 `DEV_BYPASS_EMAIL` and drops you in *LOCAL SEED - Osteria Scala*, the venue that
 holds the data.
@@ -131,9 +141,11 @@ surfaces.
 
 **Show the bottle-label scan** (`/scan` → *Bottle*): it photographs a label, sends it to
 Claude, and comes back with producer, wine, vintage and a confidence. An
-unidentifiable photo (0% confidence, every field flagged) now disables one-tap
-**Confirm & save** and routes through **Correct details** (fixed 2026-09-01) — worth
-showing on purpose with a non-wine photo.
+unidentifiable photo (0% confidence, every field flagged, or producer and wine name
+both flagged) now disables one-tap **Confirm & save** and routes through **Correct
+details** (fixed 2026-09-01) — worth showing on purpose with a non-wine photo. Use a
+clearly non-wine photo for that beat, not a blurry real label: a mediocre label at
+moderate confidence still confirms in one tap, by design.
 
 **Do not scan an invoice live** unless Azure Document Intelligence has been
 re-provisioned and proven with the exact file you will use. The resource behind
