@@ -82,3 +82,49 @@ describe("parseSearchQuery — edges the corpus does not reach", () => {
     expect(first).toEqual(second);
   });
 });
+
+// Found while building the deterministic-miss-corpus fixture
+// (docs/plans/2026-09-01-tier-2-struct-compile-ops-spec.md §6 decision 4):
+// this module had NO negation handling at all, so "no reds tonight" filtered
+// TO reds — colours: ["Red"], understood: true — the exact inverse of the
+// question, with total confidence. That is the same confident-wrong-answer
+// class assistant-lexicon.ts's negation fix already removed from the
+// assistant parser; it had simply never been ported here. Scope matches that
+// fix exactly: a negated word is NOT added as a filter, and it falls through
+// to the search text instead of vanishing — same choice this module already
+// makes for an out-of-range vintage.
+describe("parseSearchQuery — negation is never read as affirmation", () => {
+  it("does not filter to the colour a query rules out", () => {
+    const parsed = parseSearchQuery("no reds tonight please");
+    expect(parsed.filters.colours).toEqual([]);
+    expect(parsed.understood).toBe(false);
+    expect(parsed.text).toContain("reds");
+  });
+
+  it("does not filter to the region a query rules out", () => {
+    const parsed = parseSearchQuery("a white but nothing from california");
+    expect(parsed.filters.regions).toEqual([]);
+    expect(parsed.filters.colours).toEqual(["White"]);
+  });
+
+  it("does not filter to the country a query rules out, across a contraction", () => {
+    const parsed = parseSearchQuery("something that isn't italian");
+    expect(parsed.filters.countries).toEqual([]);
+  });
+
+  it("stops the negation at the phrase it applies to", () => {
+    // "no sparkling" must not suppress the "reds" and "Portugal" that follow
+    // it — a negation that leaks forward trades one silent wrong answer for
+    // another. "sparkling" is itself a content word, so it blocks "no" from
+    // reaching any further back than the phrase right after it.
+    const parsed = parseSearchQuery("no sparkling please reds from Portugal");
+    expect(parsed.filters.colours).toEqual(["Red"]);
+    expect(parsed.filters.countries).toEqual(["Portugal"]);
+  });
+
+  it("still affirms the same filters when nothing negates them", () => {
+    const parsed = parseSearchQuery("reds from Portugal");
+    expect(parsed.filters.colours).toEqual(["Red"]);
+    expect(parsed.filters.countries).toEqual(["Portugal"]);
+  });
+});

@@ -1,0 +1,1989 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "sas-01",
+      "lens": "sommelier-at-service",
+      "query": "Rioja, please",
+      "meaning": "Wants a wine from the Rioja region.",
+      "expected": {
+        "region": "Rioja"
+      }
+    },
+    {
+      "id": "sas-02",
+      "lens": "sommelier-at-service",
+      "query": "Malbec from Mendoza",
+      "meaning": "Wants a Malbec from Mendoza.",
+      "expected": {
+        "grape": "Malbec",
+        "region": "Mendoza"
+      }
+    },
+    {
+      "id": "sas-03",
+      "lens": "sommelier-at-service",
+      "query": "sparkling under $40",
+      "meaning": "Wants a sparkling wine priced under $40.",
+      "expected": {
+        "type": "Sparkling",
+        "priceMax": 40
+      }
+    },
+    {
+      "id": "sas-04",
+      "lens": "sommelier-at-service",
+      "query": "Chilean Cabernet for the beef course tonight",
+      "meaning": "Wants a Chilean Cabernet Sauvignon to pair with a beef course.",
+      "expected": {
+        "country": "Chile",
+        "grape": "Cabernet Sauvignon",
+        "pairing": [
+          "Beef"
+        ]
+      }
+    },
+    {
+      "id": "sas-05",
+      "lens": "sommelier-at-service",
+      "query": "New Zealand Sauvignon Blanc for the oysters",
+      "meaning": "Wants a New Zealand Sauvignon Blanc to pair with oysters.",
+      "expected": {
+        "country": "New Zealand",
+        "grape": "Sauvignon Blanc",
+        "pairing": [
+          "Shellfish"
+        ]
+      }
+    },
+    {
+      "id": "sas-06",
+      "lens": "sommelier-at-service",
+      "query": "rosé, $20-35, for the terrace",
+      "meaning": "Wants a rosé priced between $20 and $35 for the terrace table.",
+      "expected": {
+        "type": "Rosé",
+        "priceMin": 20,
+        "priceMax": 35
+      }
+    },
+    {
+      "id": "sas-07",
+      "lens": "sommelier-at-service",
+      "query": "full-bodied red, $50-90, for the ribeye at table twelve",
+      "meaning": "Wants a full-bodied red priced $50-90 to pair with ribeye steak.",
+      "expected": {
+        "type": "Red",
+        "body": "Full-bodied",
+        "priceMin": 50,
+        "priceMax": 90,
+        "pairing": [
+          "Beef"
+        ]
+      }
+    },
+    {
+      "id": "sas-08",
+      "lens": "sommelier-at-service",
+      "query": "Portuguese red, nothing over $35",
+      "meaning": "Wants a Portuguese red priced no higher than $35.",
+      "expected": {
+        "country": "Portugal",
+        "type": "Red",
+        "priceMax": 35
+      }
+    },
+    {
+      "id": "sas-09",
+      "lens": "sommelier-at-service",
+      "query": "2019 Napa Cabernet under $120",
+      "meaning": "Wants a 2019 Napa Valley Cabernet Sauvignon under $120.",
+      "expected": {
+        "region": "Napa Valley",
+        "grape": "Cabernet Sauvignon",
+        "vintages": [
+          2019
+        ],
+        "priceMax": 120
+      }
+    },
+    {
+      "id": "sas-10",
+      "lens": "sommelier-at-service",
+      "query": "German Riesling, light and crisp, for the lean fish special",
+      "meaning": "Wants a light, crisp German Riesling to pair with the lean fish special.",
+      "expected": {
+        "country": "Germany",
+        "grape": "Riesling",
+        "body": "Light-bodied",
+        "pairing": [
+          "Lean Fish"
+        ]
+      }
+    },
+    {
+      "id": "sas-11",
+      "lens": "sommelier-at-service",
+      "query": "a blend from Priorat, over $80",
+      "meaning": "Wants a blended wine from Priorat priced above $80.",
+      "expected": {
+        "region": "Priorat",
+        "blend": true,
+        "priceMin": 80
+      }
+    },
+    {
+      "id": "sas-12",
+      "lens": "sommelier-at-service",
+      "query": "Tuscan red for the mushroom risotto",
+      "meaning": "Wants a Tuscan red to pair with a mushroom risotto dish.",
+      "expected": {
+        "region": "Tuscany",
+        "type": "Red",
+        "pairing": [
+          "Mushrooms",
+          "Pasta"
+        ]
+      }
+    },
+    {
+      "id": "sas-13",
+      "lens": "sommelier-at-service",
+      "query": "Marlborough Sauvignon Blanc, $25-45",
+      "meaning": "Wants a Marlborough Sauvignon Blanc priced between $25 and $45.",
+      "expected": {
+        "region": "Marlborough",
+        "grape": "Sauvignon Blanc",
+        "priceMin": 25,
+        "priceMax": 45
+      }
+    },
+    {
+      "id": "sas-14",
+      "lens": "sommelier-at-service",
+      "query": "a 2015 Bordeaux for the cheese board",
+      "meaning": "Wants a 2015 Bordeaux to pair with a cheese board.",
+      "expected": {
+        "region": "Bordeaux",
+        "vintages": [
+          2015
+        ],
+        "pairing": [
+          "Soft Cheese",
+          "Hard Cheese",
+          "Maturated Cheese"
+        ]
+      }
+    },
+    {
+      "id": "sas-15",
+      "lens": "sommelier-at-service",
+      "query": "Australian Shiraz, full bodied, under $55",
+      "meaning": "Wants a full-bodied Australian Shiraz under $55.",
+      "expected": {
+        "country": "Australia",
+        "grape": "Shiraz",
+        "body": "Full-bodied",
+        "priceMax": 55
+      }
+    },
+    {
+      "id": "sas-16",
+      "lens": "sommelier-at-service",
+      "query": "something zippy and food-friendly, nothing too pricey",
+      "meaning": "Wants a lively, versatile wine that isn't expensive, but uses no phrasing the parser recognizes.",
+      "expected": {
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "sas-17",
+      "lens": "sommelier-at-service",
+      "query": "table nine just got engaged — bring out something special",
+      "meaning": "Staff wants a celebratory recommendation for an engagement at table nine.",
+      "expected": {
+        "unanswerable": "occasion"
+      }
+    },
+    {
+      "id": "sas-18",
+      "lens": "sommelier-at-service",
+      "query": "what would pair better with the lamb than that Malbec they didn't love",
+      "meaning": "Wants a better lamb pairing than a specific Malbec the table disliked.",
+      "expected": {
+        "unanswerable": "comparative",
+        "pairing": [
+          "Lamb"
+        ],
+        "negated": [
+          "grape: Malbec"
+        ]
+      },
+      "knownWrong": "assistant-lexicon.ts's isNegated() only looks BACKWARD from a facet for a preceding negation word (\"not X\", \"anything but X\"). Here the negation is POSTPOSED and refers back across a relative clause (\"...that Malbec they didn't love\") -- \"didn't\" sits several content words after \"Malbec\", outside any backward lookback window, so grape:\"Malbec\" is asserted despite being the wine the guest just rejected. This is a different, harder negation shape (comparative sentiment about a previously-named wine, not a preceding refusal) and the case is annotated unanswerable:comparative for the same reason -- fixing it needs real clause-level parsing, not a lexicon addition. Deferred rather than patched around."
+    },
+    {
+      "id": "sas-19",
+      "lens": "sommelier-at-service",
+      "query": "nothing too expensive, no reds tonight please",
+      "meaning": "Wants an inexpensive wine that is not red, but the price cap is phrased too vaguely to read.",
+      "expected": {
+        "unanswerable": "paraphrase-only",
+        "negated": [
+          "type: Red"
+        ]
+      }
+    },
+    {
+      "id": "sas-20",
+      "lens": "sommelier-at-service",
+      "query": "an easy sipper that won't scare off the in-laws",
+      "meaning": "Wants a light, approachable, crowd-pleasing wine, phrased with no matching lexicon terms.",
+      "expected": {
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "sas-21",
+      "lens": "sommelier-at-service",
+      "query": "under 60 bucks, nothing weird",
+      "meaning": "Wants something conventional under $60, but the price has no dollar sign so it isn't read as a price.",
+      "expected": {
+        "unanswerable": "paraphrase-only",
+        "priceMax": 60
+      }
+    },
+    {
+      "id": "sas-22",
+      "lens": "sommelier-at-service",
+      "query": "big juicy red, similar vibe to a Napa Cab but cheaper",
+      "meaning": "Wants a bold red similar in style to a Napa Cabernet but less expensive.",
+      "expected": {
+        "unanswerable": "comparative",
+        "type": "Red",
+        "body": "Full-bodied"
+      }
+    },
+    {
+      "id": "sas-23",
+      "lens": "sommelier-at-service",
+      "query": "a wine that'll impress my mother-in-law without breaking the bank",
+      "meaning": "Wants an impressive-seeming but affordable wine for a family occasion, with no concrete facets stated.",
+      "expected": {
+        "unanswerable": "open-question"
+      }
+    },
+    {
+      "id": "sas-24",
+      "lens": "sommelier-at-service",
+      "query": "smooth, food-friendly red for the pasta, not a Chianti",
+      "meaning": "Wants a smooth red to pair with pasta that isn't Chianti, but Chianti isn't in the region vocabulary so the exclusion can't be recorded.",
+      "expected": {
+        "unanswerable": "paraphrase-only",
+        "type": "Red",
+        "pairing": [
+          "Pasta"
+        ]
+      }
+    },
+    {
+      "id": "sas-25",
+      "lens": "sommelier-at-service",
+      "query": "is the Sassicaia better than the Ornellaia for pairing with wagyu",
+      "meaning": "Wants a comparison between two named Super Tuscan wines for a wagyu pairing.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "sas-26",
+      "lens": "sommelier-at-service",
+      "query": "what's the crowd-pleaser tonight",
+      "meaning": "Wants a staff recommendation for what's generally popular this evening, with no concrete facet.",
+      "expected": {
+        "unanswerable": "open-question"
+      }
+    },
+    {
+      "id": "sas-27",
+      "lens": "sommelier-at-service",
+      "query": "nothing from Chardonnay, and keep it under a hundred",
+      "meaning": "Wants anything but Chardonnay priced under $100, with the price spelled out rather than given as a dollar figure.",
+      "expected": {
+        "unanswerable": "paraphrase-only",
+        "negated": [
+          "grape: Chardonnay"
+        ],
+        "priceMax": 100
+      }
+    },
+    {
+      "id": "sas-28",
+      "lens": "sommelier-at-service",
+      "query": "nice glass of something bold but not jammy",
+      "meaning": "Wants a full-bodied wine that isn't jammy-tasting, a descriptor outside the lexicon.",
+      "expected": {
+        "unanswerable": "paraphrase-only",
+        "body": "Full-bodied"
+      }
+    },
+    {
+      "id": "sas-29",
+      "lens": "sommelier-at-service",
+      "query": "somewhere between a Cab and a Zin, not too tannic",
+      "meaning": "Wants a wine stylistically between two named grapes with softer tannins, requiring comparison rather than a direct filter.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "sas-30",
+      "lens": "sommelier-at-service",
+      "query": "the couple at four wants whatever you'd pour for your own anniversary",
+      "meaning": "Wants a personal, occasion-driven recommendation for an anniversary with no stated facets.",
+      "expected": {
+        "unanswerable": "occasion"
+      }
+    },
+    {
+      "id": "gat-01",
+      "lens": "guest-at-table",
+      "query": "a Rioja, please",
+      "meaning": "Guest wants a wine from the Rioja region.",
+      "expected": {
+        "region": "Rioja"
+      }
+    },
+    {
+      "id": "gat-02",
+      "lens": "guest-at-table",
+      "query": "Italian red under $40",
+      "meaning": "Guest wants a red wine from Italy priced under $40.",
+      "expected": {
+        "country": "Italy",
+        "type": "Red",
+        "priceMax": 40
+      }
+    },
+    {
+      "id": "gat-03",
+      "lens": "guest-at-table",
+      "query": "something bubbly for the toast",
+      "meaning": "Guest wants a sparkling wine for a celebratory toast.",
+      "expected": {
+        "type": "Sparkling"
+      }
+    },
+    {
+      "id": "gat-04",
+      "lens": "guest-at-table",
+      "query": "Malbec from Argentina",
+      "meaning": "Guest wants an Argentine Malbec.",
+      "expected": {
+        "grape": "Malbec",
+        "country": "Argentina"
+      }
+    },
+    {
+      "id": "gat-05",
+      "lens": "guest-at-table",
+      "query": "full-bodied red to go with steak",
+      "meaning": "Guest wants a full-bodied red to pair with steak.",
+      "expected": {
+        "body": "Full-bodied",
+        "type": "Red",
+        "pairing": [
+          "Beef"
+        ]
+      }
+    },
+    {
+      "id": "gat-06",
+      "lens": "guest-at-table",
+      "query": "Chardonnay somewhere between $20 and $35",
+      "meaning": "Guest wants a Chardonnay priced between $20 and $35.",
+      "expected": {
+        "grape": "Chardonnay",
+        "priceMin": 20,
+        "priceMax": 35
+      }
+    },
+    {
+      "id": "gat-07",
+      "lens": "guest-at-table",
+      "query": "a nice rosé under $25 for the porch",
+      "meaning": "Guest wants an inexpensive rosé for casual porch drinking.",
+      "expected": {
+        "type": "Rosé",
+        "priceMax": 25
+      }
+    },
+    {
+      "id": "gat-08",
+      "lens": "guest-at-table",
+      "query": "New Zealand Sauvignon Blanc, chilled and ready",
+      "meaning": "Guest wants a New Zealand Sauvignon Blanc.",
+      "expected": {
+        "country": "New Zealand",
+        "grape": "Sauvignon Blanc"
+      }
+    },
+    {
+      "id": "gat-09",
+      "lens": "guest-at-table",
+      "query": "red blend from Napa Valley",
+      "meaning": "Guest wants a red blend from the Napa Valley region.",
+      "expected": {
+        "blend": true,
+        "region": "Napa Valley"
+      }
+    },
+    {
+      "id": "gat-10",
+      "lens": "guest-at-table",
+      "query": "do you have anything for a cheese board",
+      "meaning": "Guest wants a wine to pair with a cheese board.",
+      "expected": {
+        "pairing": [
+          "Soft Cheese",
+          "Hard Cheese",
+          "Maturated Cheese"
+        ]
+      }
+    },
+    {
+      "id": "gat-11",
+      "lens": "guest-at-table",
+      "query": "Spanish white over $50, something serious",
+      "meaning": "Guest wants a premium Spanish white wine over $50.",
+      "expected": {
+        "country": "Spain",
+        "type": "White",
+        "priceMin": 50
+      }
+    },
+    {
+      "id": "gat-12",
+      "lens": "guest-at-table",
+      "query": "2018 Malbec if you have one",
+      "meaning": "Guest wants a 2018 vintage Malbec.",
+      "expected": {
+        "vintages": [
+          2018
+        ],
+        "grape": "Malbec"
+      }
+    },
+    {
+      "id": "gat-13",
+      "lens": "guest-at-table",
+      "query": "light, crisp white for out on the patio",
+      "meaning": "Guest wants a light, crisp white wine for casual outdoor drinking.",
+      "expected": {
+        "body": "Light-bodied",
+        "type": "White"
+      }
+    },
+    {
+      "id": "gat-14",
+      "lens": "guest-at-table",
+      "query": "a port for after dinner",
+      "meaning": "Guest wants a port-style fortified wine to finish the meal.",
+      "expected": {
+        "type": "Fortified"
+      }
+    },
+    {
+      "id": "gat-15",
+      "lens": "guest-at-table",
+      "query": "Pinot Noir that works with duck",
+      "meaning": "Guest wants a Pinot Noir to pair with duck.",
+      "expected": {
+        "grape": "Pinot Noir",
+        "pairing": [
+          "Poultry"
+        ]
+      }
+    },
+    {
+      "id": "gat-16",
+      "lens": "guest-at-table",
+      "query": "something zippy and refreshing",
+      "meaning": "Guest wants a lively, bright, easy-to-drink wine, described in casual slang.",
+      "expected": {
+        "body": "Light-bodied",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "gat-17",
+      "lens": "guest-at-table",
+      "query": "easy to drink, nothing too serious",
+      "meaning": "Guest wants a light, approachable, uncomplicated wine.",
+      "expected": {
+        "body": "Light-bodied",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "gat-18",
+      "lens": "guest-at-table",
+      "query": "we're celebrating our anniversary tonight, what should we get",
+      "meaning": "Guest wants a recommendation suited to an anniversary celebration.",
+      "expected": {
+        "unanswerable": "occasion"
+      }
+    },
+    {
+      "id": "gat-19",
+      "lens": "guest-at-table",
+      "query": "I'd like something like the Opus One we had before",
+      "meaning": "Guest wants a wine similar in style to Opus One, a wine they've had previously.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "gat-20",
+      "lens": "guest-at-table",
+      "query": "anything nicer than a basic house red",
+      "meaning": "Guest wants a step up in quality from an ordinary house red, a relative comparison.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "gat-21",
+      "lens": "guest-at-table",
+      "query": "surprise me with something special for date night",
+      "meaning": "Guest wants the staff to pick something impressive for a date, without stating any concrete criteria.",
+      "expected": {
+        "unanswerable": "open-question"
+      }
+    },
+    {
+      "id": "gat-22",
+      "lens": "guest-at-table",
+      "query": "budget's about 60 for two of us sharing",
+      "meaning": "Guest wants a wine priced around $60 to share, stated without a dollar sign.",
+      "expected": {
+        "priceMax": 60,
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "gat-23",
+      "lens": "guest-at-table",
+      "query": "no Chardonnay please, I'm just not a fan of it",
+      "meaning": "Guest wants recommendations that exclude Chardonnay.",
+      "expected": {
+        "negated": [
+          "grape: Chardonnay"
+        ]
+      }
+    },
+    {
+      "id": "gat-24",
+      "lens": "guest-at-table",
+      "query": "bold but not too expensive, nothing fancy",
+      "meaning": "Guest wants a full-bodied wine at a modest, unspecified price point.",
+      "expected": {
+        "body": "Full-bodied",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "gat-25",
+      "lens": "guest-at-table",
+      "query": "something that'll go with basically anything we order",
+      "meaning": "Guest wants a versatile food-pairing wine without naming any specific dish.",
+      "expected": {
+        "unanswerable": "open-question"
+      }
+    },
+    {
+      "id": "gat-26",
+      "lens": "guest-at-table",
+      "query": "best bottle you've got for a first date",
+      "meaning": "Guest wants a top recommendation suited to a first-date occasion.",
+      "expected": {
+        "unanswerable": "occasion"
+      }
+    },
+    {
+      "id": "gat-27",
+      "lens": "guest-at-table",
+      "query": "smoother than the Malbec we had last time",
+      "meaning": "Guest wants something mellower than a Malbec they previously drank, a relative comparison.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "gat-28",
+      "lens": "guest-at-table",
+      "query": "big, food-friendly red, nothing shy",
+      "meaning": "Guest wants a bold, versatile red wine that pairs well generally.",
+      "expected": {
+        "body": "Full-bodied",
+        "type": "Red",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "gat-29",
+      "lens": "guest-at-table",
+      "query": "what's good tonight that isn't too sweet",
+      "meaning": "Guest wants a recommendation while excluding sweet/dessert-style wines.",
+      "expected": {
+        "negated": [
+          "type: Dessert"
+        ]
+      }
+    },
+    {
+      "id": "gat-30",
+      "lens": "guest-at-table",
+      "query": "Portuguese red, $15 to $30, nothing fussy",
+      "meaning": "Guest wants an unpretentious Portuguese red priced between $15 and $30.",
+      "expected": {
+        "country": "Portugal",
+        "type": "Red",
+        "priceMin": 15,
+        "priceMax": 30
+      }
+    },
+    {
+      "id": "bym-01",
+      "lens": "buyer-manager",
+      "query": "Argentine Malbec restock",
+      "meaning": "The manager wants to check remaining stock of Argentine Malbec to decide whether to reorder.",
+      "expected": {
+        "country": "Argentina",
+        "grape": "Malbec"
+      }
+    },
+    {
+      "id": "bym-02",
+      "lens": "buyer-manager",
+      "query": "reds under $40 by the glass",
+      "meaning": "Looking for red wines priced below $40 suitable for the by-the-glass program.",
+      "expected": {
+        "type": "Red",
+        "priceMax": 40
+      }
+    },
+    {
+      "id": "bym-03",
+      "lens": "buyer-manager",
+      "query": "New Zealand Sauvignon Blanc between $20 and $35",
+      "meaning": "Wants New Zealand Sauvignon Blanc bottles within a mid-range price band.",
+      "expected": {
+        "country": "New Zealand",
+        "grape": "Sauvignon Blanc",
+        "priceMin": 20,
+        "priceMax": 35
+      }
+    },
+    {
+      "id": "bym-04",
+      "lens": "buyer-manager",
+      "query": "sparkling over $100 for the toast",
+      "meaning": "Needs a higher-end sparkling wine to pour for a celebratory toast.",
+      "expected": {
+        "type": "Sparkling",
+        "priceMin": 100
+      }
+    },
+    {
+      "id": "bym-05",
+      "lens": "buyer-manager",
+      "query": "Rioja reds",
+      "meaning": "Quick check of Rioja red wines on hand.",
+      "expected": {
+        "region": "Rioja",
+        "type": "Red"
+      }
+    },
+    {
+      "id": "bym-06",
+      "lens": "buyer-manager",
+      "query": "German Riesling for the shellfish tower",
+      "meaning": "Wants a German Riesling to pair with a shellfish tower on the menu.",
+      "expected": {
+        "country": "Germany",
+        "grape": "Riesling",
+        "pairing": [
+          "Shellfish"
+        ]
+      }
+    },
+    {
+      "id": "bym-07",
+      "lens": "buyer-manager",
+      "query": "full-bodied reds to pour with tonight's steak special",
+      "meaning": "Wants a full-bodied red suited to the evening's steak special.",
+      "expected": {
+        "type": "Red",
+        "body": "Full-bodied",
+        "pairing": [
+          "Beef"
+        ]
+      }
+    },
+    {
+      "id": "bym-08",
+      "lens": "buyer-manager",
+      "query": "Chilean Cabernet Sauvignon under $25",
+      "meaning": "Wants an affordable Chilean Cabernet Sauvignon, likely for a value pour.",
+      "expected": {
+        "country": "Chile",
+        "grape": "Cabernet Sauvignon",
+        "priceMax": 25
+      }
+    },
+    {
+      "id": "bym-09",
+      "lens": "buyer-manager",
+      "query": "Provence rosé for lunch service",
+      "meaning": "Wants a Provence rosé suitable for daytime lunch service.",
+      "expected": {
+        "region": "Provence",
+        "type": "Rosé"
+      }
+    },
+    {
+      "id": "bym-10",
+      "lens": "buyer-manager",
+      "query": "do we still have the 2018 Napa Cabernet",
+      "meaning": "Checking whether a specific 2018 Napa Cabernet is still in the cellar.",
+      "expected": {
+        "vintages": [
+          2018
+        ],
+        "region": "Napa Valley",
+        "grape": "Cabernet Sauvignon"
+      }
+    },
+    {
+      "id": "bym-11",
+      "lens": "buyer-manager",
+      "query": "Barossa Shiraz restock check",
+      "meaning": "Checking whether Barossa Valley Shiraz needs reordering.",
+      "expected": {
+        "region": "Barossa Valley",
+        "grape": "Shiraz"
+      }
+    },
+    {
+      "id": "bym-12",
+      "lens": "buyer-manager",
+      "query": "Portuguese reds that pair with lamb",
+      "meaning": "Wants Portuguese red wines suited to a lamb dish.",
+      "expected": {
+        "country": "Portugal",
+        "type": "Red",
+        "pairing": [
+          "Lamb"
+        ]
+      }
+    },
+    {
+      "id": "bym-13",
+      "lens": "buyer-manager",
+      "query": "Mendoza blend under $50",
+      "meaning": "Wants a red blend from Mendoza priced under $50.",
+      "expected": {
+        "region": "Mendoza",
+        "blend": true,
+        "priceMax": 50
+      }
+    },
+    {
+      "id": "bym-14",
+      "lens": "buyer-manager",
+      "query": "Austrian whites $15 to $25",
+      "meaning": "Wants Austrian white wines within a set price range.",
+      "expected": {
+        "country": "Austria",
+        "type": "White",
+        "priceMin": 15,
+        "priceMax": 25
+      }
+    },
+    {
+      "id": "bym-15",
+      "lens": "buyer-manager",
+      "query": "Sangiovese from Tuscany under $18 a glass",
+      "meaning": "Wants an affordable Tuscan Sangiovese for the by-the-glass list.",
+      "expected": {
+        "region": "Tuscany",
+        "grape": "Sangiovese",
+        "priceMax": 18
+      }
+    },
+    {
+      "id": "bym-16",
+      "lens": "buyer-manager",
+      "query": "something food-friendly and easy drinking for the bar menu",
+      "meaning": "Wants a versatile, lighter wine that pairs well broadly for the bar menu.",
+      "expected": {
+        "body": "Light-bodied",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "bym-17",
+      "lens": "buyer-manager",
+      "query": "smooth reds for the by-the-glass list",
+      "meaning": "Wants approachable, mellow-tasting reds for the glass pour list.",
+      "expected": {
+        "type": "Red",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "bym-18",
+      "lens": "buyer-manager",
+      "query": "juicy, crowd-pleasing Malbec for the by-the-glass",
+      "meaning": "Wants a fruit-forward, widely likable Malbec for glass pours.",
+      "expected": {
+        "grape": "Malbec",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "bym-19",
+      "lens": "buyer-manager",
+      "query": "punchy Chilean reds that won't scare the table",
+      "meaning": "Wants bold but approachable Chilean reds that won't intimidate less adventurous guests.",
+      "expected": {
+        "country": "Chile",
+        "type": "Red",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "bym-20",
+      "lens": "buyer-manager",
+      "query": "silky Pinot Noir for the tasting menu",
+      "meaning": "Wants a smooth-textured Pinot Noir to pair with the tasting menu.",
+      "expected": {
+        "grape": "Pinot Noir",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "bym-21",
+      "lens": "buyer-manager",
+      "query": "well-balanced whites that won't blow the by-the-glass cost",
+      "meaning": "Wants harmonious white wines that also fit the glass-pour cost target.",
+      "expected": {
+        "type": "White",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "bym-22",
+      "lens": "buyer-manager",
+      "query": "a red that isn't Cabernet",
+      "meaning": "Wants a red wine while explicitly ruling out Cabernet Sauvignon.",
+      "expected": {
+        "type": "Red",
+        "negated": [
+          "grape: Cabernet Sauvignon"
+        ]
+      }
+    },
+    {
+      "id": "bym-23",
+      "lens": "buyer-manager",
+      "query": "no sparkling please, reds from Portugal under $30",
+      "meaning": "Rules out sparkling wine and wants Portuguese reds under $30 instead.",
+      "expected": {
+        "type": "Red",
+        "country": "Portugal",
+        "priceMax": 30,
+        "negated": [
+          "type: Sparkling"
+        ]
+      }
+    },
+    {
+      "id": "bym-24",
+      "lens": "buyer-manager",
+      "query": "under 60 for a Tuesday night red",
+      "meaning": "Wants a red wine priced under $60 for a slow weeknight.",
+      "expected": {
+        "type": "Red",
+        "priceMax": 60,
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "bym-25",
+      "lens": "buyer-manager",
+      "query": "reds under sixty a bottle for happy hour",
+      "meaning": "Wants reds priced under $60 a bottle for the happy hour list.",
+      "expected": {
+        "type": "Red",
+        "priceMax": 60,
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "bym-26",
+      "lens": "buyer-manager",
+      "query": "what should I open for a table celebrating a big promotion",
+      "meaning": "Wants a recommendation suited to a celebratory occasion, not a filterable attribute.",
+      "expected": {
+        "unanswerable": "occasion"
+      }
+    },
+    {
+      "id": "bym-27",
+      "lens": "buyer-manager",
+      "query": "I need something impressive to pour for a first date sitting at table 12",
+      "meaning": "Wants an impressive-feeling pour for a specific occasion, not a stated wine attribute.",
+      "expected": {
+        "unanswerable": "occasion"
+      }
+    },
+    {
+      "id": "bym-28",
+      "lens": "buyer-manager",
+      "query": "something like Whispering Angel but a little cheaper",
+      "meaning": "Wants a wine comparable in style to Whispering Angel rosé at a lower price.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "bym-29",
+      "lens": "buyer-manager",
+      "query": "what do we have that's similar to Opus One",
+      "meaning": "Wants wines comparable in style or stature to Opus One.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "bym-30",
+      "lens": "buyer-manager",
+      "query": "which whites are we sitting on too long",
+      "meaning": "Wants to identify white wines aging in inventory that should be sold down, a judgment call not expressible as a filter.",
+      "expected": {
+        "unanswerable": "open-question"
+      }
+    },
+    {
+      "id": "col-01",
+      "lens": "colloquial-typos",
+      "query": "malbec under $40",
+      "meaning": "Wants a Malbec priced at $40 or less.",
+      "expected": {
+        "grape": "Malbec",
+        "priceMax": 40
+      }
+    },
+    {
+      "id": "col-02",
+      "lens": "colloquial-typos",
+      "query": "big bold red frm argentina",
+      "meaning": "Wants a full-bodied red wine from Argentina.",
+      "expected": {
+        "type": "Red",
+        "body": "Full-bodied",
+        "country": "Argentina"
+      }
+    },
+    {
+      "id": "col-03",
+      "lens": "colloquial-typos",
+      "query": "bubbles under $50 pls",
+      "meaning": "Wants a sparkling wine priced at $50 or less.",
+      "expected": {
+        "type": "Sparkling",
+        "priceMax": 50
+      }
+    },
+    {
+      "id": "col-04",
+      "lens": "colloquial-typos",
+      "query": "rioja under $25",
+      "meaning": "Wants a wine from Rioja priced at $25 or less.",
+      "expected": {
+        "region": "Rioja",
+        "priceMax": 25
+      }
+    },
+    {
+      "id": "col-05",
+      "lens": "colloquial-typos",
+      "query": "napa red for steak nite",
+      "meaning": "Wants a red wine from Napa Valley to pair with steak.",
+      "expected": {
+        "region": "Napa Valley",
+        "type": "Red",
+        "pairing": [
+          "Beef"
+        ]
+      }
+    },
+    {
+      "id": "col-06",
+      "lens": "colloquial-typos",
+      "query": "chilean sauv blanc",
+      "meaning": "Wants a Sauvignon Blanc from Chile, using the abbreviation 'sauv blanc'.",
+      "expected": {
+        "country": "Chile",
+        "grape": "Sauvignon Blanc",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "col-07",
+      "lens": "colloquial-typos",
+      "query": "german riesling please",
+      "meaning": "Wants a Riesling from Germany.",
+      "expected": {
+        "country": "Germany",
+        "grape": "Riesling"
+      }
+    },
+    {
+      "id": "col-08",
+      "lens": "colloquial-typos",
+      "query": "rose from provence",
+      "meaning": "Wants a rosé wine from Provence.",
+      "expected": {
+        "type": "Rosé",
+        "region": "Provence"
+      }
+    },
+    {
+      "id": "col-09",
+      "lens": "colloquial-typos",
+      "query": "pinot noir from oregon under $45",
+      "meaning": "Wants a Pinot Noir from Oregon priced at $45 or less.",
+      "expected": {
+        "grape": "Pinot Noir",
+        "region": "Oregon",
+        "priceMax": 45
+      }
+    },
+    {
+      "id": "col-10",
+      "lens": "colloquial-typos",
+      "query": "spanish red under $20 for cured meats",
+      "meaning": "Wants a red wine from Spain under $20 to pair with cured meats.",
+      "expected": {
+        "country": "Spain",
+        "type": "Red",
+        "priceMax": 20,
+        "pairing": [
+          "Cured Meat"
+        ]
+      }
+    },
+    {
+      "id": "col-11",
+      "lens": "colloquial-typos",
+      "query": "champagne $200-400",
+      "meaning": "Wants a Champagne priced between $200 and $400.",
+      "expected": {
+        "type": "Sparkling",
+        "priceMin": 200,
+        "priceMax": 400
+      }
+    },
+    {
+      "id": "col-12",
+      "lens": "colloquial-typos",
+      "query": "an easy drinkin red, nothin too full bodied",
+      "meaning": "Wants a light, easy-drinking red and explicitly does not want anything full-bodied.",
+      "expected": {
+        "type": "Red",
+        "body": "Light-bodied",
+        "negated": [
+          "body: Full-bodied"
+        ]
+      }
+    },
+    {
+      "id": "col-13",
+      "lens": "colloquial-typos",
+      "query": "a white but nothin from california",
+      "meaning": "Wants a white wine and explicitly rules out California.",
+      "expected": {
+        "type": "White",
+        "negated": [
+          "region: California"
+        ]
+      }
+    },
+    {
+      "id": "col-14",
+      "lens": "colloquial-typos",
+      "query": "spicy food wine, not shiraz tho",
+      "meaning": "Wants a wine to pair with spicy food but explicitly not Shiraz.",
+      "expected": {
+        "pairing": [
+          "Spicy Food"
+        ],
+        "negated": [
+          "grape: Shiraz"
+        ]
+      }
+    },
+    {
+      "id": "col-15",
+      "lens": "colloquial-typos",
+      "query": "watcha got that pairs w beef wellington",
+      "meaning": "Wants a wine recommendation to pair with beef wellington.",
+      "expected": {
+        "pairing": [
+          "Beef"
+        ]
+      }
+    },
+    {
+      "id": "col-16",
+      "lens": "colloquial-typos",
+      "query": "tuscany red for pasta nite",
+      "meaning": "Wants a red wine from Tuscany to go with pasta.",
+      "expected": {
+        "region": "Tuscany",
+        "type": "Red",
+        "pairing": [
+          "Pasta"
+        ]
+      }
+    },
+    {
+      "id": "col-17",
+      "lens": "colloquial-typos",
+      "query": "malbec, mendoza, under 30 pls",
+      "meaning": "Wants a Malbec from Mendoza priced at $30 or less.",
+      "expected": {
+        "grape": "Malbec",
+        "region": "Mendoza",
+        "priceMax": 30
+      }
+    },
+    {
+      "id": "col-18",
+      "lens": "colloquial-typos",
+      "query": "shellfish wine under a hundred bucks",
+      "meaning": "Wants a wine to pair with shellfish, budget around $100, phrased without a dollar sign.",
+      "expected": {
+        "pairing": [
+          "Shellfish"
+        ],
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "col-19",
+      "lens": "colloquial-typos",
+      "query": "somethin zippy n refreshing for apps",
+      "meaning": "Wants a light, refreshing wine to serve with appetizers, using slang for both the style and the food.",
+      "expected": {
+        "body": "Light-bodied",
+        "pairing": [
+          "Appetizer"
+        ],
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "col-20",
+      "lens": "colloquial-typos",
+      "query": "big fruity crowd pleaser under a hundred",
+      "meaning": "Wants a full-bodied, crowd-pleasing wine around $100, with the price phrased informally.",
+      "expected": {
+        "body": "Full-bodied",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "col-21",
+      "lens": "colloquial-typos",
+      "query": "kiwi sauv blanc, crisp",
+      "meaning": "Wants a crisp Sauvignon Blanc from New Zealand, using the slang demonym 'kiwi'.",
+      "expected": {
+        "country": "New Zealand",
+        "grape": "Sauvignon Blanc",
+        "body": "Light-bodied",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "col-22",
+      "lens": "colloquial-typos",
+      "query": "aussie shiraz, big n bold",
+      "meaning": "Wants a big, bold Shiraz from Australia, using the slang demonym 'aussie'.",
+      "expected": {
+        "country": "Australia",
+        "grape": "Shiraz",
+        "body": "Full-bodied",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "col-23",
+      "lens": "colloquial-typos",
+      "query": "champers under 60 bucks",
+      "meaning": "Wants a sparkling wine under about $60, using slang for champagne and no dollar sign for the price.",
+      "expected": {
+        "type": "Sparkling",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "col-24",
+      "lens": "colloquial-typos",
+      "query": "somethin like a Meursault but cheaper",
+      "meaning": "Wants a wine similar in style to Meursault but less expensive.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "col-25",
+      "lens": "colloquial-typos",
+      "query": "anything similar to Opus One",
+      "meaning": "Wants a wine comparable in style to the famous Napa blend Opus One.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "col-26",
+      "lens": "colloquial-typos",
+      "query": "whats good for an anniversary dinner",
+      "meaning": "Wants a wine recommendation suited to an anniversary dinner occasion.",
+      "expected": {
+        "unanswerable": "occasion"
+      }
+    },
+    {
+      "id": "col-27",
+      "lens": "colloquial-typos",
+      "query": "need a bottle to impress my boss, price no object",
+      "meaning": "Wants an impressive bottle for a work occasion with no budget constraint stated as a filter.",
+      "expected": {
+        "unanswerable": "occasion"
+      }
+    },
+    {
+      "id": "col-28",
+      "lens": "colloquial-typos",
+      "query": "drier than the sancerre we had last time",
+      "meaning": "Wants a wine drier than a specific Sancerre the person remembers drinking previously.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "col-29",
+      "lens": "colloquial-typos",
+      "query": "whats the best wine you've got",
+      "meaning": "Asks generally for the best wine available, with no concrete facet named.",
+      "expected": {
+        "unanswerable": "open-question"
+      }
+    },
+    {
+      "id": "col-30",
+      "lens": "colloquial-typos",
+      "query": "somethin special, not sure what, surprise me",
+      "meaning": "Wants a special recommendation but gives no concrete criteria, leaving the choice open.",
+      "expected": {
+        "unanswerable": "open-question"
+      }
+    },
+    {
+      "id": "occ-01",
+      "lens": "occasion-comparative",
+      "query": "celebrating our anniversary — a bottle of Champagne",
+      "meaning": "They want a Champagne/sparkling bottle to mark their anniversary.",
+      "expected": {
+        "type": "Sparkling"
+      }
+    },
+    {
+      "id": "occ-02",
+      "lens": "occasion-comparative",
+      "query": "date night, a Malbec from Argentina",
+      "meaning": "Wants an Argentine Malbec for a date-night dinner.",
+      "expected": {
+        "grape": "Malbec",
+        "country": "Argentina"
+      }
+    },
+    {
+      "id": "occ-03",
+      "lens": "occasion-comparative",
+      "query": "hosting a dinner party, need a red under $30",
+      "meaning": "Wants a red wine priced under $30 for a dinner party.",
+      "expected": {
+        "type": "Red",
+        "priceMax": 30
+      }
+    },
+    {
+      "id": "occ-04",
+      "lens": "occasion-comparative",
+      "query": "weekend barbecue, something that pairs well with beef, under $40",
+      "meaning": "Wants a beef-pairing wine under $40 for a backyard barbecue.",
+      "expected": {
+        "pairing": [
+          "Beef"
+        ],
+        "priceMax": 40
+      }
+    },
+    {
+      "id": "occ-05",
+      "lens": "occasion-comparative",
+      "query": "birthday dinner, a full-bodied Cabernet Sauvignon from Napa Valley",
+      "meaning": "Wants a full-bodied Napa Valley Cabernet Sauvignon for a birthday dinner.",
+      "expected": {
+        "body": "Full-bodied",
+        "grape": "Cabernet Sauvignon",
+        "region": "Napa Valley"
+      }
+    },
+    {
+      "id": "occ-06",
+      "lens": "occasion-comparative",
+      "query": "Sunday roast with lamb, a red between $20 and $50",
+      "meaning": "Wants a red wine matched to lamb, priced $20-$50, for Sunday roast.",
+      "expected": {
+        "pairing": [
+          "Lamb"
+        ],
+        "type": "Red",
+        "priceMin": 20,
+        "priceMax": 50
+      }
+    },
+    {
+      "id": "occ-07",
+      "lens": "occasion-comparative",
+      "query": "engagement party, a Rosé from Provence France",
+      "meaning": "Wants a Provence, France rosé for an engagement party.",
+      "expected": {
+        "type": "Rosé",
+        "country": "France",
+        "region": "Provence"
+      }
+    },
+    {
+      "id": "occ-08",
+      "lens": "occasion-comparative",
+      "query": "quiet night in, light-bodied Pinot Noir under $25",
+      "meaning": "Wants a light-bodied Pinot Noir under $25 for a low-key night at home.",
+      "expected": {
+        "body": "Light-bodied",
+        "grape": "Pinot Noir",
+        "priceMax": 25
+      }
+    },
+    {
+      "id": "occ-09",
+      "lens": "occasion-comparative",
+      "query": "friends over for pasta night, an Italian red around $35",
+      "meaning": "Wants an Italian red around $35 to serve with pasta for friends.",
+      "expected": {
+        "pairing": [
+          "Pasta"
+        ],
+        "country": "Italy",
+        "type": "Red",
+        "priceMin": 28,
+        "priceMax": 42
+      },
+      "knownWrong": "assistant-query.ts's parsePrice() upper/lower detection (/\\b(over|above|...)\\b/) tests the regex against the WHOLE normalized query, not a window around the price figure. \"friends OVER for pasta night...around $35\" contains the literal word \"over\" as an ordinary preposition, unrelated to the price -- so the lone-figure case reads priceMin:35 (a floor) instead of banding 35 +/-20% into priceMin:28 / priceMax:42. A real, evidence-backed precision bug, but the fix (scoping the comparator check to the words near the matched amount, not the full string) touches every price pattern parsePrice handles and needs its own dedicated test pass -- not a minimal, contained change safe for this slice."
+    },
+    {
+      "id": "occ-10",
+      "lens": "occasion-comparative",
+      "query": "wrapping up with dessert, something sweet for chocolate cake",
+      "meaning": "Wants a dessert-pairing wine to go with chocolate cake at the end of the meal.",
+      "expected": {
+        "pairing": [
+          "Sweet Dessert"
+        ]
+      }
+    },
+    {
+      "id": "occ-11",
+      "lens": "occasion-comparative",
+      "query": "tonight's pick?",
+      "meaning": "Asking the assistant to just pick tonight's wine with no criteria given.",
+      "expected": {
+        "unanswerable": "open-question"
+      }
+    },
+    {
+      "id": "occ-12",
+      "lens": "occasion-comparative",
+      "query": "our usual, please",
+      "meaning": "Asking for whatever wine they habitually order, without naming it.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "occ-13",
+      "lens": "occasion-comparative",
+      "query": "what should I open tonight?",
+      "meaning": "Open-ended request for a recommendation for tonight with no stated criteria.",
+      "expected": {
+        "unanswerable": "open-question"
+      }
+    },
+    {
+      "id": "occ-14",
+      "lens": "occasion-comparative",
+      "query": "same as last time please",
+      "meaning": "Wants the same bottle as a previous, unspecified visit.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "occ-15",
+      "lens": "occasion-comparative",
+      "query": "something like Opus One but a bit cheaper",
+      "meaning": "Wants a wine similar in style to Opus One but less expensive.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "occ-16",
+      "lens": "occasion-comparative",
+      "query": "we just got engaged, bring us something really special",
+      "meaning": "Newly engaged couple wants a standout bottle to celebrate, no concrete criteria given.",
+      "expected": {
+        "unanswerable": "occasion"
+      }
+    },
+    {
+      "id": "occ-17",
+      "lens": "occasion-comparative",
+      "query": "it's her birthday, pick something she'll absolutely love",
+      "meaning": "Wants a birthday bottle chosen for someone else's taste, with no stated facets.",
+      "expected": {
+        "unanswerable": "occasion"
+      }
+    },
+    {
+      "id": "occ-18",
+      "lens": "occasion-comparative",
+      "query": "give me the opposite of last night's big red",
+      "meaning": "Wants a wine unlike a previous full-bodied red, referenced only by memory.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "occ-19",
+      "lens": "occasion-comparative",
+      "query": "anything but another Malbec, we had that already",
+      "meaning": "Rules out Malbec since they already had it, without stating a positive preference.",
+      "expected": {
+        "negated": [
+          "grape: Malbec"
+        ]
+      }
+    },
+    {
+      "id": "occ-20",
+      "lens": "occasion-comparative",
+      "query": "not sparkling tonight, we're not really celebrating",
+      "meaning": "Rules out sparkling wine for a low-key, non-celebratory evening.",
+      "expected": {
+        "negated": [
+          "type: Sparkling"
+        ]
+      }
+    },
+    {
+      "id": "occ-21",
+      "lens": "occasion-comparative",
+      "query": "zippy white to start the evening with appetizers",
+      "meaning": "Wants a bright, zesty white to open the meal with appetizers.",
+      "expected": {
+        "type": "White",
+        "pairing": [
+          "Appetizer"
+        ],
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "occ-22",
+      "lens": "occasion-comparative",
+      "query": "we want something food-friendly for the tasting menu tonight",
+      "meaning": "Wants a versatile wine to go with a multi-course tasting menu, with no named dish or type.",
+      "expected": {
+        "unanswerable": "open-question"
+      }
+    },
+    {
+      "id": "occ-23",
+      "lens": "occasion-comparative",
+      "query": "our usual bottle for game night, nothing too serious",
+      "meaning": "Wants their habitual casual game-night wine, referenced only by memory.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "occ-24",
+      "lens": "occasion-comparative",
+      "query": "the wine we had at Sarah's wedding, if you have it",
+      "meaning": "Wants a specific remembered wine from a past event, not identified by name or facet.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "occ-25",
+      "lens": "occasion-comparative",
+      "query": "toasting a promotion, bring out something punchy for the table",
+      "meaning": "Wants a bold, powerful-tasting wine to toast a work promotion.",
+      "expected": {
+        "body": "Full-bodied",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "occ-26",
+      "lens": "occasion-comparative",
+      "query": "we want a crowd-pleaser for the whole table tonight",
+      "meaning": "Wants a broadly likeable wine for a mixed group, with no stated type or price.",
+      "expected": {
+        "unanswerable": "open-question"
+      }
+    },
+    {
+      "id": "occ-27",
+      "lens": "occasion-comparative",
+      "query": "surprise us with something we haven't tried before",
+      "meaning": "Wants an unfamiliar recommendation with no criteria of any kind.",
+      "expected": {
+        "unanswerable": "open-question"
+      }
+    },
+    {
+      "id": "occ-28",
+      "lens": "occasion-comparative",
+      "query": "make it a smooth red, nothing too sharp, for movie night",
+      "meaning": "Wants a mellow, easy-drinking red for a casual movie night.",
+      "expected": {
+        "type": "Red",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "occ-29",
+      "lens": "occasion-comparative",
+      "query": "her go-to order, whatever we got her last time",
+      "meaning": "Wants to reorder someone's usual wine from a previous, unspecified visit.",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "occ-30",
+      "lens": "occasion-comparative",
+      "query": "same grape as the bottle we had in Tuscany last summer",
+      "meaning": "Wants a wine matching the grape variety of a remembered Tuscan bottle, without naming the grape.",
+      "expected": {
+        "region": "Tuscany",
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "mco-01",
+      "lens": "multi-constraint",
+      "query": "a red under 60 to go with the ribeye",
+      "meaning": "wants a red wine, priced below $60, that pairs with steak",
+      "expected": {
+        "type": "Red",
+        "priceMax": 60,
+        "pairing": [
+          "Beef"
+        ]
+      }
+    },
+    {
+      "id": "mco-02",
+      "lens": "multi-constraint",
+      "query": "something Italian around $50",
+      "meaning": "wants an Italian wine near a $50 price point",
+      "expected": {
+        "country": "Italy",
+        "priceMin": 40,
+        "priceMax": 60
+      }
+    },
+    {
+      "id": "mco-03",
+      "lens": "multi-constraint",
+      "query": "Rioja, not more than 40 bucks",
+      "meaning": "wants a wine from Rioja priced at or under $40",
+      "expected": {
+        "region": "Rioja",
+        "priceMax": 40
+      }
+    },
+    {
+      "id": "mco-04",
+      "lens": "multi-constraint",
+      "query": "full bodied Malbec from Mendoza for the lamb",
+      "meaning": "wants a full-bodied Malbec from Mendoza to pair with lamb",
+      "expected": {
+        "body": "Full-bodied",
+        "grape": "Malbec",
+        "region": "Mendoza",
+        "pairing": [
+          "Lamb"
+        ]
+      }
+    },
+    {
+      "id": "mco-05",
+      "lens": "multi-constraint",
+      "query": "crisp white for oysters, less than sixty",
+      "meaning": "wants a light/crisp white wine under $60 to pair with oysters",
+      "expected": {
+        "body": "Light-bodied",
+        "type": "White",
+        "pairing": [
+          "Shellfish"
+        ],
+        "priceMax": 60
+      }
+    },
+    {
+      "id": "mco-06",
+      "lens": "multi-constraint",
+      "query": "no chardonnay, something else white and light",
+      "meaning": "wants a white, light-bodied wine but explicitly not Chardonnay",
+      "expected": {
+        "type": "White",
+        "body": "Light-bodied",
+        "negated": [
+          "grape: Chardonnay"
+        ]
+      }
+    },
+    {
+      "id": "mco-07",
+      "lens": "multi-constraint",
+      "query": "a Burgundy Pinot Noir, 2018 to 2020, not too oaky",
+      "meaning": "wants a Pinot Noir from Burgundy from vintages 2018-2020 that isn't heavily oaked",
+      "expected": {
+        "region": "Burgundy",
+        "grape": "Pinot Noir",
+        "vintages": [
+          2018,
+          2019,
+          2020
+        ],
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "mco-08",
+      "lens": "multi-constraint",
+      "query": "sparkling for the toast, $200-400 total for the table",
+      "meaning": "wants sparkling wine and has a combined budget of $200-400 for multiple bottles for a toast",
+      "expected": {
+        "type": "Sparkling",
+        "priceMin": 200,
+        "priceMax": 400,
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "mco-09",
+      "lens": "multi-constraint",
+      "query": "something big and bold, doesn't need to be fancy",
+      "meaning": "wants a full-bodied, powerful wine but isn't looking for anything prestigious or expensive",
+      "expected": {
+        "body": "Full-bodied",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "mco-10",
+      "lens": "multi-constraint",
+      "query": "nothing sweet, we're doing the cheese course",
+      "meaning": "wants a wine that is not sweet/dessert-style to pair with a cheese course",
+      "expected": {
+        "pairing": [
+          "Soft Cheese",
+          "Hard Cheese",
+          "Maturated Cheese"
+        ],
+        "negated": [
+          "type: Dessert"
+        ]
+      }
+    },
+    {
+      "id": "mco-11",
+      "lens": "multi-constraint",
+      "query": "German Riesling under $30",
+      "meaning": "wants a German Riesling priced under $30",
+      "expected": {
+        "country": "Germany",
+        "grape": "Riesling",
+        "priceMax": 30
+      }
+    },
+    {
+      "id": "mco-12",
+      "lens": "multi-constraint",
+      "query": "a New Zealand Sauvignon Blanc over $25 for the shellfish tower",
+      "meaning": "wants a New Zealand Sauvignon Blanc priced above $25 for shellfish",
+      "expected": {
+        "country": "New Zealand",
+        "grape": "Sauvignon Blanc",
+        "priceMin": 25,
+        "pairing": [
+          "Shellfish"
+        ]
+      }
+    },
+    {
+      "id": "mco-13",
+      "lens": "multi-constraint",
+      "query": "French red, food-friendly, medium body, not Bordeaux",
+      "meaning": "wants a versatile medium-bodied French red that's easy to pair with food, but not from Bordeaux specifically",
+      "expected": {
+        "country": "France",
+        "body": "Medium-bodied",
+        "unanswerable": "paraphrase-only",
+        "negated": [
+          "region: Bordeaux"
+        ]
+      }
+    },
+    {
+      "id": "mco-14",
+      "lens": "multi-constraint",
+      "query": "Chilean Cabernet, $15 to $25, for burgers",
+      "meaning": "wants a Chilean Cabernet Sauvignon priced $15-25 to pair with burgers",
+      "expected": {
+        "country": "Chile",
+        "grape": "Cabernet Sauvignon",
+        "priceMin": 15,
+        "priceMax": 25,
+        "pairing": [
+          "Beef"
+        ]
+      }
+    },
+    {
+      "id": "mco-15",
+      "lens": "multi-constraint",
+      "query": "give me something as good as Opus One but cheaper",
+      "meaning": "wants a wine comparable in style/quality to the famous Napa blend Opus One at a lower price",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "mco-16",
+      "lens": "multi-constraint",
+      "query": "zippy rosé for the porch, nothing over 30",
+      "meaning": "wants a bright, refreshing rosé priced at or under $30 for casual drinking",
+      "expected": {
+        "type": "Rosé",
+        "priceMax": 30,
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "mco-17",
+      "lens": "multi-constraint",
+      "query": "Austrian Grüner Veltliner, not too acidic, under $40",
+      "meaning": "wants an Austrian Grüner Veltliner that isn't overly acidic and is under $40",
+      "expected": {
+        "country": "Austria",
+        "grape": "Grüner Veltliner",
+        "priceMax": 40,
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "mco-18",
+      "lens": "multi-constraint",
+      "query": "a smooth easy drinking red for someone who doesn't usually like wine",
+      "meaning": "wants an approachable, low-tannin, easy-to-drink red suitable for a wine novice",
+      "expected": {
+        "type": "Red",
+        "body": "Light-bodied",
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "mco-19",
+      "lens": "multi-constraint",
+      "query": "blend from Priorat, over $100, big and rich",
+      "meaning": "wants a full-bodied blended red wine from Priorat priced above $100",
+      "expected": {
+        "region": "Priorat",
+        "blend": true,
+        "priceMin": 100,
+        "body": "Full-bodied"
+      }
+    },
+    {
+      "id": "mco-20",
+      "lens": "multi-constraint",
+      "query": "what would you pour for a fifth anniversary dinner",
+      "meaning": "asks for a special occasion recommendation for a fifth wedding anniversary",
+      "expected": {
+        "unanswerable": "occasion"
+      }
+    },
+    {
+      "id": "mco-21",
+      "lens": "multi-constraint",
+      "query": "Portuguese red from the Douro, vintage 2015, for game meat",
+      "meaning": "wants a red wine from the Douro region of Portugal from the 2015 vintage to pair with game meat",
+      "expected": {
+        "country": "Portugal",
+        "region": "Douro",
+        "type": "Red",
+        "vintages": [
+          2015
+        ],
+        "pairing": [
+          "Game Meat"
+        ]
+      }
+    },
+    {
+      "id": "mco-22",
+      "lens": "multi-constraint",
+      "query": "something special to celebrate a promotion, budget's not really a concern",
+      "meaning": "wants an impressive, high-end wine for a celebratory occasion with no price constraint",
+      "expected": {
+        "unanswerable": "occasion"
+      }
+    },
+    {
+      "id": "mco-23",
+      "lens": "multi-constraint",
+      "query": "Aussie Shiraz, full bodied, for the BBQ, under 50",
+      "meaning": "wants a full-bodied Australian Shiraz for barbecue, priced under $50",
+      "expected": {
+        "country": "Australia",
+        "grape": "Shiraz",
+        "body": "Full-bodied",
+        "pairing": [
+          "Barbecue"
+        ],
+        "priceMax": 50
+      }
+    },
+    {
+      "id": "mco-24",
+      "lens": "multi-constraint",
+      "query": "is the Sancerre more mineral than the Chablis",
+      "meaning": "asks the assistant to compare the minerality of two specific wines on the list",
+      "expected": {
+        "unanswerable": "comparative"
+      }
+    },
+    {
+      "id": "mco-25",
+      "lens": "multi-constraint",
+      "query": "a Tuscan red that isn't Sangiovese, around $70",
+      "meaning": "wants a red wine from Tuscany priced near $70 that is not made from Sangiovese",
+      "expected": {
+        "region": "Tuscany",
+        "type": "Red",
+        "priceMin": 56,
+        "priceMax": 84,
+        "negated": [
+          "grape: Sangiovese"
+        ]
+      }
+    },
+    {
+      "id": "mco-26",
+      "lens": "multi-constraint",
+      "query": "cheap Spanish white, 2 for under 40 combined",
+      "meaning": "wants two inexpensive Spanish white wines together costing under $40 total",
+      "expected": {
+        "country": "Spain",
+        "type": "White",
+        "priceMax": 40,
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "mco-27",
+      "lens": "multi-constraint",
+      "query": "dessert wine, chocolate pairing, small pour",
+      "meaning": "wants a dessert wine to pair with a chocolate dessert, served in a small tasting portion",
+      "expected": {
+        "type": "Dessert",
+        "pairing": [
+          "Sweet Dessert"
+        ],
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "mco-28",
+      "lens": "multi-constraint",
+      "query": "Loire Sauvignon Blanc, light, cheaper than 35",
+      "meaning": "wants a light-bodied Sauvignon Blanc from the Loire priced under $35",
+      "expected": {
+        "region": "Loire",
+        "grape": "Sauvignon Blanc",
+        "body": "Light-bodied",
+        "priceMax": 35
+      }
+    },
+    {
+      "id": "mco-29",
+      "lens": "multi-constraint",
+      "query": "a Chianti that pairs with mushrooms and isn't too expensive",
+      "meaning": "wants an affordable Chianti to pair with a mushroom dish",
+      "expected": {
+        "region": "Chianti",
+        "pairing": [
+          "Mushrooms"
+        ],
+        "unanswerable": "paraphrase-only"
+      }
+    },
+    {
+      "id": "mco-30",
+      "lens": "multi-constraint",
+      "query": "vegetarian tasting menu, light to medium bodied whites only, $30-60",
+      "meaning": "wants light-to-medium bodied white wines priced $30-60 to pair with a vegetarian tasting menu",
+      "expected": {
+        "type": "White",
+        "pairing": [
+          "Vegetarian"
+        ],
+        "priceMin": 30,
+        "priceMax": 60,
+        "unanswerable": "paraphrase-only"
+      }
+    }
+  ]
+}

@@ -378,3 +378,60 @@ describe("parseAssistantQuery — demonyms, plurals and spellings from the gazet
   });
 });
 
+// Three narrow gaps found while building the deterministic-miss-corpus
+// fixture (docs/plans/2026-09-01-tier-2-struct-compile-ops-spec.md §6
+// decision 4): a query per bug, taken straight from that corpus.
+describe("parseAssistantQuery — gaps found by the miss corpus", () => {
+  it("negates across 'anything but another X', not just 'anything but X'", () => {
+    // Was: grape "Malbec" affirmed. "another" sits between the negation
+    // phrase and its object and is not itself a negation or a facet, so it
+    // belongs with the other pass-through words in FILLER_WORDS — the same
+    // role "a"/"the" already play in "not a Merlot".
+    const q = parse("anything but another Malbec, we had that already");
+    expect(q.grape).toBeUndefined();
+  });
+
+  it("recognises 'nothing' and 'nothin' as negation, not just 'no'/'not'", () => {
+    // Was: grape "Chardonnay" affirmed — "nothing" was never in
+    // NEGATION_PHRASES at all, only "no" and "not" were.
+    expect(parse("nothing from Chardonnay, keep it under a hundred").grape).toBeUndefined();
+    // The colloquial, dropped-g spelling reaches the same NEGATION_PHRASES
+    // entry as "nothing" once normalize() has done its work.
+    expect(parse("an easy drinking red, nothin too full bodied").body).not.toBe("Full-bodied");
+  });
+
+  it("lets a negation reach through 'too', an intensifier with no facet of its own", () => {
+    // Was: type "Dessert" affirmed for a question that ruled sweetness OUT.
+    // "too" sat between "isn't" and "sweet" and, not being a filler word,
+    // blocked the negation walk one step short of its target.
+    const q = parse("what's good tonight that isn't too sweet");
+    expect(q.type).toBeUndefined();
+  });
+
+  it("does not read a $100 price as the '100% single varietal' idiom", () => {
+    // Was: blend false (single varietal) for a $100 PRICE, because
+    // normalize() strips the "%" that distinguishes "100% Malbec" from
+    // "$100" before the digits are ever compared — leaving a bare "100"
+    // that SINGLE_VARIETAL_PHRASES matched unconditionally, before the
+    // "blend from Priorat" a few words later in the same question was even
+    // considered.
+    const q = parse("a blend from Priorat, over $100, big and rich");
+    expect(q.blend).toBe(true);
+    expect(q.priceMin).toBe(100);
+  });
+
+  it("still reads the '100% Malbec' idiom off the raw text", () => {
+    expect(parse("something 100% Malbec").blend).toBe(false);
+    expect(parse("a wine that's 100 % Cabernet").blend).toBe(false);
+  });
+
+  it("matches a plural 'cured meats' the way it already matches the singular", () => {
+    // Was: pairing fell through to the generic "meats" catch-all (Beef,
+    // Lamb, Pork, Game Meat, Veal) instead of the specific Cured Meat value
+    // — technically not false (cured meat is a meat), but not what was
+    // asked for either, because the phrase list only had the singular.
+    const q = parse("a red for cured meats");
+    expect(q.pairing).toContain("Cured Meat");
+  });
+});
+

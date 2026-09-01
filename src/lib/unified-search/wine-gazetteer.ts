@@ -132,7 +132,7 @@ export const FILLER_TERMS: ReadonlySet<string> = new Set([
   "a", "an", "the", "and", "or", "of", "from", "in", "with", "for", "to",
   "some", "any", "me", "my", "our", "please", "show", "find", "looking",
   "want", "need", "wine", "wines", "bottle", "bottles", "something",
-  "anything", "that", "which", "is", "are", "like", "good", "nice",
+  "anything", "that", "which", "is", "are", "like", "good", "nice", "too",
 ]);
 
 export type GazetteerEntry = {
@@ -166,6 +166,18 @@ export function foldTerm(raw: string): string {
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .toLocaleLowerCase()
+    // Strip punctuation a token is commonly glued to in ordinary prose
+    // ("Rioja,", "2016.", "please!"), keeping letters, digits, hyphens and
+    // spaces — everything a gazetteer term or a year is actually made of.
+    // A trailing comma silently broke both matchers that key off this
+    // function: a region/colour/body word never matched its gazetteer
+    // entry, and a bare year never matched YEAR_TOKEN's exact four-digit
+    // pattern, so "Rioja, please" and "a Barolo, 2016" both parsed as
+    // though nothing had been said at all (understood: false). Applied
+    // only to the FOLDED value used for matching — tokenize() keeps each
+    // token's original punctuation in `.raw`, so text still searched via
+    // the needle is unchanged.
+    .replace(/[^\p{L}\p{N}\s-]/gu, "")
     .trim()
     .replace(/\s+/g, " ");
 }
