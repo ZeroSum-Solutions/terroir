@@ -210,6 +210,19 @@ than treated as a second search API.
 
 ## D-006b — Semantic / conversational retrieval · **AMENDED**
 
+> **Amended 2026-08-31 by `2026-08-31-d006b-amendment-unified-search.md`**
+> (ratified by Devin). That amendment lifts the deferral for three
+> capabilities *together* — tier-2 LLM struct compile, tier-3 conversation
+> mode, and embeddings — each under binding terms recorded there. **The
+> reopen trigger below is SPENT: it was met by the amendment, not by a
+> bake-off.** What the text below still states correctly is what remains
+> FORBIDDEN, which the amendment did not touch: generated SQL, ungrounded
+> prose presented as data, and a parallel semantic result model.
+> Ratifying the amendment does not authorise implementation — the
+> operational terms for tier 2 are in
+> `2026-09-01-tier-2-struct-compile-ops-spec.md`, and the feature-ledger
+> assertions ride the branch that builds each tier.
+
 Defer embeddings, vector indexes, open-ended chat, and multi-turn conversational
 search from v1. Ship D-006a typed search and preserve the existing single-turn
 deterministic voice resolver. Extending that resolver with additional whitelisted
