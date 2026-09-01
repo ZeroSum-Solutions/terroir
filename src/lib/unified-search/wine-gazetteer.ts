@@ -170,6 +170,21 @@ export function foldTerm(raw: string): string {
     .replace(/\s+/g, " ");
 }
 
+/**
+ * Every spelling the gazetteer knows for a canonical region.
+ *
+ * Needed because the corpora do not agree with each other: lwin_catalog has
+ * 25,420 rows under "Burgundy" and none under "Bourgogne", while
+ * xwines_catalog has 2,429 under "Bourgogne" and none under "Burgundy"
+ * (measured 2026-09-01). A filter built from one canonical name reaches one
+ * corpus and silently misses the other, so the filter is built from all of a
+ * region's surface terms instead — the same terms that let a person's typing
+ * find it.
+ */
+export function regionSurfaceTerms(canonical: string): readonly string[] {
+  return REGION_TERMS[canonical] ?? [foldTerm(canonical)];
+}
+
 export const COUNTRY_INDEX = buildIndex(COUNTRY_TERMS);
 export const REGION_INDEX = buildIndex(REGION_TERMS);
 export const COLOUR_INDEX = buildIndex(COLOUR_TERMS);
