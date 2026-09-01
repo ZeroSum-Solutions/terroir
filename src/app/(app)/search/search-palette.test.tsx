@@ -1,6 +1,7 @@
 // P1 slice 2a — the unified search palette (program plan D3/D4), the surface
-// that replaces the header dropdown (global-search.tsx dies at parity in this
-// same slice; the scan panel and assistant entry point survive until theirs).
+// that replaced the header dropdown (global-search.tsx died at parity in that
+// slice; the scan panel followed in slice 2c, which also wired the all-scope
+// miss to the companion).
 //
 // What these tests pin, against the REAL /api/search contract shape:
 // one field feeding the unified endpoint; cellar and catalogue visually
@@ -12,6 +13,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { onAssistantRequest } from "../assistant-open";
 
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -386,5 +388,28 @@ describe("SearchPalette", () => {
     await renderPalette();
     await typeQuery("margaux");
     expect(panelText()).toContain("Nothing matched");
+  });
+
+  it("offers the companion on an all-scope miss and hands it the query", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ results: [] }));
+    const seen: Array<string | null> = [];
+    const unsubscribe = onAssistantRequest((question) => seen.push(question));
+    try {
+      await renderPalette();
+      await typeQuery("volcanic white for oysters");
+
+      const cta = [...document.querySelectorAll("button")].find((b) =>
+        (b.textContent ?? "").includes("Ask the companion"),
+      );
+      if (!cta) throw new Error("companion CTA not rendered");
+      await act(async () => {
+        cta.click();
+      });
+
+      expect(seen).toEqual(["volcanic white for oysters"]);
+      expect(document.querySelector("[data-global-search-panel]")).toBeNull();
+    } finally {
+      unsubscribe();
+    }
   });
 });

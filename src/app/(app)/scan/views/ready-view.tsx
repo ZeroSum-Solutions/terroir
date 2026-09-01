@@ -13,7 +13,6 @@ import { formatMoney } from "../components/field-inputs";
 import { isImportableSpreadsheet } from "@/app/(app)/import/spreadsheet-handoff";
 import { useFileIntake } from "@/lib/upload/use-file-intake";
 import type { ClipboardReadOutcome } from "@/lib/upload/file-intake";
-import { WineSearchPanel } from "./wine-search-panel";
 
 interface RecentScansListProps {
   scans: RecentScan[];
@@ -202,12 +201,9 @@ export function ReadyView({
         </div>
       </div>
 
-      {/* SCAN-09: "There should be a search bar where I can type in any
-          wine … and be able to add that to my inventory. That simple
-          search feature is nowhere on this page." It is now, above the
-          capture affordances, because looking a wine up is the cheaper
-          action and should not be buried under the camera. */}
-      <WineSearchPanel />
+      {/* SCAN-09's search bar moved to the global palette (P1 slice 2c):
+          with no route-local search declared on this page, the palette's "/"
+          shortcut now reaches it from /scan. */}
 
       <header className="mb-lg md:mb-xl">
         <h1 className="font-serif text-heading-sm text-ink md:text-heading">

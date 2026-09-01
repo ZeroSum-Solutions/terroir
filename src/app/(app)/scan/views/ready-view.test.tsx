@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RecentScan, ScanMode } from "@/lib/scanner/types";
+import { pageHasItsOwnSearch } from "@/app/(app)/search/search-palette";
 import { ReadyView } from "./ready-view";
 
 const recentScan: RecentScan = {
@@ -352,6 +353,15 @@ describe("ReadyView — dropping and pasting reach the same route as the picker"
 
     expect(container.textContent).toContain("Allow paste when your browser asks");
     vi.unstubAllGlobals();
+  });
+});
+
+describe("ReadyView — search belongs to the global palette (P1 slice 2c)", () => {
+  it("declares no route-local search, so the palette's / shortcut serves /scan", async () => {
+    await renderReady("invoice");
+    // The exact probe the palette's "/" handler runs: with the scan search
+    // panel gone, "/" on /scan must reach the global palette.
+    expect(pageHasItsOwnSearch()).toBe(false);
   });
 });
 
