@@ -1,17 +1,35 @@
 # Running the investor demo
 
-Written 2026-08-30, on branch `feat/xwines-corpus-and-labels`.
+Written 2026-08-30 on branch `feat/xwines-corpus-and-labels`; revised 2026-09-01 for the unified search box and the two-surface demo.
 
 ## Start it
 
 ```bash
 npx supabase start            # if the stack is not already up
+export ANTHROPIC_API_KEY="$(railway variables --service terroir-web --environment production --kv | sed -n 's/^ANTHROPIC_API_KEY=//p')"
 scripts/local/dev-local.sh    # NOT `pnpm dev`
 ```
+
+The second line matters if you will scan a bottle label: `dev-local.sh` pins the
+local Supabase stack but does not carry a provider key, and without
+`ANTHROPIC_API_KEY` in the shell `POST /api/scan-bottle` answers a redacted 500.
+The script now warns on start when the key is missing; the dev server also logs the
+real error to the terminal outside production (it used to be silent).
 
 Then open http://localhost:3000 and hit **`/api/dev-login`** once — it signs in as
 `DEV_BYPASS_EMAIL` and drops you in *LOCAL SEED - Osteria Scala*, the venue that
 holds the data.
+
+### Two surfaces, one script
+
+The in-depth walk runs **here, on the local stack** — it is the only environment with
+the seeded cellar, its 250 label photographs and its corpus links. The deployed app
+(`https://terroir-web-production.up.railway.app`) is shown for what it is: the same
+code, live, on real data. On production open **DEMO — Osteria Dimostrativa** (42
+wines, every one spine-linked, no blank producers), not *My Restaurant*: that tenant
+is a real CSV import with 321 blank producers and one photograph, and it is not the
+cellar you want on a screen. Production wines have no label photographs of their
+own; detail pages fall back to the corpus picture, captioned for what it is.
 
 ## Why not `pnpm dev`
 
@@ -52,6 +70,27 @@ fuzzy matching live.
 **A good page to land on:** the cellar's most-rated wine — Esporão Reserva Tinto,
 4.21/5 from 9,662 ratings, Alicante Bouschet, pairs with beef.
 
+## The one search box
+
+Every authenticated page has one box, top of the screen: **Search cellar and
+catalogue…** (`/` focuses it on pages that have no search of their own). It reads
+the cellar first and the two reference catalogues behind it — LWIN (211,498) and
+X-Wines (100,646) — and it *parses* what you type rather than pattern-matching it:
+
+| Type | What happens |
+|---|---|
+| `esporao` | Cellar rows first (with photograph, bottles, bin), then catalogue rows |
+| `a crisp white from Portugal` | Country and colour become filters; "crisp" ranks by body; 20 Portuguese whites, all with pictures |
+| `2016 douro` | The year is a vintage filter, not four characters of noise |
+| `something under $40 for fish` | Price and food are not search dimensions, so the box says so and offers **Ask the companion** above the rows — one tap hands the question across, already asked |
+| `hello how are you` | Nothing matched anywhere; the companion is offered |
+
+Scope tabs (**My cellar** / **Cellar + catalogue**) narrow it. A catalogue row opens a
+catalogue page (`/catalogue/lwin/…`, `/catalogue/xwines/…`) that says plainly what is
+known and what is *unknown, not blank*, with **Add to cellar** where the identity is
+trustworthy. This box replaced three separate search surfaces on 2026-08-31 and
+2026-09-01 (program plan P1); nothing older is left to demonstrate.
+
 ## The wine assistant
 
 The **?** button in the header, on every authenticated page. Type a question:
@@ -73,7 +112,10 @@ Worth demonstrating on purpose, because it is the differentiator:
 
 | Ask | What happens |
 |---|---|
-| `a blend from Argentina, $200-400, for meats` | The PRD's own example. Parses completely and returns Tussock Jumper Malbec 2021, $209.56, 2 on hand |
+| `a malbec from Argentina, $200-400, for meats` | Parses completely and returns Tussock Jumper Malbec 2021, $209.56, 2 on hand |
+| `a blend from Argentina, $200-400, for meats` | The PRD's own phrasing. The cellar's one Argentine wine is a 100% varietal, so it answers honestly: nothing in the cellar fits, and five corpus blends are offered **not in your cellar** |
+| `an italian red under $60 for lamb` | Red, under $60, lamb — and a banner that it did not understand *italian*. The cellar holds no Italian wine, so the word cannot become a filter; it is the same honesty as Narnia, on a real word |
+| `a red that isn't cabernet` | Reds, with the negation reported as not understood rather than silently dropped. Excluding on it is a follow-up; asserting the opposite was the bug (fixed 2026-09-01) |
 | `a red from Narnia` | Reds, with a banner: *"I did not understand narnia, so that was left out of this search."* It cannot invent a country |
 | `hello how are you` | No results and no list. A query that understood nothing matches nothing |
 
@@ -84,6 +126,23 @@ your cellar**.
 
 It is not on the print views or the public guest menu — those are not staff
 surfaces.
+
+## Scanning
+
+**Show the bottle-label scan** (`/scan` → *Bottle*): it photographs a label, sends it to
+Claude, and comes back with producer, wine, vintage and a confidence. An
+unidentifiable photo (0% confidence, every field flagged) now disables one-tap
+**Confirm & save** and routes through **Correct details** (fixed 2026-09-01) — worth
+showing on purpose with a non-wine photo.
+
+**Do not scan an invoice live** unless Azure Document Intelligence has been
+re-provisioned and proven with the exact file you will use. The resource behind
+`AZURE_DOC_INTELLIGENCE_ENDPOINT` no longer exists (issue #116, since 2026-08-23), so
+invoice OCR fails in every environment. The scan **history** (`/scans`) is safe to show:
+60 seeded scans, 56 complete and 4 in review, each with a stated reason.
+
+The **reconciliation queue** (`/reconcile-queue`) is real work, not a bug: 318 items
+sit unplaced or mismatched, $107k at risk, because the seed leaves stock to place.
 
 ## What the imagery actually claims
 
@@ -136,6 +195,7 @@ scripts/local/seed-demo-drink-windows.mjs
 scripts/local/seed-demo-tasting-notes.mjs
 scripts/local/fix-demo-wine-lists.mjs
 scripts/local/fix-demo-cellar-sections.mjs   # cellar sections by colour, not round-robin
+scripts/local/fix-demo-scan-statuses.mjs    # complete/review, the app's own words
 scripts/seed-local-operational.ts --place-inventory
 scripts/local/enable-demo-login.mjs     # confirm the user, join the venue
 ```
