@@ -182,7 +182,33 @@ export function foldTerm(raw: string): string {
  * find it.
  */
 export function regionSurfaceTerms(canonical: string): readonly string[] {
-  return REGION_TERMS[canonical] ?? [foldTerm(canonical)];
+  return surfaceTermsOf(REGION_TERMS, canonical);
+}
+
+/**
+ * Every spelling the gazetteer knows for a canonical country — demonyms
+ * included, so a caller holding "Italy" can recognise "italian".
+ *
+ * Shared with the assistant parser (wine-intelligence/assistant-query.ts),
+ * whose vocabulary is the tenant's own DISTINCT values and so knows the
+ * noun but not the adjective. The honesty rule there is unchanged: this
+ * expands a country the caller already holds; it never introduces one.
+ */
+export function countrySurfaceTerms(canonical: string): readonly string[] {
+  return surfaceTermsOf(COUNTRY_TERMS, canonical);
+}
+
+/** Lookup by FOLDED key, because the assistant's canonicals come from tenant
+ *  rows and are not guaranteed the gazetteer's exact casing. */
+function surfaceTermsOf(
+  terms: Record<string, readonly string[]>,
+  canonical: string,
+): readonly string[] {
+  const folded = foldTerm(canonical);
+  for (const [key, values] of Object.entries(terms)) {
+    if (foldTerm(key) === folded) return values;
+  }
+  return [folded];
 }
 
 export const COUNTRY_INDEX = buildIndex(COUNTRY_TERMS);

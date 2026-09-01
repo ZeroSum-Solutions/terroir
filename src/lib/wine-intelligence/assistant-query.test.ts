@@ -317,3 +317,64 @@ describe("parseAssistantQuery — negation is never read as affirmation", () => 
   });
 });
 
+// The assistant's country/region vocabulary is the tenant's own DISTINCT
+// values, so it knew "Italy" but not "italian", and its type table knew "red"
+// but not "reds". The search gazetteer (src/lib/unified-search/wine-gazetteer)
+// already carries demonyms, plurals and alternate spellings because slice 3a
+// had to; spending a provider call to recover "italian" when a lookup table in
+// the same repo resolves it would be paying for capability we own (ops spec
+// 2026-09-01 §2.1). The honesty rule is unchanged: a demonym resolves ONLY to
+// a country the tenant actually holds — it never introduces one.
+describe("parseAssistantQuery — demonyms, plurals and spellings from the gazetteer", () => {
+  it("reads a demonym as the country the tenant holds", () => {
+    const q = parse("an italian red");
+    expect(q.country).toBe("Italy");
+    expect(q.type).toBe("Red");
+    // The demonym was understood, so it is not reported as noise.
+    expect(q.unrecognized).not.toContain("italian");
+  });
+
+  it("reads another demonym the same way", () => {
+    expect(parse("a portuguese white").country).toBe("Portugal");
+  });
+
+  it("reads a plural type", () => {
+    expect(parse("bold reds").type).toBe("Red");
+    expect(parse("crisp whites").type).toBe("White");
+  });
+
+  it("reads an alternate spelling of a region the tenant holds", () => {
+    const q = parseAssistantQuery("a bourgogne", {
+      country: [],
+      region: ["Burgundy"],
+      grape: [],
+    });
+    expect(q.region).toBe("Burgundy");
+  });
+
+  it("never lets a demonym introduce a country the tenant does not hold", () => {
+    // Same sentence, tenant with no Italian wine: "italian" must stay a word
+    // it could not place, exactly as "Narnia" does. The gazetteer knowing a
+    // country is not the same as this cellar having one.
+    const q = parseAssistantQuery("an italian red", { country: ["France"], region: [], grape: [] });
+    expect(q.country).toBeUndefined();
+    expect(q.unrecognized).toContain("italian");
+  });
+
+  it("still honours a negation that lands on the demonym", () => {
+    const q = parse("a red but not italian");
+    expect(q.country).toBeUndefined();
+    expect(q.type).toBe("Red");
+  });
+
+  it("does not read a filler word as a country just because a gazetteer lists it", () => {
+    // The gazetteer's surface terms for "United States" include "us". In
+    // "show us a red", "us" is the reader, not a nation — and it is already in
+    // FILLER_WORDS, which is the tell: a word the parser treats as noise cannot
+    // also be a country signal.
+    const q = parse("show us a red");
+    expect(q.country).toBeUndefined();
+    expect(q.type).toBe("Red");
+  });
+});
+
