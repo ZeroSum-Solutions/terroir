@@ -4,12 +4,8 @@ import { AlertTriangle, Check, Pencil, RotateCcw, Save } from "lucide-react";
 import { useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { BottleCandidate, BottleField, BottleScanResult } from "@/lib/scanner/types";
-import {
-  TextInput,
-  VintageInput,
-  MoneyInput,
-  QtyStepper,
-} from "../components/field-inputs";
+import { TextInput, VintageInput, MoneyInput, QtyStepper } from "../components/field-inputs";
+import { needsCorrectionBeforeSave } from "./bottle-confirm-gate";
 
 interface BottleResultsViewProps {
   result: BottleScanResult;
@@ -109,6 +105,8 @@ export function BottleResultsView({
   const [unitCost, setUnitCost] = useState(0);
 
   const lowConfidence = active.confidence < LOW_CONFIDENCE_THRESHOLD;
+  // Issue #118: route an unidentifiable result through Correct details.
+  const mustCorrect = needsCorrectionBeforeSave(active);
   const isLow = useCallback((field: BottleField) => active.lowFields.includes(field), [active]);
 
   const handleCorrect = useCallback(() => {
@@ -153,7 +151,7 @@ export function BottleResultsView({
 
   const canCommit =
     stage === "review"
-      ? !!active.name.trim() && !!active.producer.trim()
+      ? !!active.name.trim() && !!active.producer.trim() && !mustCorrect
       : !!name.trim() && !!producer.trim();
 
   return (
@@ -185,15 +183,18 @@ export function BottleResultsView({
         </div>
       )}
 
-      {lowConfidence && (
+      {(lowConfidence || mustCorrect) && (
         <div className="mb-md flex items-start gap-sm rounded-card border border-risk-ink/40/20 bg-risk-wash/60 px-md py-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-risk-ink" strokeWidth={2} />
           <div className="text-[13px] text-ink">
             <span className="font-medium">
-              Low AI match confidence ({Math.round(active.confidence * 100)}%).
+              {mustCorrect
+                ? "Confirm & save is off for this result."
+                : `Low AI match confidence (${Math.round(active.confidence * 100)}%).`}
             </span>{" "}
-            The label may have been hard to read. Check the flagged fields below
-            {candidates.length > 1 ? ", or try another match." : "."}
+            {mustCorrect
+              ? "It doesn't look reliable enough to save as-is — use Correct details to check the fields first."
+              : `The label may have been hard to read. Check the flagged fields below${candidates.length > 1 ? ", or try another match." : "."}`}
           </div>
         </div>
       )}
