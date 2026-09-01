@@ -61,14 +61,33 @@ describe("needsCorrectionBeforeSave", () => {
     ).toBe(true);
   });
 
-  it("allows one-tap confirm when all but one identity field is flagged", () => {
+  it("disables one-tap confirm when producer AND wine name are both flagged, whatever else the model trusts", () => {
+    // The identity IS producer + name. A candidate that cannot vouch for
+    // either is unidentified even if it is sure about the vintage and the
+    // bottle size — that was the all-but-one hole in the first cut.
     expect(
       needsCorrectionBeforeSave(
         candidate({
           confidence: 0.8,
-          lowFields: ["producer", "name", "vintage", "region"],
+          lowFields: ["producer", "name"],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("allows one-tap confirm when only attribute fields are flagged and the identity is trusted", () => {
+    expect(
+      needsCorrectionBeforeSave(
+        candidate({
+          confidence: 0.8,
+          lowFields: ["vintage", "region", "format"],
         }),
       ),
     ).toBe(false);
+  });
+
+  it("allows one-tap confirm when only one of producer or name is flagged", () => {
+    expect(needsCorrectionBeforeSave(candidate({ confidence: 0.8, lowFields: ["name"] }))).toBe(false);
+    expect(needsCorrectionBeforeSave(candidate({ confidence: 0.8, lowFields: ["producer", "vintage"] }))).toBe(false);
   });
 });
