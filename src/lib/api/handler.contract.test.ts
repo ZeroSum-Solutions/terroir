@@ -58,6 +58,21 @@ describe("API handler contract", () => {
     expect(sentry.captureException).toHaveBeenCalledWith("database-secret");
   });
 
+  it("logs the thrown error to the server console outside production, so a local 500 is diagnosable", async () => {
+    const original = new Error("ANTHROPIC_API_KEY missing");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const response = await withApiHandler(async () => {
+        throw original;
+      });
+      expect(response.status).toBe(500);
+      expect(consoleError).toHaveBeenCalledOnce();
+      expect(consoleError.mock.calls[0]).toContain(original);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("still returns the generic envelope if error reporting fails", async () => {
     sentry.captureException.mockImplementationOnce(() => {
       throw new Error("sentry unavailable");

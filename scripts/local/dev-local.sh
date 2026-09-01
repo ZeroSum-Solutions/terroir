@@ -72,6 +72,17 @@ NEXT_PUBLIC_SUPABASE_URL="$API_URL" source scripts/local/assert-local-db.sh
 # that only ever existed locally, because CI already pins this.
 APP_URL="http://127.0.0.1:3000"
 
+# Bottle-label scan (POST /api/scan-bottle) calls Claude with ANTHROPIC_API_KEY,
+# which this script does NOT supply: it is a provider key, not a local-stack
+# credential, and it lives on the Railway service, not in supabase status.
+# Without it the route answers a redacted 500 and nothing in the terminal says
+# why — exactly the silence that cost a demo rehearsal on 2026-09-01. Warn,
+# loudly, before serving; do not refuse, because everything else still works.
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+  echo "dev-local: WARNING — ANTHROPIC_API_KEY is not set in this shell; bottle-label scan will fail with a 500." >&2
+  echo "dev-local:           export it first (docs/runbooks/investor-demo.md § Start it) if you plan to scan a label." >&2
+fi
+
 echo "dev-local: serving against $API_URL (app origin $APP_URL)"
 exec env \
   NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
