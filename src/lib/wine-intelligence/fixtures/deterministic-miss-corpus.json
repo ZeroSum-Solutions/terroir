@@ -489,7 +489,7 @@
       "query": "a port for after dinner",
       "meaning": "Guest wants a port-style fortified wine to finish the meal.",
       "expected": {
-        "type": "Fortified"
+        "type": "Dessert/Port"
       }
     },
     {

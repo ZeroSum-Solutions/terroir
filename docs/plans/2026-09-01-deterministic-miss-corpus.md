@@ -12,15 +12,15 @@ Re-run: `npx tsx scripts/measure-deterministic-misses.ts`. Offline, deterministi
 
 | classification | count | % of 180 | meaning |
 |---|---|---|---|
-| answered | 97 | 53.9% | every expected field matched |
+| answered | 98 | 54.4% | every expected field matched |
 | partial | 26 | 14.4% | some but not all expected fields matched |
 | tier2 | 9 | 5.0% | paraphrase-only, nothing captured |
 | tier3 | 45 | 25.0% | occasion / comparative / open-question |
-| missed | 1 | 0.6% | nothing captured, not paraphrase-only |
+| missed | 0 | 0.0% | nothing captured, not paraphrase-only |
 | wrong (unexcused) | 0 | — | must be 0 — the acceptance test enforces it |
 | knownWrong (excused) | 2 | — | classifies wrong; reason recorded on the case |
 
-Ratchet baseline (`fixtures/deterministic-coverage-baseline.json`): answered 87 → 97, missed+tier2 17 → 10.
+Ratchet baseline (`fixtures/deterministic-coverage-baseline.json`): answered 87 → 98, missed+tier2 17 → 9.
 
 ## Bugs found and fixed in this slice
 
@@ -83,12 +83,6 @@ Two cases still classify `wrong` and are excused with `knownWrong` on the case (
 | col-19 | colloquial-typos | somethin zippy n refreshing for apps | body, pairing | somethin, zippy, refreshing, apps |
 | col-23 | colloquial-typos | champers under 60 bucks | type | champers |
 | occ-25 | occasion-comparative | toasting a promotion, bring out something punchy for the table | body | toasting, promotion, out, punchy, table |
-
-### Missed — nothing captured, not paraphrase-only (1)
-
-| id | lens | query | missing | unrecognized |
-|---|---|---|---|---|
-| gat-14 | guest-at-table | a port for after dinner | type | after |
 
 ### Known wrong (excused, reason on the case) (2)
 
@@ -181,11 +175,11 @@ Not a missing spelling of a known region — the canonical region itself ("Chian
 
 Cases: mco-29
 
-### Add a colloquial type synonym to an existing phrase list (2 cases)
+### Add a colloquial type synonym to an existing phrase list (1 case)
 
 "champers" (slang for Champagne/sparkling) and "port" (for the Fortified colour the search gazetteer already has a slot for) both name a TYPE_PHRASES/COLOUR_TERMS value that exists today; only the surface word is missing from its phrase list.
 
-Cases: gat-14, col-23
+Cases: col-23
 
 ### Add a plural to a singular-only pairing phrase (2 cases)
 
@@ -201,7 +195,7 @@ Cases: mco-07
 
 ## What only tier 2 recovers
 
-12 of the 38 non-answered, non-tier3 cases are not explained by any cheap fix above — genuine paraphrase, slang, or multi-clause phrasing outside any fixed phrase list, which is tier 2's actual residual job per ops spec §2:
+12 of the 37 non-answered, non-tier3 cases are not explained by any cheap fix above — genuine paraphrase, slang, or multi-clause phrasing outside any fixed phrase list, which is tier 2's actual residual job per ops spec §2:
 
 | id | lens | query | unrecognized |
 |---|---|---|---|
