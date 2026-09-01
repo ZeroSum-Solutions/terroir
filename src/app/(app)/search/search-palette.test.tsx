@@ -61,6 +61,8 @@ const CELLAR_ROW = {
   colour: "Red",
   imageUrl: null,
   isEightysixed: false,
+  quantity: 3,
+  bin: "A4",
   wineId: "w-1",
   lwinId: null,
   xwinesWineId: null,
@@ -80,6 +82,8 @@ const LWIN_ROW = {
   colour: "Red",
   imageUrl: null,
   isEightysixed: null,
+  quantity: null,
+  bin: null,
   wineId: null,
   lwinId: "1234567",
   xwinesWineId: null,
@@ -106,6 +110,8 @@ const XWINES_ROW = {
   colour: "Red",
   imageUrl: null,
   isEightysixed: null,
+  quantity: null,
+  bin: null,
   wineId: null,
   lwinId: null,
   xwinesWineId: 202,
@@ -241,6 +247,49 @@ describe("SearchPalette", () => {
     await renderPalette();
     await typeQuery("margaux");
     expect(panelText()).not.toContain("Château Margaux Château Margaux");
+  });
+
+  it("shows bottles on hand and the bin on a cellar row — slice 2b", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ results: [CELLAR_ROW] }));
+    await renderPalette();
+    await typeQuery("koonunga");
+    expect(panelText()).toContain("3 btl · A4");
+  });
+
+  it("stays silent about stock when availability degraded to unknown", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ results: [{ ...CELLAR_ROW, quantity: null, bin: null }] }),
+    );
+    await renderPalette();
+    await typeQuery("koonunga");
+    expect(panelText()).not.toContain("btl");
+  });
+
+  it("opens the catalogue detail page for an LWIN-backed row instead of add-on-click", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ results: [LWIN_ROW] }));
+    await renderPalette();
+    await typeQuery("margaux");
+    const row = document.querySelector<HTMLButtonElement>('[role="option"] button');
+    if (!row) throw new Error("result row not rendered");
+    await act(async () => {
+      row.click();
+    });
+    expect(pushMock).toHaveBeenCalledWith("/catalogue/lwin/1234567");
+    // Navigation, not a silent add: no create call was made.
+    const posts = fetchMock.mock.calls.filter((c) => String(c[0]).includes("create-from-lwin"));
+    expect(posts).toHaveLength(0);
+  });
+
+  it("opens the catalogue detail page for an X-Wines-only row — no more dead end", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ results: [XWINES_ROW] }));
+    await renderPalette();
+    await typeQuery("community");
+    const row = document.querySelector<HTMLButtonElement>('[role="option"] button');
+    if (!row) throw new Error("result row not rendered");
+    await act(async () => {
+      row.click();
+    });
+    expect(pushMock).toHaveBeenCalledWith("/catalogue/xwines/202");
   });
 
   it("marks an 86'd cellar row so it never looks pullable", async () => {

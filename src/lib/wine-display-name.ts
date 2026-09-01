@@ -115,6 +115,21 @@ export function wineDisplayName(
  * `assistant-panel.tsx` already guarded this by hand. One helper instead of
  * eighteen hand-guards, so the next surface added gets it for free.
  */
+/**
+ * Catalogue-row title (P1 slice 2b). A catalogue row's identity IS
+ * producer + cuvée: twenty appellation-named rows are indistinguishable
+ * without the château. LWIN display names already open with the producer;
+ * X-Wines names rarely do — prefix only when absent. Containment, not
+ * prefix-stripping: an LWIN display name like "Penfolds, Koonunga Hill"
+ * is already right and must render untouched, commas and all.
+ */
+export function catalogueWineTitle(producer: string | null, name: string): string {
+  if (!producer) return name;
+  return name.toLowerCase().includes(producer.toLowerCase())
+    ? name
+    : `${producer} ${name}`;
+}
+
 export function wineTitle(
   producer: string | null | undefined,
   name: string | null | undefined,

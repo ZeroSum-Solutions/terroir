@@ -421,6 +421,23 @@ export async function resolveXWinesProfile(
 }
 
 /**
+ * The corpus row for a wine_id the caller already TRUSTS — an accepted
+ * lwin_xwines_links decision (P0's batch linkage), or the corpus row the
+ * reader themselves clicked in the unified palette. No matching rule runs,
+ * so the profile reads as "linked", never scored: the acceptance question
+ * was answered before this function was called.
+ */
+export async function fetchXWinesProfileById(
+  supabase: SupabaseClient<Database>,
+  wineId: number,
+): Promise<CorpusRead<XWinesProfile | null>> {
+  const row = await fetchCatalogRow(supabase, wineId);
+  if (row.status === "unavailable") return row;
+  if (!row.value) return { status: "ok", value: null };
+  return { status: "ok", value: toProfile(row.value, "linked", null) };
+}
+
+/**
  * Per-vintage ratings for a corpus wine, newest vintage first.
  *
  * A vintage with no ratings has no row — absence means "no ratings yet", which

@@ -18,10 +18,10 @@
 // "My cellar" chip narrows scope (D4: one chip, no radiogroup). Recents are
 // shared with the scan panel via src/lib/wine-search-recents.
 //
-// Interim honesty (until slice 2b's catalogue detail view): an LWIN-backed
-// catalogue row's action is inline add (POST /api/wines/create-from-lwin);
-// an X-Wines-only row is informational — rendering a dead-end click as an
-// affordance would be a lie, so it gets no action yet.
+// Catalogue rows (slice 2b): a click opens /catalogue/[source]/[id] — the
+// detail view that renders identity plus any linked X-Wines features, with
+// unknowns visibly unknown. The inline Add button (POST
+// /api/wines/create-from-lwin) stays beside LWIN-backed rows as the shortcut.
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -205,10 +205,25 @@ export function SearchPalette({ className }: { className?: string }) {
         router.push(`/cellar/${row.wineId}`);
         return;
       }
-      // Catalogue rows' only action until 2b's detail view is the inline add.
-      if (row.kind === "catalogue" && row.lwinId !== null) void addFromCatalogue(row);
+      // Slice 2b: a catalogue row opens its detail page — add-to-cellar-first
+      // is NOT required (D4). The inline Add button beside the row remains the
+      // shortcut; a click on the row itself is a question, not a commitment.
+      if (row.kind === "catalogue") {
+        const href =
+          row.lwinId !== null
+            ? `/catalogue/lwin/${row.lwinId}`
+            : row.xwinesWineId !== null
+              ? `/catalogue/xwines/${row.xwinesWineId}`
+              : null;
+        if (href !== null) {
+          recordRecent();
+          close();
+          setQuery("");
+          router.push(href);
+        }
+      }
     },
-    [recordRecent, close, router, addFromCatalogue],
+    [recordRecent, close, router],
   );
 
   function runRecent(term: string) {

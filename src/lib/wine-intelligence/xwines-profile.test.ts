@@ -5,6 +5,7 @@ import {
   acidityAxis,
   bodyAxis,
   fetchVintageRatings,
+  fetchXWinesProfileById,
   resolveXWinesProfile,
   toImage,
   XWINES_NAME_FLOOR,
@@ -413,6 +414,30 @@ describe("resolveXWinesProfile — explicit link", () => {
     );
     expect(profile!.provenance).toBe("matched");
     expect(calls.filter((c) => c.table === "rpc:match_xwines")).toHaveLength(1);
+  });
+});
+
+describe("fetchXWinesProfileById", () => {
+  // Slice 2b: the catalogue detail view arrives holding a corpus wine_id it
+  // TRUSTS — an accepted P0 link, or the corpus row the reader clicked — so
+  // no matching rule runs and the profile reads as linked, not scored.
+  it("reads the corpus row for a trusted id and marks it linked", async () => {
+    const { supabase, calls } = fakeSupabase({ catalog: CATALOG_ROW });
+    const profile = value(await fetchXWinesProfileById(supabase, 174177));
+    expect(profile).not.toBeNull();
+    expect(profile!.wineId).toBe(174177);
+    expect(profile!.provenance).toBe("linked");
+    expect(profile!.matchScore).toBeNull();
+    expect(profile!.matchedName).toBe("Koonunga Hill Shiraz-Cabernet");
+    expect(calls.find((c) => c.table === "xwines_catalog")?.filters.wine_id).toBe(174177);
+  });
+
+  it("tells an absent row apart from an unreadable corpus", async () => {
+    const { supabase } = fakeSupabase({ catalog: null });
+    expect(value(await fetchXWinesProfileById(supabase, 1))).toBeNull();
+
+    const { supabase: broken } = fakeSupabase({ fail: "catalog" });
+    expect((await fetchXWinesProfileById(broken, 1)).status).toBe("unavailable");
   });
 });
 
