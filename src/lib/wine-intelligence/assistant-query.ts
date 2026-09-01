@@ -218,6 +218,11 @@ function parseVintages(words: readonly string[], priceSpans: readonly string[]):
   return years;
 }
 
+/** See the comment where this is used: a bare "100" is ambiguous with a
+ *  price once normalize() has removed the "%" sign, so this checks the raw
+ *  text instead of the word list parsePrice/matchPhrases both work from. */
+const SINGLE_VARIETAL_PERCENT = /\b100\s*%/;
+
 /**
  * Parse a typed question into a whitelisted, structured query.
  *
@@ -283,12 +288,18 @@ export function parseAssistantQuery(
   // word, but "100% Malbec" and "a blend" must not both fire on one question.
   const singleMatch = matchPhrases(words, SINGLE_VARIETAL_PHRASES);
   const blendMatch = matchPhrases(words, BLEND_PHRASES);
+  // "100% Malbec" is the single-varietal idiom, checked against the RAW text
+  // rather than a word list: normalize() strips "%" along with every other
+  // punctuation mark, so a bare "100" token cannot tell that idiom apart
+  // from an unrelated "$100" price without losing the very thing ("%")
+  // that disambiguates them.
+  const singleByPercent = SINGLE_VARIETAL_PERCENT.test(raw ?? "");
   // A negated hit sets nothing: "not a blend" implies a single varietal only
   // if you are willing to guess, and guessing is what this module does not do.
-  if (singleMatch !== null && !singleMatch.negated) {
+  if ((singleMatch !== null && !singleMatch.negated) || singleByPercent) {
     query.blend = false;
     query.understood.push("blend");
-    consume(singleMatch.hit);
+    if (singleMatch) consume(singleMatch.hit);
   } else if (blendMatch !== null && !blendMatch.negated) {
     query.blend = true;
     query.understood.push("blend");

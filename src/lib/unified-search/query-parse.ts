@@ -107,6 +107,51 @@ function matchPhrase(
   return null;
 }
 
+/**
+ * Words that flip a recognised filter word from "wanted" to "ruled out" —
+ * the same idea as the assistant parser's NEGATION_PHRASES
+ * (wine-intelligence/assistant-lexicon.ts), reimplemented locally on this
+ * module's own token model rather than imported: the two parsers fold text
+ * differently (this one keeps punctuation other than diacritics; the
+ * assistant strips it to spaces), so sharing the check would couple two
+ * modules whose matching engines this file's header already keeps separate
+ * on purpose. Single words only — "other than"/"anything but" are not
+ * covered, matching this module's existing preference for simple, auditable
+ * rules over exhaustive phrase coverage.
+ *
+ * Without this, "no reds tonight" filtered TO reds — the exact inverse of
+ * the question, presented with total confidence (colours: ["Red"],
+ * understood: true). That is the same confident-wrong-answer class the
+ * assistant parser's own negation fix (assistant-lexicon.ts) removed there;
+ * it had simply never been ported to this module.
+ */
+const NEGATION_TOKENS: ReadonlySet<string> = new Set([
+  "not", "no", "nothing", "nothin", "without", "except", "excluding", "besides",
+  "isnt", "arent", "dont", "doesnt", "didnt", "wasnt", "werent", "wont", "cant",
+  "avoid", "avoiding", "skip",
+]);
+
+/** How far back a negation may reach before a recognised filter word — the
+ *  same bound the assistant parser uses, for the same reason: unbounded
+ *  lookback would let one "no" at the start of a long query silently
+ *  swallow every filter after it. */
+const NEGATION_LOOKBACK = 6;
+
+/** Whether a negation reaches the token at `index` — walking backward
+ *  through filler words exactly as the assistant parser's isNegated does,
+ *  stopping at the first word that is neither a negation nor filler (a
+ *  content word ends the negation's reach). */
+function isNegatedAt(tokens: readonly Token[], index: number): boolean {
+  // foldTerm() already strips punctuation (including "'"), so "isn't" is
+  // folded to "isnt" before this ever runs — no separate stripping needed
+  // here to match a contraction against NEGATION_TOKENS.
+  for (let i = index - 1, steps = 0; i >= 0 && steps < NEGATION_LOOKBACK; i--, steps++) {
+    if (NEGATION_TOKENS.has(tokens[i]!.folded)) return true;
+    if (!FILLER_TERMS.has(tokens[i]!.folded)) return false;
+  }
+  return false;
+}
+
 type Buckets = {
   countries: string[];
   regions: string[];
@@ -154,6 +199,16 @@ export function parseSearchQuery(query: string): ParsedSearchQuery {
 
     const phrase = matchPhrase(tokens, cursor, indexes);
     if (phrase !== null) {
+      if (isNegatedAt(tokens, cursor)) {
+        // A ruled-out fact is not a filter (D1: filters may exclude, so a
+        // wrong one is worse than a missing one). Its words fall through to
+        // the needle instead of vanishing, so they are still searched as
+        // text — the same choice this module already makes for an
+        // out-of-range vintage a few lines up.
+        for (let i = cursor; i < cursor + phrase.length; i++) needle.push(tokens[i]!.raw);
+        cursor += phrase.length;
+        continue;
+      }
       push(buckets[phrase.bucket], phrase.entry.canonical);
       cursor += phrase.length;
       continue;

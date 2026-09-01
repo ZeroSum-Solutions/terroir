@@ -68,7 +68,7 @@ export function phraseWordIndex(words: readonly string[], phrase: string): numbe
 /** Phrases that flip a facet from "wanted" to "ruled out", already in the
  *  shape normalize() produces (no apostrophes: "isn't" arrives as "isnt"). */
 const NEGATION_PHRASES: readonly string[] = [
-  "not", "no", "without", "except", "excluding", "besides", "minus",
+  "not", "no", "nothing", "nothin", "without", "except", "excluding", "besides", "minus",
   "isnt", "arent", "dont", "doesnt", "didnt", "wasnt", "werent", "wont", "cant",
   "other than", "apart from", "rather than", "anything but", "but not",
   "avoid", "avoiding", "skip", "hate", "dislike",
@@ -169,7 +169,7 @@ export const PAIRING_PHRASES: ReadonlyArray<{ values: readonly string[]; phrases
   { values: ["Pork"], phrases: ["pork", "ham", "bacon"] },
   { values: ["Veal"], phrases: ["veal"] },
   { values: ["Game Meat"], phrases: ["game meat", "game", "venison", "boar"] },
-  { values: ["Cured Meat"], phrases: ["cured meat", "charcuterie", "salami", "prosciutto"] },
+  { values: ["Cured Meat"], phrases: ["cured meat", "cured meats", "charcuterie", "salami", "prosciutto"] },
   { values: ["Shellfish"], phrases: ["shellfish", "shrimp", "prawns", "lobster", "crab", "oysters", "scallops"] },
   { values: ["Rich Fish", "Lean Fish"], phrases: ["fish", "seafood"] },
   { values: ["Rich Fish"], phrases: ["rich fish", "salmon", "tuna", "mackerel"] },
@@ -197,8 +197,12 @@ export const PAIRING_PHRASES: ReadonlyArray<{ values: readonly string[]; phrases
 // "single varietal" and "blend" are both things people ask for and neither is
 // the absence of the other.
 export const BLEND_PHRASES: readonly string[] = ["blend", "blends", "blended", "assemblage", "cuvee"];
+// A bare "100" is DELIBERATELY not a phrase here: "$100" normalizes to the
+// same digits (normalize() strips the "$"), so a bare number would read a
+// price as a single-varietal signal — see SINGLE_VARIETAL_PERCENT in
+// assistant-query.ts, which checks the RAW text for "100%" instead.
 export const SINGLE_VARIETAL_PHRASES: readonly string[] = [
-  "single varietal", "single variety", "100", "varietal only", "pure", "straight",
+  "single varietal", "single variety", "varietal only", "pure", "straight",
 ];
 
 // Words that carry no facet. Kept tight for the same reason
@@ -218,4 +222,5 @@ export const FILLER_WORDS = new Set([
   "we", "you", "my", "our", "your", "can", "do", "does", "please",
   "should", "pour", "pouring", "glass", "dinner", "night", "evening",
   "meal", "dish", "eating", "having", "suggest", "suggestion", "match",
+  "another", "too",
 ]);
