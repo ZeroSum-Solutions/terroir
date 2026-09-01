@@ -89,6 +89,16 @@ export function selectCellarMatches(
     if (query.region && !sameValue(wine.region, query.region)) return false;
     if (query.grape && !matchesGrape(wine, query.grape)) return false;
 
+    // Vintage is the one dimension that names a BOTTLING rather than a wine,
+    // so it excludes rather than ranks — a 2016 is not an answer to a 2018
+    // question. An unrecorded vintage is excluded for the same reason an
+    // unpriced wine is excluded from a price band: there is no honest way to
+    // show a NULL as being the year that was asked for.
+    if (query.vintages && query.vintages.length > 0) {
+      if (wine.vintage == null) return false;
+      if (!query.vintages.includes(wine.vintage)) return false;
+    }
+
     // Unknown is not "not a blend": a wine with no corpus row is excluded
     // from BOTH answers rather than guessed into one of them.
     if (query.blend != null) {

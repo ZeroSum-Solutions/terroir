@@ -67,6 +67,33 @@ describe("AssistantPanel", () => {
     );
   });
 
+  // The chips are how the panel shows its working. A constraint the parser
+  // read but the panel never renders is a filter applied behind the user's
+  // back — the same class of dishonesty as one dropped without a notice.
+  it("shows an understood vintage as a chip", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        query: { vintages: [2018], understood: ["vintage"], unrecognized: [] },
+        cellar: [],
+        cellarTotal: 0,
+        corpus: [],
+      }),
+    } as unknown as Response);
+
+    await act(async () => {
+      root.render(<AssistantPanel />);
+    });
+    await act(async () => {
+      requestAssistant("a 2018 Barolo");
+    });
+    await act(async () => {});
+
+    const chips = document.querySelector('[aria-label="Understood as"]');
+    expect(chips?.textContent).toContain("2018");
+  });
+
   it("opens empty from a request that carries no question", async () => {
     await act(async () => {
       root.render(<AssistantPanel />);

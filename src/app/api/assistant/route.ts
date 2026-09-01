@@ -173,6 +173,11 @@ export async function GET(request: NextRequest) {
         "wine_id, name, type, body, elaborate, grapes, harmonize, rating_avg, rating_count, image_url, image_kind, winery_name, region_name, country",
       )
       .not("rating_count", "is", null);
+    // xwines_catalog.vintages is the years the wine has been produced in, and
+    // it is populated on 99.9% of rows — an expressible dimension, so it
+    // filters here rather than being quietly ignored while the panel shows a
+    // vintage chip. Overlaps, not contains: several asked-for years mean OR.
+    if (query.vintages?.length) q = q.overlaps("vintages", query.vintages);
     if (query.type) q = q.eq("type", query.type);
     if (query.body) q = q.eq("body", query.body);
     if (query.country) q = q.eq("country", query.country);

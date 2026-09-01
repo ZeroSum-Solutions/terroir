@@ -127,10 +127,47 @@ describe("parseAssistantQuery", () => {
       expect(parse("between $400 and $200")).toMatchObject({ priceMin: 200, priceMax: 400 });
     });
 
-    it("ignores a vintage year that is not a price", () => {
+    it("does not read a vintage year as a price", () => {
       const q = parse("a 2018 Malbec");
       expect(q.priceMin).toBeUndefined();
       expect(q.priceMax).toBeUndefined();
+      // It is not nothing, either: a year is a constraint of its own.
+      expect(q.vintages).toEqual([2018]);
+    });
+  });
+
+  describe("vintage", () => {
+    it("reads a bare year as a constraint", () => {
+      const q = parse("a 2018 Malbec from Mendoza");
+      expect(q.vintages).toEqual([2018]);
+      expect(q.understood).toContain("vintage");
+    });
+
+    // Two years mean "either" — the same reason `pairing` is a list. Taking
+    // only the first would drop the second exactly as silently as the bug
+    // this contract exists to prevent.
+    it("reads several years as alternatives", () => {
+      expect(parse("a 2018 or 2019 Malbec").vintages).toEqual([2018, 2019]);
+    });
+
+    it("does not read a monetary figure as a vintage", () => {
+      const q = parse("something under $2018");
+      expect(q.vintages).toBeUndefined();
+      expect(q.priceMax).toBe(2018);
+    });
+
+    // Below the band a four-digit number in a wine question is far likelier
+    // to be a cuvee name or a street number than a year.
+    it("does not read a four-digit number outside the vintage band", () => {
+      expect(parse("a 1500 Malbec").vintages).toBeUndefined();
+    });
+
+    it("does not read a number glued to a unit as a vintage", () => {
+      expect(parse("a 1500ml bottle of Malbec").vintages).toBeUndefined();
+    });
+
+    it("says nothing about vintage when the question carries no year", () => {
+      expect(parse("a red from Portugal").vintages).toBeUndefined();
     });
   });
 
@@ -178,6 +215,17 @@ describe("parseAssistantQuery", () => {
 
     it("does not report filler words as unrecognised", () => {
       expect(parse("show me a red wine please").unrecognized).toHaveLength(0);
+    });
+
+    // The bug this replaces: pure-digit tokens were stripped from the report,
+    // so a number that became neither a price nor a vintage vanished without
+    // the panel's "I did not understand X" line ever mentioning it.
+    it("reports a number it could place nowhere rather than dropping it", () => {
+      expect(parse("a red 1500").unrecognized).toContain("1500");
+    });
+
+    it("does not report a year it understood as unrecognised", () => {
+      expect(parse("a 2018 red").unrecognized).toHaveLength(0);
     });
   });
 });

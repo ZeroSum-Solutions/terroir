@@ -55,6 +55,9 @@ export interface AssistantQuery {
   country?: string;
   region?: string;
   grape?: string;
+  /** Years asked for, ORed — a list for the same reason `pairing` is one:
+   * keeping only the first of "2018 or 2019" would drop the second silently. */
+  vintages?: number[];
   priceMin?: number;
   priceMax?: number;
   /** Dimensions actually recognised, so the UI can show its working. */
@@ -247,6 +250,32 @@ function parsePrice(raw: string, normalized: string): PriceBounds {
   return { spans };
 }
 
+// The band a four-digit number must sit in to read as a year, and the reasons,
+// are the typed-search parser's (src/lib/unified-search/query-parse.ts): below
+// 1850 such a number is likelier a cuvee name or a street number than a
+// vintage, and futures sell two years ahead of release. Borrowed, NOT shared —
+// slice 3a rejected merging the two parsers, and that still holds.
+const OLDEST_VINTAGE = 1850;
+const VINTAGE_LOOKAHEAD_YEARS = 2;
+
+/**
+ * Years in `text`, minus any number already spent as a price — "$2018" is a
+ * budget, not a bottling. Matches a BARE four-digit token, so "1500ml" is a
+ * bottle size and stays out.
+ */
+function parseVintages(text: string, priceSpans: readonly string[]): number[] {
+  const spent = new Set(priceSpans);
+  const newest = new Date().getUTCFullYear() + VINTAGE_LOOKAHEAD_YEARS;
+  const years: number[] = [];
+  for (const word of text.split(" ")) {
+    if (!/^\d{4}$/.test(word) || spent.has(word)) continue;
+    const year = Number(word);
+    if (year < OLDEST_VINTAGE || year > newest) continue;
+    if (!years.includes(year)) years.push(year);
+  }
+  return years;
+}
+
 /**
  * Parse a typed question into a whitelisted, structured query.
  *
@@ -348,6 +377,13 @@ export function parseAssistantQuery(
   }
   for (const s of price.spans) consume(s);
 
+  const vintages = parseVintages(text, price.spans);
+  if (vintages.length > 0) {
+    query.vintages = vintages;
+    query.understood.push("vintage");
+    for (const year of vintages) consume(String(year));
+  }
+
   const consumedSet = new Set(consumed);
   query.unrecognized = text
     .split(" ")
@@ -355,8 +391,7 @@ export function parseAssistantQuery(
       (w) =>
         w.length > 2 &&
         !consumedSet.has(w) &&
-        !FILLER_WORDS.has(w) &&
-        !/^\d+$/.test(w),
+        !FILLER_WORDS.has(w),
     );
 
   return query;

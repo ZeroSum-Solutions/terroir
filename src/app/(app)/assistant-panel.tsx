@@ -28,6 +28,8 @@ const EXAMPLES = [
 
 function chipsFor(query: AssistantResponse["query"]): string[] {
   const chips: string[] = [];
+  // Vintage leads: it is the fact that names a bottling rather than a wine.
+  if (query.vintages?.length) chips.push(query.vintages.join(" or "));
   if (query.type) chips.push(query.type);
   if (query.body) chips.push(query.body);
   if (query.blend === true) chips.push("Blend");
