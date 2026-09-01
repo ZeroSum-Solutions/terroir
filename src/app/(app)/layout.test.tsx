@@ -25,8 +25,8 @@ vi.mock("./toast-wrapper", () => ({
 vi.mock("./settings-dropdown", () => ({
   SettingsDropdown: () => <button data-settings="true">Settings</button>,
 }));
-vi.mock("./global-search", () => ({
-  GlobalSearch: ({ className }: { className?: string }) => (
+vi.mock("./search/search-palette", () => ({
+  SearchPalette: ({ className }: { className?: string }) => (
     <input data-global-search="true" type="search" className={className} />
   ),
 }));

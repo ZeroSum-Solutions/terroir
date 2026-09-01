@@ -4,7 +4,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { RestaurantProvider } from "@/lib/context/restaurant";
 import { SettingsDropdown } from "./settings-dropdown";
 import { AssistantPanel } from "./assistant-panel";
-import { GlobalSearch } from "./global-search";
+import { SearchPalette } from "./search/search-palette";
 import { DesktopNavLinks, MobileNavLinks } from "./nav-links";
 import { Fab } from "./fab";
 import { ToastWrapper } from "./toast-wrapper";
@@ -55,7 +55,7 @@ export default async function AppLayout({
             and the two icon controls, so the mobile placement is the band
             directly below — still the top of the page, still a visible field,
             never folded into a menu. */}
-        <GlobalSearch className="mx-lg hidden min-w-0 max-w-[360px] flex-1 md:block" />
+        <SearchPalette className="mx-lg hidden min-w-0 max-w-[360px] flex-1 md:block" />
 
         <div className="ml-auto flex shrink-0 items-center gap-sm md:gap-md">
           <span className="hidden text-[12px] font-light tabular text-grey md:inline">
@@ -76,7 +76,7 @@ export default async function AppLayout({
         className="sticky z-[var(--z-sticky)] border-b border-rule bg-canvas px-md py-sm md:hidden"
         style={{ top: "var(--chrome-header-total)" }}
       >
-        <GlobalSearch />
+        <SearchPalette />
       </div>
 
       {/* Content — mobile bottom padding clears the tab bar AND the FAB,
