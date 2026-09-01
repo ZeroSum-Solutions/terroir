@@ -99,6 +99,15 @@ jobs:
       - name: Seed local Supabase
         run: pnpm run supabase:seed:local:apply
 
+      - name: Seed the production-shaped tenant
+        # e2e/prodshape.ts's enterProdShape() PUTs /api/restaurant/{prodshape
+        # id}, which 403s without this fixture — mobile-wine-detail,
+        # one-row-rule, producer-shown-once, lists-insights-role and
+        # prodshape-tenant all call it. Must run after the base seed: the
+        # fixture attaches to the base seeder's users instead of creating its
+        # own (docs/runbooks/prodshape-tenant.md). Idempotent.
+        run: pnpm run prodshape:seed
+
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
