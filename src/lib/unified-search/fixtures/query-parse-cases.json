@@ -1,0 +1,256 @@
+{
+  "_comment": [
+    "Test corpus for the typed-search query parser (program plan D1).",
+    "",
+    "Each case is a query a sommelier could plausibly type into the palette,",
+    "with the parse it must produce. The corpus is the acceptance bar: a",
+    "parser change that breaks a case here is a regression in what the search",
+    "box understands, and adding a capability means adding cases FIRST.",
+    "",
+    "Fields omitted from `expect` default to empty. `text` is the residue",
+    "handed to trigram/ILIKE matching after extraction — the part of the",
+    "query that names a wine rather than describing one. Note that the parser",
+    "never judges whether a residue word is a real producer: 'chateau' and",
+    "'zzqqxx' are both just words to it, and only the search itself can say",
+    "which one found something."
+  ],
+  "cases": [
+    {
+      "why": "the plain case — nothing to extract, everything is the needle",
+      "query": "chateau margaux",
+      "expect": {
+        "text": "chateau margaux"
+      }
+    },
+    {
+      "why": "a vintage is a filter, and must leave the needle",
+      "query": "chateau margaux 2016",
+      "expect": {
+        "vintages": [
+          2016
+        ],
+        "text": "chateau margaux"
+      }
+    },
+    {
+      "why": "vintage first reads the same as vintage last",
+      "query": "2016 chateau margaux",
+      "expect": {
+        "vintages": [
+          2016
+        ],
+        "text": "chateau margaux"
+      }
+    },
+    {
+      "why": "two years named means both are wanted, not a range collapse",
+      "query": "barolo 2016 2018",
+      "expect": {
+        "vintages": [
+          2016,
+          2018
+        ],
+        "text": "barolo"
+      }
+    },
+    {
+      "why": "a bottle size is not a vintage — 1500ml must not become a year",
+      "query": "margaux 1500ml",
+      "expect": {
+        "text": "margaux 1500ml"
+      }
+    },
+    {
+      "why": "a country name is a filter and leaves the needle",
+      "query": "barolo from italy",
+      "expect": {
+        "countries": [
+          "Italy"
+        ],
+        "text": "barolo"
+      }
+    },
+    {
+      "why": "the demonym means the same country as the noun (the D1 gap)",
+      "query": "italian barolo",
+      "expect": {
+        "countries": [
+          "Italy"
+        ],
+        "text": "barolo"
+      }
+    },
+    {
+      "why": "a demonym with an irregular stem, beside a two-word region — both are recognised, so nothing is left to search as text",
+      "query": "portuguese vinho verde",
+      "expect": {
+        "countries": [
+          "Portugal"
+        ],
+        "regions": [
+          "Vinho Verde"
+        ],
+        "text": ""
+      }
+    },
+    {
+      "why": "a grape is not in the gazetteer and must survive as the needle — the parser narrows the search, it does not swallow it",
+      "query": "chilean carmenere",
+      "expect": {
+        "countries": [
+          "Chile"
+        ],
+        "text": "carmenere"
+      }
+    },
+    {
+      "why": "two countries are two filters — country is a list, not a winner",
+      "query": "riesling from germany and austria",
+      "expect": {
+        "countries": [
+          "Germany",
+          "Austria"
+        ],
+        "text": "riesling"
+      }
+    },
+    {
+      "why": "a multi-word country matches as one span, not two tokens",
+      "query": "pinot noir from new zealand",
+      "expect": {
+        "countries": [
+          "New Zealand"
+        ],
+        "text": "pinot noir"
+      }
+    },
+    {
+      "why": "a region is a filter of its own, and implies nothing about its country",
+      "query": "burgundy chardonnay",
+      "expect": {
+        "regions": [
+          "Burgundy"
+        ],
+        "text": "chardonnay"
+      }
+    },
+    {
+      "why": "multi-word regions match as one span",
+      "query": "napa valley cabernet",
+      "expect": {
+        "regions": [
+          "Napa Valley"
+        ],
+        "text": "cabernet"
+      }
+    },
+    {
+      "why": "region and country together, both kept",
+      "query": "mosel riesling from germany",
+      "expect": {
+        "countries": [
+          "Germany"
+        ],
+        "regions": [
+          "Mosel"
+        ],
+        "text": "riesling"
+      }
+    },
+    {
+      "why": "colour is a filter — asking for red excludes white, it does not merely prefer it",
+      "query": "red from spain",
+      "expect": {
+        "countries": [
+          "Spain"
+        ],
+        "colours": [
+          "Red"
+        ],
+        "text": ""
+      }
+    },
+    {
+      "why": "a structural quality is a PREFERENCE — it ranks, it must never exclude",
+      "query": "crisp white from portugal",
+      "expect": {
+        "countries": [
+          "Portugal"
+        ],
+        "colours": [
+          "White"
+        ],
+        "body": [
+          "Light-bodied"
+        ],
+        "text": ""
+      }
+    },
+    {
+      "why": "a pairing word is not a search filter — it stays in the needle and misses, which is what routes the user to the companion",
+      "query": "bold red for beef",
+      "expect": {
+        "colours": [
+          "Red"
+        ],
+        "body": [
+          "Full-bodied"
+        ],
+        "text": "beef"
+      }
+    },
+    {
+      "why": "everything at once, in the order a person types it",
+      "query": "elegant italian barolo 2016",
+      "expect": {
+        "countries": [
+          "Italy"
+        ],
+        "vintages": [
+          2016
+        ],
+        "body": [
+          "Light-bodied"
+        ],
+        "text": "barolo"
+      }
+    },
+    {
+      "why": "a word the parser cannot place stays in the needle for the search to judge",
+      "query": "zzqqxx wine",
+      "expect": {
+        "text": "zzqqxx"
+      }
+    },
+    {
+      "why": "connective words are neither needle nor unmatched noise",
+      "query": "a wine from italy",
+      "expect": {
+        "countries": [
+          "Italy"
+        ],
+        "text": ""
+      }
+    },
+    {
+      "why": "accents and case fold — a French speaker's spelling still matches",
+      "query": "Rhône from FRANCE",
+      "expect": {
+        "countries": [
+          "France"
+        ],
+        "regions": [
+          "Rhône"
+        ],
+        "text": ""
+      }
+    },
+    {
+      "why": "an empty query parses to nothing at all rather than throwing",
+      "query": "   ",
+      "expect": {
+        "text": ""
+      }
+    }
+  ]
+}
