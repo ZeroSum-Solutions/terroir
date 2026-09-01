@@ -34,6 +34,7 @@
 // of VoiceFilterPayload.
 
 import { foldAccents } from "./name-resolver";
+import { countrySurfaceTerms, regionSurfaceTerms } from "@/lib/unified-search/wine-gazetteer";
 import {
   BLEND_PHRASES,
   BODY_PHRASES,
@@ -78,24 +79,43 @@ export interface AssistantQuery {
   unrecognized: string[];
 }
 
-/** Longest vocabulary value present in the text, or undefined. Longer wins so
- * "Napa Valley" beats "Napa" when both are held. */
+/** No extra spellings — grapes are matched on the tenant's value alone. */
+const NO_SURFACE_TERMS = (): readonly string[] => [];
+
+/**
+ * Longest vocabulary value present in the text, or undefined. Longer wins so
+ * "Napa Valley" beats "Napa" when both are held.
+ *
+ * `surfaceTerms` is how the tenant's noun gets its adjective: a value the
+ * tenant holds ("Italy") is also looked for under every spelling the search
+ * gazetteer knows for it ("italian"). The rule that every emitted value came
+ * from the tenant's own rows is untouched — a spelling can only resolve to a
+ * value that is already in `vocabulary`. `normalized` is the spelling that
+ * actually matched, so the words consumed are the words the reader typed.
+ */
 function bestVocabularyMatch(
   vocabulary: readonly string[],
   words: readonly string[],
+  surfaceTerms: (canonical: string) => readonly string[],
 ): { value: string; normalized: string } | undefined {
   let winner: { value: string; normalized: string } | undefined;
   for (const raw of vocabulary) {
     const value = raw?.trim();
     if (!value) continue;
-    const norm = normalize(value);
-    if (!norm) continue;
-    const index = phraseWordIndex(words, norm);
-    if (index < 0) continue;
-    // A ruled-out value is not a constraint. Left unconsumed on purpose.
-    if (isNegated(words, index)) continue;
-    if (!winner || norm.length > winner.normalized.length) {
-      winner = { value, normalized: norm };
+    const spellings = new Set([normalize(value), ...surfaceTerms(value).map(normalize)]);
+    for (const norm of spellings) {
+      if (!norm) continue;
+      // A word the parser treats as noise cannot also be a country: the
+      // gazetteer lists "us" for the United States, and "show us a red" is
+      // addressed to the assistant, not set in America.
+      if (FILLER_WORDS.has(norm)) continue;
+      const index = phraseWordIndex(words, norm);
+      if (index < 0) continue;
+      // A ruled-out value is not a constraint. Left unconsumed on purpose.
+      if (isNegated(words, index)) continue;
+      if (!winner || norm.length > winner.normalized.length) {
+        winner = { value, normalized: norm };
+      }
     }
   }
   return winner;
@@ -271,21 +291,21 @@ export function parseAssistantQuery(
     consume(blendMatch.hit);
   }
 
-  const region = bestVocabularyMatch(vocabulary.region, words);
+  const region = bestVocabularyMatch(vocabulary.region, words, regionSurfaceTerms);
   if (region) {
     query.region = region.value;
     query.understood.push("region");
     consume(region.normalized);
   }
 
-  const country = bestVocabularyMatch(vocabulary.country, words);
+  const country = bestVocabularyMatch(vocabulary.country, words, countrySurfaceTerms);
   if (country) {
     query.country = country.value;
     query.understood.push("country");
     consume(country.normalized);
   }
 
-  const grape = bestVocabularyMatch(vocabulary.grape, words);
+  const grape = bestVocabularyMatch(vocabulary.grape, words, NO_SURFACE_TERMS);
   if (grape) {
     query.grape = grape.value;
     query.understood.push("grape");

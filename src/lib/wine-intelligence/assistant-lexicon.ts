@@ -133,14 +133,21 @@ export function matchPhrases(
 // lists map how people actually ask onto the exact stored value. Order
 // matters: the first entry whose phrase is present wins, so more specific
 // phrases ("full bodied") precede the words they contain ("full").
+//
+// The plurals ("reds", "whites", "roses") are the search gazetteer's, added
+// by hand rather than by importing its colour terms wholesale: that table
+// also maps bare "dessert" and "sweet" to the Dessert type, and here bare
+// "dessert" is a PAIRING ("a wine for dessert") — importing it would turn a
+// food into a wine type. Demonyms and regional spellings, which carry no
+// such ambiguity, ARE imported (see bestVocabularyMatch in assistant-query).
 
 export const TYPE_PHRASES: ReadonlyArray<{ value: string; phrases: readonly string[] }> = [
   { value: "Dessert/Port", phrases: ["port", "tawny", "vintage port"] },
   { value: "Sparkling", phrases: ["sparkling", "champagne", "bubbles", "bubbly", "prosecco", "cava", "espumante"] },
-  { value: "Rosé", phrases: ["rose", "rosado", "pink"] },
+  { value: "Rosé", phrases: ["rose", "roses", "rosado", "pink"] },
   { value: "Dessert", phrases: ["dessert wine", "sweet wine", "pudding wine"] },
-  { value: "White", phrases: ["white", "blanc", "branco"] },
-  { value: "Red", phrases: ["red", "tinto", "rouge"] },
+  { value: "White", phrases: ["white", "whites", "blanc", "branco"] },
+  { value: "Red", phrases: ["red", "reds", "tinto", "rouge"] },
 ];
 
 export const BODY_PHRASES: ReadonlyArray<{ value: string; phrases: readonly string[] }> = [
