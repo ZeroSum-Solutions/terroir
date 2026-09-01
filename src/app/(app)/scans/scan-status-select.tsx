@@ -31,7 +31,7 @@ export function ScanStatusSelect({
   counts: Record<Exclude<StatusFilter, "all">, number>;
 }) {
   const router = useRouter();
-  const total = counts.complete + counts.processing + counts.failed;
+  const total = counts.complete + counts.processing + counts.review + counts.failed;
 
   return (
     <div data-scan-filter-row className="mt-md flex items-center gap-xs">

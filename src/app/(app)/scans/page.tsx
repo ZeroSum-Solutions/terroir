@@ -68,10 +68,11 @@ export default async function ScansPage({
       .eq("restaurant_id", restaurantId)
       .eq("status", s);
 
-  const [scansRes, completeRes, processingRes, failedRes] = await Promise.all([
+  const [scansRes, completeRes, processingRes, reviewRes, failedRes] = await Promise.all([
     query.order("created_at", { ascending: false }).range(offset, offset + PAGE_SIZE - 1),
     statusCountQuery("complete"),
     statusCountQuery("processing"),
+    statusCountQuery("review"),
     statusCountQuery("failed"),
   ]);
   const { data: scans, error, count } = scansRes;
@@ -79,6 +80,7 @@ export default async function ScansPage({
   const statusCounts: Record<Exclude<StatusFilter, "all">, number> = {
     complete: completeRes.count ?? 0,
     processing: processingRes.count ?? 0,
+    review: reviewRes.count ?? 0,
     failed: failedRes.count ?? 0,
   };
 
@@ -141,10 +143,15 @@ export default async function ScansPage({
                 title: "No failed scans",
                 body: "Nice — every scan has extracted cleanly.",
               }
-            : {
-                title: "No scans yet",
-                body: "Photograph an invoice to start building your inventory.",
-              };
+            : status === "review"
+              ? {
+                  title: "Nothing needs a second look",
+                  body: "Nice — no scan has numbers that don't add up right now.",
+                }
+              : {
+                  title: "No scans yet",
+                  body: "Photograph an invoice to start building your inventory.",
+                };
 
     return (
       <section>
