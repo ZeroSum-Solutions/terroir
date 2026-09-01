@@ -286,6 +286,55 @@ describe("BottleResultsView — confirm-or-correct gate", () => {
   });
 });
 
+describe("BottleResultsView — confirm guard (issue #118)", () => {
+  it("disables Confirm & save for an unidentifiable result (0% confidence, every field flagged)", async () => {
+    await renderView({
+      result: makeResult([
+        candidate({
+          confidence: 0,
+          lowFields: ["producer", "name", "vintage", "region", "format"],
+        }),
+      ]),
+    });
+
+    const confirmButton = buttonNamed("Confirm & save");
+    expect(confirmButton.disabled).toBe(true);
+    expect(container.textContent).toMatch(/confirm.*off|correct details/i);
+  });
+
+  it("keeps Confirm & save enabled for a normal, confident result", async () => {
+    await renderView({ result: makeResult([candidate({ confidence: 0.95, lowFields: [] })]) });
+
+    expect(buttonNamed("Confirm & save").disabled).toBe(false);
+  });
+
+  it("keeps Confirm & save enabled for a partial result — some fields flagged, Correct details still available", async () => {
+    await renderView({
+      result: makeResult([candidate({ confidence: 0.55, lowFields: ["vintage"] })]),
+    });
+
+    expect(buttonNamed("Confirm & save").disabled).toBe(false);
+    expect(() => buttonNamed("correct details")).not.toThrow();
+  });
+
+  it("still allows saving after routing through Correct details on an unidentifiable result", async () => {
+    const { onSave } = await renderView({
+      result: makeResult([
+        candidate({
+          confidence: 0,
+          lowFields: ["producer", "name", "vintage", "region", "format"],
+        }),
+      ]),
+    });
+
+    await act(async () => buttonNamed("correct details").click());
+    expect(buttonNamed("Save to inventory").disabled).toBe(false);
+
+    await act(async () => buttonNamed("Save to inventory").click());
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("BottleResultsView — user-provided fields", () => {
   it("always allows quantity/unit cost input regardless of confirm-or-correct stage", async () => {
     await renderView();
