@@ -38,6 +38,8 @@ function makeSupabase(options?: {
   inventory?: Row[];
   inventoryError?: { message: string } | null;
   fuzzy?: Array<{ wine_id: string; score: number }>;
+  lwinCatalog?: Row[];
+  xwinesCatalog?: Row[];
 }) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   function makeChain(table: string) {
@@ -48,7 +50,11 @@ function makeSupabase(options?: {
           ? (options?.links ?? [])
           : table === "inventory_items"
             ? (options?.inventory ?? [])
-            : (options?.wines ?? []);
+            : table === "lwin_catalog"
+              ? (options?.lwinCatalog ?? [])
+              : table === "xwines_catalog"
+                ? (options?.xwinesCatalog ?? [])
+                : (options?.wines ?? []);
     const error =
       table === "lwin_xwines_links"
         ? (options?.linksError ?? null)
@@ -56,7 +62,7 @@ function makeSupabase(options?: {
           ? (options?.inventoryError ?? null)
           : null;
     const chain: Record<string, unknown> = {};
-    for (const method of ["select", "eq", "in", "or", "order", "limit"]) {
+    for (const method of ["select", "eq", "in", "or", "order", "limit", "overlaps"]) {
       chain[method] = (...args: unknown[]) => {
         calls.push({ method: `${table}.${method}`, args });
         return chain;
@@ -230,5 +236,99 @@ describe("GET /api/search", () => {
     expect(body.results).toHaveLength(2);
     expect(body.results.every((r: { deduped: boolean }) => r.deduped === false)).toBe(true);
     expect(captureException).toHaveBeenCalled();
+  });
+});
+
+// P1 slice 3b — the parser (slice 3a) reaches the endpoint.
+//
+// The defect this closes, observed live on 2026-08-31: the tier-1 matcher is
+// loose enough that "a crisp white from Portugal" returns rows whose names
+// merely contain one of those words, so a descriptive question got answered
+// with noise instead of either real matches or an honest miss.
+describe("GET /api/search — typed search (P1 slice 3b)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const q = (text: string) => request(`q=${encodeURIComponent(text)}`);
+
+  it("filters the catalogue on the facts asked for instead of trigram-matching them", async () => {
+    const { supabase, calls } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    await GET(q("a crisp white from Portugal"));
+
+    // Nothing is left to trigram-match: the whole query was facts.
+    expect(supabase.rpc).not.toHaveBeenCalledWith("lwin_search", expect.anything());
+    expect(supabase.rpc).not.toHaveBeenCalledWith("xwines_search", expect.anything());
+
+    const lwinIn = calls.filter((c) => c.method === "lwin_catalog.in");
+    expect(lwinIn).toContainEqual({ method: "lwin_catalog.in", args: ["country", ["Portugal"]] });
+    expect(lwinIn).toContainEqual({ method: "lwin_catalog.in", args: ["colour", ["White"]] });
+    // X-Wines spells the same colour on a different column.
+    expect(calls).toContainEqual({ method: "xwines_catalog.in", args: ["type", ["White"]] });
+  });
+
+  it("drops LWIN from a sparkling query rather than answering it with still wine", async () => {
+    const { supabase, calls } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    await GET(q("sparkling from France"));
+
+    expect(calls.some((c) => c.method.startsWith("lwin_catalog."))).toBe(false);
+    expect(calls).toContainEqual({ method: "xwines_catalog.in", args: ["type", ["Sparkling"]] });
+  });
+
+  it("still searches LWIN for a vintage, which it models at the wine's grain", async () => {
+    const { supabase, calls } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    await GET(q("2016 Bordeaux"));
+
+    expect(calls.some((c) => c.method.startsWith("lwin_catalog."))).toBe(true);
+    expect(calls).toContainEqual({ method: "xwines_catalog.overlaps", args: ["vintages", [2016]] });
+    expect(calls).toContainEqual({ method: "wines.in", args: ["vintage", [2016]] });
+  });
+
+  it("narrows the tenant's own cellar by the same facts", async () => {
+    const { supabase, calls } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    await GET(q("Portuguese white"));
+
+    expect(calls).toContainEqual({ method: "wines.in", args: ["country", ["Portugal"]] });
+    // The cellar spells its colours in lower case.
+    expect(calls).toContainEqual({ method: "wines.in", args: ["colour", ["white"]] });
+  });
+
+  it("leaves a query it recognises nothing in on the trigram path, unchanged", async () => {
+    const { supabase, calls } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    await GET(q("margaux"));
+
+    expect(supabase.rpc).toHaveBeenCalledWith("lwin_search", { p_query: "margaux", p_limit: 20 });
+    expect(calls.some((c) => c.method.startsWith("lwin_catalog."))).toBe(false);
+  });
+
+  it("searches what was asked for, not the words wrapped around it", async () => {
+    const { supabase } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    await GET(q("show me some chablis please"));
+    expect(supabase.rpc).toHaveBeenCalledWith("lwin_search", { p_query: "chablis", p_limit: 20 });
+  });
+
+  it("answers a query with nothing searchable in it honestly, rather than with noise", async () => {
+    const { supabase } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    const res = await GET(q("something nice please"));
+    expect(await res.json()).toEqual({ results: [] });
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("returns the filtered catalogue rows as results", async () => {
+    const { supabase } = makeSupabase({
+      xwinesCatalog: [
+        { ...XWINES_ROW, wine_id: 501, name: "Alvarinho", country: "Portugal", type: "White", body: "Light-bodied" },
+      ],
+    });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    const res = await GET(q("a crisp white from Portugal"));
+    const { results } = await res.json();
+    expect(results.map((r: { name: string }) => r.name)).toContain("Alvarinho");
   });
 });

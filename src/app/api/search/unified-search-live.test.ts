@@ -74,16 +74,30 @@ describe.skipIf(!hasLiveDb)("GET /api/search live wiring (MANDATORY)", { timeout
     } as never);
     if (wErr) throw wErr;
 
+    // Slice 3b fixtures: the two rows also carry the FACTS a typed query
+    // filters on, each spelled the way its own corpus spells it — LWIN says
+    // "White" in `colour`, X-Wines says "White" in `type`. That difference is
+    // the thing the filtered pass exists to handle, so the fixture has to
+    // reproduce it rather than normalise it away.
     const { error: lErr } = await admin.from("lwin_catalog").insert({
       lwin_id: LWIN_ID,
       display_name: `${WINERY}, Cuvee Unified`,
       producer: WINERY,
+      country: "Portugal",
+      region: "Douro",
+      colour: "White",
+      type: "Wine",
     } as never);
     if (lErr) throw lErr;
     const { error: xErr } = await admin.from("xwines_catalog").insert({
       wine_id: XWINES_ID,
       name: "Cuvee Unified",
       winery_name: WINERY,
+      country: "Portugal",
+      region_name: "Douro",
+      type: "White",
+      body: "Light-bodied",
+      vintages: [2016, 2017],
     } as never);
     if (xErr) throw xErr;
 
@@ -148,5 +162,46 @@ describe.skipIf(!hasLiveDb)("GET /api/search live wiring (MANDATORY)", { timeout
       lwinId: LWIN_ID,
       xwinesWineId: XWINES_ID,
     });
+  });
+
+  // P1 slice 3b — the filtered catalogue pass, through real PostgREST. What
+  // only a live database can check: that the region `.or()` string, the
+  // `overlaps` on an int[] and the colour predicate landing on a DIFFERENT
+  // column per corpus are all valid syntax that matches the rows we think
+  // they match. A mock accepts any string here.
+  const ourRows = (body: { results: Array<{ lwinId: string | null; xwinesWineId: number | null }> }) =>
+    body.results.filter((r) => r.lwinId === LWIN_ID || r.xwinesWineId === XWINES_ID);
+
+  it("filters both corpora on facts each one spells its own way", async () => {
+    const res = await GET(
+      new NextRequest(`http://localhost/api/search?q=${encodeURIComponent("yggdrasil douro white")}`),
+    );
+    expect(res.status).toBe(200);
+    const ours = ourRows(await res.json());
+    expect(ours).toHaveLength(1);
+    expect(ours[0]).toMatchObject({ lwinId: LWIN_ID, xwinesWineId: XWINES_ID, deduped: true });
+  });
+
+  it("keeps LWIN in a vintage search, which it models at the wine's grain", async () => {
+    // X-Wines matches 2016 through `vintages @> ...`; lwin_catalog has no
+    // vintage column at all and must NOT be dropped for it — an LWIN row is
+    // the wine, not the bottling.
+    const res = await GET(
+      new NextRequest(`http://localhost/api/search?q=${encodeURIComponent("yggdrasil douro 2016")}`),
+    );
+    const ours = ourRows(await res.json());
+    expect(ours).toHaveLength(1);
+    expect(ours[0]).toMatchObject({ lwinId: LWIN_ID, xwinesWineId: XWINES_ID });
+  });
+
+  it("drops LWIN from a sparkling search rather than offering it a still wine", async () => {
+    // Same row the previous tests find, same needle, same region — only the
+    // colour word changes, and lwin_catalog.colour has no value that means
+    // sparkling. Returning it anyway would answer the question wrongly.
+    const res = await GET(
+      new NextRequest(`http://localhost/api/search?q=${encodeURIComponent("yggdrasil douro sparkling")}`),
+    );
+    const body = await res.json();
+    expect(body.results.some((r: { lwinId: string | null }) => r.lwinId === LWIN_ID)).toBe(false);
   });
 });

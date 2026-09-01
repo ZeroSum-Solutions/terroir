@@ -29,6 +29,9 @@ import {
   type LwinHit,
   type XwinesHit,
 } from "@/lib/unified-search/merge";
+import { parseSearchQuery } from "@/lib/unified-search/query-parse";
+import { planSource, type SourcePlan } from "@/lib/unified-search/search-filters";
+import { fetchLwinFiltered, fetchXwinesFiltered } from "./catalogue-pass";
 
 export const runtime = "nodejs";
 
@@ -55,42 +58,31 @@ function reportDegradation(phase: string, error: unknown, extra: Record<string, 
   });
 }
 
-// Verbatim from /api/wines/search — the proven quoting for a value embedded
-// in a PostgREST `.or()` filter string: LIKE wildcards escaped, then the
-// whole pattern double-quoted with inner quotes escaped.
-function escapeLikePattern(value: string) {
-  return value
-    .replaceAll("\\", "\\\\")
-    .replaceAll("%", "\\%")
-    .replaceAll("_", "\\_");
-}
-
-function quotePostgrestPattern(value: string) {
-  const escaped = escapeLikePattern(value).replaceAll('"', '\\"');
-  return `"%${escaped}%"`;
-}
-
 async function fetchCellar(
   supabase: Supabase,
   restaurantId: string,
-  q: string,
+  plan: SourcePlan,
 ): Promise<CellarHit[]> {
   const columns =
     "id, name, producer, vintage, varietal, region, country, colour, hero_image_url, is_eightysixed, canonical_wine_id";
-  const pattern = quotePostgrestPattern(q);
-  // The D4 bug fix: free text spans region/varietal/country, not just
-  // name+producer — "chablis" must find the tenant's Chablis by region.
-  const orPattern = ["name", "producer", "region", "varietal", "country"]
-    .map((column) => `${column}.ilike.${pattern}`)
-    .join(",");
 
-  const { data: exact, error } = await supabase
-    .from("wines")
-    .select(columns)
-    .eq("restaurant_id", restaurantId)
-    .or(orPattern)
-    .order("producer")
-    .limit(PER_SOURCE_LIMIT);
+  // The facts the query asked for, as predicates. Built fresh per query
+  // because the fuzzy top-up below has to carry the SAME narrowing — a
+  // typo-tolerant row that ignores the filters is a wrong row, not a
+  // generous one. plan.textOr is the D4 bug fix, now built from the needle:
+  // free text spans region/varietal/country, not just name+producer.
+  const narrowed = () => {
+    let query = supabase.from("wines").select(columns).eq("restaurant_id", restaurantId);
+    if (plan.countries.length > 0) query = query.in("country", plan.countries);
+    if (plan.colours.length > 0) query = query.in("colour", plan.colours);
+    if (plan.vintages.length > 0) query = query.in("vintage", plan.vintages);
+    if (plan.regionOr !== null) query = query.or(plan.regionOr);
+    return query;
+  };
+
+  let exactQuery = narrowed();
+  if (plan.textOr !== null) exactQuery = exactQuery.or(plan.textOr);
+  const { data: exact, error } = await exactQuery.order("producer").limit(PER_SOURCE_LIMIT);
   if (error) throw error;
 
   type WineRow = {
@@ -111,28 +103,27 @@ async function fetchCellar(
     score: 1,
   }));
 
-  if (rows.length < FUZZY_FALLBACK_MIN_RESULTS) {
+  if (rows.length < FUZZY_FALLBACK_MIN_RESULTS && plan.text !== "") {
     const { data: ranked, error: fuzzyError } = await supabase.rpc("search_wines_fuzzy", {
       p_restaurant_id: restaurantId,
-      p_query: q,
+      p_query: plan.text,
       p_threshold: FUZZY_WORD_SIMILARITY_THRESHOLD,
       p_limit: PER_SOURCE_LIMIT,
     });
     if (fuzzyError) {
       // Same deploy-window rule as the old route: the exact pass already
       // answered; an unavailable enhancement must not break it.
-      reportDegradation("cellar-fuzzy", fuzzyError, { restaurantId, q });
+      reportDegradation("cellar-fuzzy", fuzzyError, { restaurantId, q: plan.text });
     } else {
       const shown = new Set(rows.map((row) => row.id));
       const missing = (ranked ?? []).filter((r) => !shown.has(r.wine_id));
       if (missing.length > 0) {
-        const { data: fuzzyRows, error: fetchError } = await supabase
-          .from("wines")
-          .select(columns)
-          .eq("restaurant_id", restaurantId)
-          .in("id", missing.map((r) => r.wine_id));
+        const { data: fuzzyRows, error: fetchError } = await narrowed().in(
+          "id",
+          missing.map((r) => r.wine_id),
+        );
         if (fetchError) {
-          reportDegradation("cellar-fuzzy-fetch", fetchError, { restaurantId, q });
+          reportDegradation("cellar-fuzzy-fetch", fetchError, { restaurantId, q: plan.text });
         } else {
           const scoreById = new Map(missing.map((r) => [r.wine_id, r.score]));
           for (const row of (fuzzyRows ?? []) as WineRow[]) {
@@ -152,7 +143,7 @@ async function fetchCellar(
       .select("id, lwin7, xwines_wine_id")
       .in("id", canonicalIds);
     if (canonicalError) {
-      reportDegradation("canonical-identity", canonicalError, { restaurantId, q });
+      reportDegradation("canonical-identity", canonicalError, { restaurantId, q: plan.text });
     } else {
       for (const row of canonical ?? []) {
         identityByCanonical.set(row.id, { lwin7: row.lwin7, xwines_wine_id: row.xwines_wine_id });
@@ -175,7 +166,7 @@ async function fetchCellar(
       .order("added_at", { ascending: false });
     if (inventoryError) {
       availabilityKnown = false;
-      reportDegradation("cellar-availability", inventoryError, { restaurantId, q });
+      reportDegradation("cellar-availability", inventoryError, { restaurantId, q: plan.text });
     } else {
       for (const item of inventory ?? []) {
         if (item.wine_id === null) continue;
@@ -264,9 +255,31 @@ export async function GET(request: NextRequest) {
 
   if (q.length < 2) return NextResponse.json({ results: [] });
 
+  // Slice 3b: the query is read before it is searched. What the parser
+  // recognises becomes predicates in each corpus's OWN vocabulary
+  // (search-filters.ts); what is left is the needle to match as text.
+  const intent = parseSearchQuery(q);
+  const hasFilters =
+    intent.filters.vintages.length > 0 ||
+    intent.filters.countries.length > 0 ||
+    intent.filters.regions.length > 0 ||
+    intent.filters.colours.length > 0;
+
+  // Nothing to filter on and nothing left to match — the query was filler, or
+  // a preference with no facts in it ("something nice"). An empty result
+  // routes the reader to the companion, which can actually answer an open
+  // question. Trigram-matching the raw text instead would answer it with rows
+  // that merely share a word, which is how "a crisp white from Portugal"
+  // used to come back full of things that were none of those.
+  if (!hasFilters && intent.text === "") return NextResponse.json({ results: [] });
+
+  const cellarPlan = planSource("cellar", intent);
+
   let cellar: CellarHit[];
   try {
-    cellar = await fetchCellar(supabase, restaurantId, q);
+    cellar = cellarPlan.answerable
+      ? await fetchCellar(supabase, restaurantId, cellarPlan)
+      : [];
   } catch (error) {
     console.error("unified search: cellar pass failed:", error);
     Sentry.captureException(error, {
@@ -278,10 +291,36 @@ export async function GET(request: NextRequest) {
 
   let lwin: LwinHit[] = [];
   let xwines: XwinesHit[] = [];
-  if (scope === "all") {
+  if (scope === "all" && hasFilters) {
+    // Facts were asked for, so the catalogue is FILTERED rather than
+    // trigram-ranked: applying the limit after the facts instead of before
+    // them (see catalogue-pass.ts). A corpus whose vocabulary contradicts a
+    // filter is dropped instead of queried unfiltered.
+    const lwinPlan = planSource("lwin", intent);
+    const xwinesPlan = planSource("xwines", intent);
+    const extra = { restaurantId, q };
+    [lwin, xwines] = await Promise.all([
+      lwinPlan.answerable
+        ? fetchLwinFiltered(supabase, lwinPlan, PER_SOURCE_LIMIT, reportDegradation, extra)
+        : Promise.resolve<LwinHit[]>([]),
+      xwinesPlan.answerable
+        ? fetchXwinesFiltered(
+            supabase,
+            xwinesPlan,
+            intent.preferences,
+            PER_SOURCE_LIMIT,
+            reportDegradation,
+            extra,
+          )
+        : Promise.resolve<XwinesHit[]>([]),
+    ]);
+  } else if (scope === "all") {
+    // Nothing recognised: the proven trigram path, unchanged — except that it
+    // now searches the needle rather than the whole sentence, so "show me
+    // some chablis" looks for "chablis".
     const [lwinResult, xwinesResult] = await Promise.all([
-      supabase.rpc("lwin_search", { p_query: q, p_limit: PER_SOURCE_LIMIT }),
-      supabase.rpc("xwines_search", { p_query: q, p_limit: PER_SOURCE_LIMIT }),
+      supabase.rpc("lwin_search", { p_query: intent.text, p_limit: PER_SOURCE_LIMIT }),
+      supabase.rpc("xwines_search", { p_query: intent.text, p_limit: PER_SOURCE_LIMIT }),
     ]);
     if (lwinResult.error) {
       reportDegradation("lwin-search", lwinResult.error, { restaurantId, q });
