@@ -37,6 +37,31 @@ describe("selectCellarMatches", () => {
     expect(selectCellarMatches([wine()], query())).toEqual([]);
   });
 
+  it("filters by vintage", () => {
+    const y2018 = wine({ wineId: "2018", vintage: 2018 });
+    const y2019 = wine({ wineId: "2019", vintage: 2019 });
+    const got = selectCellarMatches([y2018, y2019], query({ vintages: [2018], understood: ["vintage"] }));
+    expect(got.map((w) => w.wineId)).toEqual(["2018"]);
+  });
+
+  it("matches any of several asked-for vintages", () => {
+    const y2016 = wine({ wineId: "2016", vintage: 2016 });
+    const y2018 = wine({ wineId: "2018", vintage: 2018 });
+    const y2019 = wine({ wineId: "2019", vintage: 2019 });
+    const got = selectCellarMatches(
+      [y2016, y2018, y2019],
+      query({ vintages: [2018, 2019], understood: ["vintage"] }),
+    );
+    expect(got.map((w) => w.wineId).sort()).toEqual(["2018", "2019"]);
+  });
+
+  // Same rule as an unpriced wine inside a price band: an unrecorded vintage
+  // is not 2018, and showing it as one would answer the question wrongly.
+  it("excludes a wine whose vintage was never recorded", () => {
+    const unknown = wine({ wineId: "unknown", vintage: null });
+    expect(selectCellarMatches([unknown], query({ vintages: [2018], understood: ["vintage"] }))).toEqual([]);
+  });
+
   it("filters by pairing overlap", () => {
     const beef = wine({ wineId: "beef", pairings: ["Beef"] });
     const fish = wine({ wineId: "fish", pairings: ["Lean Fish"] });
