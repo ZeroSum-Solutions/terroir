@@ -29,10 +29,11 @@ import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { requestAssistant } from "../assistant-open";
 import { addRecentSearch, readRecentSearches } from "@/lib/wine-search-recents";
-import { PaletteResultsPanel, type AddState, type UnifiedResult } from "./palette-results";
+import { PaletteResultsPanel, type AddState, type CompanionHint, type UnifiedResult } from "./palette-results";
 
 const MIN_QUERY = 2;
 const DEBOUNCE_MS = 200;
+const NO_COMPANION: CompanionHint = { suggested: false, reasons: [] };
 
 export function SearchPalette({ className }: { className?: string }) {
   const router = useRouter();
@@ -44,6 +45,7 @@ export function SearchPalette({ className }: { className?: string }) {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<"all" | "cellar">("all");
   const [results, setResults] = useState<UnifiedResult[] | null>(null);
+  const [companion, setCompanion] = useState<CompanionHint>(NO_COMPANION);
   const [pending, setPending] = useState(false);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -69,6 +71,7 @@ export function SearchPalette({ className }: { className?: string }) {
     const trimmed = text.trim();
     if (trimmed.length < MIN_QUERY) {
       setResults(null);
+      setCompanion(NO_COMPANION);
       setPending(false);
       return;
     }
@@ -80,11 +83,17 @@ export function SearchPalette({ className }: { className?: string }) {
         const params = new URLSearchParams({ q: trimmed });
         if (scopeNow === "cellar") params.set("scope", "cellar");
         const res = await fetch(`/api/search?${params}`, { signal: controller.signal });
-        const body = res.ok ? ((await res.json()) as { results: UnifiedResult[] }) : { results: [] };
+        const body = res.ok
+          ? ((await res.json()) as { results: UnifiedResult[]; companion?: CompanionHint })
+          : { results: [] };
         setResults(body.results);
+        setCompanion(body.companion ?? NO_COMPANION);
         setAddStates(new Map());
       } catch {
-        if (!controller.signal.aborted) setResults([]);
+        if (!controller.signal.aborted) {
+          setResults([]);
+          setCompanion(NO_COMPANION);
+        }
       } finally {
         if (!controller.signal.aborted) setPending(false);
       }
@@ -333,6 +342,7 @@ export function SearchPalette({ className }: { className?: string }) {
           scope={scope}
           addStates={addStates}
           recents={showRecents ? recents : []}
+          companion={companion}
           onPick={commit}
           onAdd={addFromCatalogue}
           onSeeAll={seeAll}
@@ -343,8 +353,9 @@ export function SearchPalette({ className }: { className?: string }) {
             router.push("/scan");
           }}
           onAskCompanion={() => {
-            // The query already missed both corpora; hand it to the
-            // companion as asked rather than making the user retype it.
+            // Shared by the all-scope-miss CTA and the companion-hint banner
+            // above the results: hand the typed query to the companion as
+            // asked rather than making the user retype it.
             const text = query.trim();
             close();
             requestAssistant(text === "" ? null : text);

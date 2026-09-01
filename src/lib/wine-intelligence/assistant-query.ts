@@ -129,7 +129,11 @@ interface PriceBounds {
   spans: string[];
 }
 
-function parsePrice(raw: string, normalized: string): PriceBounds {
+/** Exported for src/lib/unified-search/companion-hint.ts (VOCABULARY-FREE
+ *  contract): the same price reading this parser gives the assistant, reused
+ *  rather than re-decided, so a query that carries a price bound routes to
+ *  the surface that can actually answer one. */
+export function parsePrice(raw: string, normalized: string): PriceBounds {
   const spans: string[] = [];
 
   // Work on the raw string for price detection so "$" survives normalization.

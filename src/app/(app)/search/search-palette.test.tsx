@@ -412,4 +412,67 @@ describe("SearchPalette", () => {
       unsubscribe();
     }
   });
+
+  it("offers the companion above loose results when the query carries a price or a pairing", async () => {
+    // The defect this closes (route.ts header, 2026-08-31): "something under
+    // $40 for fish" used to come back as loose trigram matches with no route
+    // to the companion at all, because the miss CTA only ever fires when
+    // `results` is empty — this one is not.
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        results: [XWINES_ROW],
+        companion: { suggested: true, reasons: ["price", "pairing"] },
+      }),
+    );
+    const seen: Array<string | null> = [];
+    const unsubscribe = onAssistantRequest((question) => seen.push(question));
+    try {
+      await renderPalette();
+      await typeQuery("something under $40 for fish");
+
+      expect(panelText()).toContain("Price and food pairing are questions for the companion.");
+      // Results still render beneath the banner — the loose match is not hidden.
+      expect(document.querySelectorAll('[role="option"]')).toHaveLength(1);
+
+      const cta = [...document.querySelectorAll("button")].find((b) =>
+        (b.textContent ?? "").includes("Ask the companion"),
+      );
+      if (!cta) throw new Error("companion banner CTA not rendered");
+      await act(async () => {
+        cta.click();
+      });
+      expect(seen).toEqual(["something under $40 for fish"]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("does not offer the companion banner when the search answered with real facts", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        results: [XWINES_ROW],
+        companion: { suggested: false, reasons: [] },
+      }),
+    );
+    await renderPalette();
+    await typeQuery("community");
+
+    expect(panelText()).not.toContain("questions for the companion");
+    expect([...document.querySelectorAll("button")].some((b) =>
+      (b.textContent ?? "").includes("Ask the companion"),
+    )).toBe(false);
+  });
+
+  it("leaves the all-scope-miss empty state as-is when a mocked response omits companion", async () => {
+    // Regression guard: a response with no `companion` field (as every other
+    // test in this file mocks) must not crash the panel or the miss CTA.
+    fetchMock.mockResolvedValue(jsonResponse({ results: [] }));
+    await renderPalette();
+    await typeQuery("nonexistent volcanic thing");
+
+    const cta = [...document.querySelectorAll("button")].find((b) =>
+      (b.textContent ?? "").includes("Ask the companion"),
+    );
+    expect(cta).toBeDefined();
+  });
 });

@@ -14,6 +14,9 @@ import { createPortal } from "react-dom";
 import { WineThumb } from "@/components/wine-thumb";
 import { cn } from "@/lib/utils";
 import { catalogueWineTitle, wineDisplayName } from "@/lib/wine-display-name";
+import type { CompanionHint, CompanionReason } from "@/lib/unified-search/companion-hint";
+
+export type { CompanionHint, CompanionReason };
 
 /** The row shape GET /api/search returns (src/lib/unified-search/merge.ts). */
 export type UnifiedResult = {
@@ -47,6 +50,16 @@ const PROVENANCE_LABEL: Record<UnifiedResult["provenance"], string | null> = {
   "lwin+xwines": "LWIN · X-Wines",
 };
 
+/** One short line saying why the companion is offered — companion-hint.ts
+ *  supplies `reasons`, this only turns it into words. */
+function companionReasonCopy(reasons: readonly CompanionReason[]): string {
+  const hasPrice = reasons.includes("price");
+  const hasPairing = reasons.includes("pairing");
+  if (hasPrice && hasPairing) return "Price and food pairing are questions for the companion.";
+  if (hasPrice) return "Price is a question for the companion.";
+  return "Food pairing is a question for the companion.";
+}
+
 export function PaletteResultsPanel({
   anchor,
   listboxId,
@@ -57,6 +70,7 @@ export function PaletteResultsPanel({
   scope,
   addStates,
   recents,
+  companion,
   onPick,
   onAdd,
   onSeeAll,
@@ -74,6 +88,7 @@ export function PaletteResultsPanel({
   scope: "all" | "cellar";
   addStates: ReadonlyMap<string, AddState>;
   recents: string[];
+  companion: CompanionHint;
   onPick: (row: UnifiedResult) => void;
   onAdd: (row: UnifiedResult) => void;
   onSeeAll: () => void;
@@ -161,6 +176,19 @@ export function PaletteResultsPanel({
             </button>
           </div>
         )
+      ) : null}
+
+      {hasQueryResults && companion.suggested ? (
+        <div className="border-b border-rule px-md py-sm">
+          <p className="text-body-sm font-light text-grey">{companionReasonCopy(companion.reasons)}</p>
+          <button
+            type="button"
+            onClick={onAskCompanion}
+            className="mt-xs text-body-sm text-ink-soft underline-offset-2 hover:underline focus-ring"
+          >
+            Ask the companion
+          </button>
+        </div>
       ) : null}
 
       {hasQueryResults ? (

@@ -128,7 +128,7 @@ describe("GET /api/search", () => {
     mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await GET(request("q=m"));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ results: [] });
+    expect(await res.json()).toEqual({ results: [], companion: { suggested: false, reasons: [] } });
     expect(supabase.from).not.toHaveBeenCalled();
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
@@ -315,7 +315,7 @@ describe("GET /api/search — typed search (P1 slice 3b)", () => {
     const { supabase } = makeSupabase();
     mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
     const res = await GET(q("something nice please"));
-    expect(await res.json()).toEqual({ results: [] });
+    expect(await res.json()).toEqual({ results: [], companion: { suggested: false, reasons: [] } });
     expect(supabase.from).not.toHaveBeenCalled();
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
@@ -330,5 +330,44 @@ describe("GET /api/search — typed search (P1 slice 3b)", () => {
     const res = await GET(q("a crisp white from Portugal"));
     const { results } = await res.json();
     expect(results.map((r: { name: string }) => r.name)).toContain("Alvarinho");
+  });
+});
+
+// Companion hand-off (companion-hint.ts): a query carrying a price bound or
+// a pairing phrase gets the additive `companion` field set, ALONGSIDE
+// whatever the trigram fallback below returns — the evidence being closed
+// (route.ts header): "something under $40 for fish" used to come back with
+// ~16 loose token matches and no route to the surface that could actually
+// answer it.
+describe("GET /api/search — companion hand-off", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const q = (text: string) => request(`q=${encodeURIComponent(text)}`);
+
+  it("flags a query carrying a price bound and a pairing, alongside the trigram results", async () => {
+    const { supabase } = makeSupabase({ lwin: [LWIN_ROW], xwines: [XWINES_ROW] });
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    const res = await GET(q("something under $40 for fish"));
+    const body = await res.json();
+    expect(body.companion).toEqual({ suggested: true, reasons: ["price", "pairing"] });
+    // The existing trigram fallback is untouched — companion is additive.
+    expect(body.results.length).toBeGreaterThan(0);
+  });
+
+  it("does not flag a query the search already answers with real facts", async () => {
+    const { supabase } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    const res = await GET(q("a crisp white from Portugal"));
+    const body = await res.json();
+    expect(body.companion).toEqual({ suggested: false, reasons: [] });
+  });
+
+  it("leaves the all-scope-miss empty state and its companion field consistent", async () => {
+    const { supabase } = makeSupabase();
+    mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1" });
+    const res = await GET(q("something nice please"));
+    const body = await res.json();
+    expect(body.results).toEqual([]);
+    expect(body.companion).toEqual({ suggested: false, reasons: [] });
   });
 });
