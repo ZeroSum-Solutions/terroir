@@ -51,13 +51,15 @@
  * be a code change and is left alone.
  *
  * ── 4. INVENTED NAMES OVERRIDE REAL WINES ON THE GUEST MENU ─────────────
- * Every 19th item carried `name_override = "<producer> Reserve Pour"`, an
- * invented name from before the cellar was re-pointed at real bottlings — so
- * the public menu showed "Trellis Road Reserve Pour" for what is really
- * Mateus The Original Rosé. `name_override` always wins in render.ts because
- * it is the owner's own wording; the seed pattern is not the owner's wording,
- * so ONLY overrides matching that exact pattern are cleared. A real override
- * an operator typed is never touched.
+ * Every 19th item carries `name_override = "<producer> Reserve Pour"`, the
+ * owner's by-the-glass wording. It was written when the cellar held invented
+ * producers, and it survived the re-pointing at real bottlings, so the public
+ * menu showed "Trellis Road Reserve Pour" for what is really Mateus The
+ * Original Rosé. `name_override` always wins in render.ts because it is the
+ * owner's own wording — so the wording is KEPT and only the producer half is
+ * rewritten to the wine's real producer ("Mateus Reserve Pour"). Only the
+ * seed's exact pattern is touched; any other override is an operator's and
+ * stays. Idempotent: an override already naming the real producer is skipped.
  *
  * Also refreshes the 10 seeded invitations, which had all expired (Jun-Jul
  * 2026, and it is now August) so /invite/[token] correctly returned an opaque
@@ -249,19 +251,28 @@ const { data: refreshed, error: invErr } = await db
 console.log(invErr ? `invites: ${invErr.message}` : `invites: ${refreshed?.length ?? 0} refreshed to ${future.slice(0, 10)}`);
 
 // -------------------------------------------- 4. seeded name overrides
-// Only the seed's own "<producer> Reserve Pour" pattern; an operator's real
-// override is their wording and stays.
+// Only the seed's own "<producer> Reserve Pour" pattern; the producer half is
+// rewritten to the wine's real producer, the owner's wording is kept.
 const { data: overridden, error: ovErr } = await db
   .from("wine_list_items")
-  .select("id, name_override")
+  .select("id, wine_id, name_override")
   .like("name_override", "% Reserve Pour");
 if (ovErr) throw ovErr;
-console.log(`name overrides: ${overridden?.length ?? 0} seeded "Reserve Pour" names to clear`);
-if (CONFIRM && overridden?.length) {
-  const { error: clearErr } = await db
-    .from("wine_list_items")
-    .update({ name_override: null })
-    .in("id", overridden.map((o) => o.id));
-  if (clearErr) throw clearErr;
-  console.log(`  cleared ${overridden.length}`);
+const rewrites = (overridden ?? [])
+  .map((item) => {
+    const producer = wineById.get(item.wine_id)?.producer?.trim();
+    const wanted = producer ? `${producer} Reserve Pour` : null;
+    return wanted && wanted !== item.name_override ? { id: item.id, name_override: wanted } : null;
+  })
+  .filter(Boolean);
+console.log(`name overrides: ${overridden?.length ?? 0} "Reserve Pour" overrides, ${rewrites.length} to rename to the real producer`);
+if (CONFIRM) {
+  for (const r of rewrites) {
+    const { error: renameErr } = await db
+      .from("wine_list_items")
+      .update({ name_override: r.name_override })
+      .eq("id", r.id);
+    if (renameErr) throw renameErr;
+  }
+  if (rewrites.length) console.log(`  renamed ${rewrites.length}`);
 }

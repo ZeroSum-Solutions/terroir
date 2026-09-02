@@ -484,10 +484,14 @@ function buildRows(userIds = DRY_USER_IDS) {
           itemIndex % 8 === 0
             ? "Local fixture note for public menu and print rendering."
             : null,
-        // Never an invented name: name_override renders VERBATIM on the public
-        // guest menu and always wins over the wine's real name (render.ts), so
-        // a seeded "<producer> Reserve Pour" put a fake wine in front of guests.
-        name_override: null,
+        // One item in nineteen carries the owner's own by-the-glass wording.
+        // name_override renders VERBATIM on the guest menu and always wins
+        // (render.ts), so it must name THIS wine's producer: in the base seed
+        // that is the invented producer, which is consistent with everything
+        // else here. After seed-xwines-labels.mjs re-points the cellar at real
+        // bottlings, fix-demo-wine-lists.mjs rewrites the producer half to the
+        // real one — the wording survives, the fake name does not.
+        name_override: itemIndex % 19 === 0 ? `${wine.producer} Reserve Pour` : null,
         blurb: itemIndex % 11 === 0 ? "Sanitized menu blurb for editor/public state." : null,
         hidden: itemIndex % 43 === 0,
         is_available: !wine.is_eightysixed,
