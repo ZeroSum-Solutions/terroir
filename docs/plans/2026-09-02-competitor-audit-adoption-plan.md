@@ -1,4 +1,4 @@
-# Competitor Audit and Adoption Plan — Vivino, Delectable, Vinous, InVintory, Bevly
+# Competitor Audit and Adoption Plan — Vivino, Delectable, Vinous, InVintory, Bevly, Bevrly
 
 **Date:** 2026-09-02 · **Status:** evidence brief + ranked backlog, awaiting Devin's picks
 **Full briefs:** `docs/plans/competitor-audit-2026-09-02/<app>.md` (one per app, cited, `[PUBLISHED]`/`[ESTIMATE]` discipline)
@@ -20,14 +20,17 @@ Two premises were tested and corrected by the evidence:
   your profile instantly and identification resolved later — historically by human
   transcription averaging about fifteen minutes. The speed Devin experiences is a non-blocking
   UI. Terroir can have both, because its identification is a parallel vision model.
-- **"Beverly" resolved to Bevly (bevlypos.com), which is a liquor-store POS, not a
-  restaurant tool, and it has not won any market** (Android "10+" downloads, zero iOS
-  ratings, no review-site listings). The earlier 2026-09-01 comparison audited a *different*
-  app, **Bevrly (bevrly.com)** — restaurant wine inventory with Toast POS depletion sync,
-  binning and hardware count scanners — which fits the description "restaurateurs logging,
-  auditing and tracking sales" far better. A Bevrly brief is in progress and will be added to
-  this folder; the Bevly brief stays because its receiving-screen and exception-report
-  patterns are good regardless of who built them.
+- **"Beverly" was dictated, and two apps fit the sound.** Devin picked **Bevly**
+  (bevlypos.com) from the options offered, but it is a liquor-store POS from a payments ISO,
+  not a restaurant tool. The earlier 2026-09-01 comparison audited **Bevrly** (bevrly.com),
+  restaurant wine inventory with POS depletion sync, binning and hardware count scanners,
+  which fits "restaurateurs logging, auditing and tracking sales" far better. Both are
+  audited below (§2.5 Bevly, §2.6 Bevrly). **Neither has won the market**: Bevly shows
+  "10+" Android installs and no review-site listings; Bevrly is a two-person company with
+  zero App Store ratings, a "1+" Play install bucket, no Toast partner-directory listing and
+  fifteen named venues, eleven of them in New York. Bevrly's *product* is nonetheless the
+  deepest restaurant workflow in the set, and its 48-page public docs plus its shipped
+  JavaScript exposed the whole route map, so its brief is the most complete of the six.
 
 ---
 
@@ -44,7 +47,7 @@ value to the agent.
 | `delectable_login` | Delectable | https://delectable.com | Owned by Vinous; iOS app last shipped 2021 |
 | `vinous_login` | Vinous | https://vinous.com | Shared account from IB Hospitality (Rohan) |
 | `invintory_login` | InVintory | https://invintory.com | Web app exists; 3D view is iOS-only |
-| `bevly_login` | Bevly | https://bevlypos.com | See §0 — may need to become Bevrly (bevrly.com) |
+| `bevly_login` | Bevly | https://bevlypos.com | See §0 — if Devin meant Bevrly (bevrly.com), this entry gets repointed |
 
 Entries were created 2026-09-02 with URL, username where known, and a placeholder password;
 Devin sets the real passwords with `zsvault edit <id>` (hidden prompt). The logged-in
@@ -194,6 +197,38 @@ Do not copy: state-minimum/MSRP enforcement, shelf-label printing, eCommerce/loy
 payment rails and AP, multi-store UPC cloning (wrong identity key), "dead stock → delete", the
 assumption that every bottle is replenishable.
 
+### 2.6 Bevrly — the restaurant inventory cycle, end to end
+
+Bevrly is the one app in the set built for exactly Terroir's restaurant job: periodic counts
+against POS depletion, variance you can explain, and a guest wine list rendered from live
+stock. Its public manual and build manifest gave up the full 78-route map, permission keys,
+feature flags, a nine-provider POS enum and the exact variance-grid columns, so the brief is
+unusually concrete. Terroir already has things Bevrly does not: real physical bins, per-pour
+millilitre variance, open-bottle state, invoice OCR and LWIN identity.
+
+| # | Adopt | Maps onto | Do better | Size |
+|---|---|---|---|---|
+| 1 | The inventory cycle as a first-class object: a period with a start, an inventory date, a sales-pause boundary and a manual close; counted values become the next period's baseline | nothing today; `/cellar` state is continuous | Make the close reconcile open bottles too, which Bevrly's 0–1 decimal cannot | L |
+| 2 | Variance row that shows its own arithmetic: `Starting · Purchases · Sales · Adjustments · Running · Actual · Variance qty/cost/%` as adjacent columns | `/insights`, `reconciliation/variance.ts` | Add a pour-variance column from the ml data Bevrly cannot compute | M |
+| 3 | Blind Counting Mode: staged counts, three tabs (Counting / History / Confirm), floating keyboard, scan-to-increment, manager confirm | new, inside `/cellar` | Scan a bin label first so every count in the session is location-bound; Bevrly's "distribution" step exists only because its counts arrive without a location | L |
+| 4 | Audit Mode: per-action impact preview with *propagate / don't propagate / cancel*; ending audit is a lock, not a recalculation | nothing today | Show the delta per bin and log actor + reason for every propagation decision | M |
+| 5 | Daily digest email, and a Home page that *is* the digest (sales, average and median bottle price, top bottle/BTG sales, recently 86'd, sleepy inventory) | `/insights`; no email, no day-scoped home | Make it a worklist of three deep-linked things to do today, not a scoreboard | M |
+| 6 | Correct variance at the source: a cause→record taxonomy (miscount → stocktake, missing receiving → invoice, loss → adjustment with reason, location → movement, timing → date boundary) and a standing refusal to force counted = expected without evidence | reconcile + stock-adjustments | Require a note above a configurable dollar threshold and carry it into the export | M |
+| 7 | List style engine: separate web and print style records, uploaded fonts, five configurable columns, per-row sold-as prices | `/lists`, `src/app/list/[slug]/` | Bevrly's guest list has zero media queries and a fixed 900px page, and its flagship customer fakes page breaks with invisible Unicode group names. Ship responsive, a real page-break primitive, guest search, a BTG filter and live availability | L |
+| 8 | Permission keys instead of fixed roles, plus `simple_mode`: one switch that hides binning for venues that will never use it | `/team` owner/manager/staff | Terroir serves collectors and restaurants from one codebase, so make personal-cellar mode the default and let a restaurant opt into the machinery | M |
+
+Also worth taking, smaller: the partial-bottle slider with quarter presets and a live-filling
+bottle graphic on top of Terroir's ml precision (S); a "recently added" receiving holding
+location plus a `needs placement` count on the cellar header (S); a per-call AI cost ledger
+keyed on feature × model × tenant with cost-per-successful-extraction as the headline (M);
+"sleepy inventory" crossed with drinking windows to flag wine that is both unsold and
+running out of window (S); a public Feature Vocabulary table ("say this / don't say / what it
+means / primary page") written before the next feature, not after (S).
+
+Do not copy: the demo-only go-to-market (they take customers' BinWise logins to migrate
+them), the non-responsive guest list, 78 routes for a two-person company, or a home-grown
+universal wine catalogue when Terroir already has LWIN.
+
 ---
 
 ## 3. The cross-app programme — what the five audits agree on
@@ -216,10 +251,15 @@ the next planning round, in the order the audits' own evidence suggests:
    Delectable 4/8, Vinous 8). M in total.
 6. **Receiving with inline exceptions, and the exception rail on cellar health** (Bevly 2–3).
    M + S, and it turns the invoice scan Terroir already leads on into a finished workflow.
+7. **The inventory cycle: period, blind count bound to bins, variance that shows its
+   arithmetic, correct-at-source** (Bevrly 1–4, 6; Bevly 1). This is the restaurant-side
+   programme, and the largest: L + L + M + M. It is what makes reconcile a business process
+   rather than a screen.
 
 Deferred by evidence, not by preference: Vinous data licensing (contract-gated; build the
 schema, prototype co-subscription), a PO/vendor module (Bevly 5), photo-to-rack (InVintory 4),
-wine-list OCR overlay (Vivino 6). Explicitly out: anything in the "do not copy" lists, and any
+wine-list OCR overlay (Vivino 6), multi-venue org groups (Bevrly 15, only when a real group
+asks). Explicitly out: anything in the "do not copy" lists, and any
 import of another product's palette or type — Terroir's identity stays contracted in
 `DESIGN.md`.
 
@@ -227,8 +267,8 @@ import of another product's palette or type — Terroir's identity stays contrac
 
 ## 4. Open items for Devin
 
-- **Bevly vs Bevrly** (§0). Say which one you meant; if Bevrly, the vault entry gets a new URL
-  and the Bevrly brief replaces §2.5's caveat.
+- **Bevly vs Bevrly** (§0). Both are now audited; say which login you actually hold, and the
+  vault entry's URL follows.
 - **Passwords** into the five vault entries via `zsvault edit <id>`, then connect the Chrome
   extension for the logged-in walkthroughs that close each brief's "Gaps" section.
 - **Pick from §3.** Each move above goes through brainstorming and a design before code, per
