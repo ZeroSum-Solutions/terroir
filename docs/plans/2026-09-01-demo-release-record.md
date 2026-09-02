@@ -225,3 +225,30 @@ referenced by open issue #108.
 - Every LWIN row does not have a professional label photograph and cannot by tomorrow:
   no open licensed source exists at 211k scale; the X-Wines set covers the corpus with
   honest label / producer / representative captions.
+
+## 8. Addendum — model-provider cutover to OpenRouter (2026-09-01, after §7)
+
+Asked after the record above was written: route the app's model calls through a
+gateway with access to more than one vendor. Done on branch `feat/openrouter-gateway`.
+
+- **Shape.** The Anthropic SDK stays; only its base URL moves to OpenRouter's
+  Anthropic-compatible Messages endpoint (`src/lib/ai/anthropic-client.ts`). Probed
+  live before the change with the project's own SDK: Zod structured output on
+  Sonnet 5 and Haiku 4.5, `effort` honoured (thinking tokens rise low → high), an
+  image call, plain `create` on Sonnet 4.5, and the same structured call answered by
+  GPT-5 nano and Gemini 3.5 Flash Lite. A bad model id surfaces as the SDK's
+  `BadRequestError`, so every route's error mapping holds unchanged.
+- **Models.** Unchanged, re-addressed by OpenRouter id (`anthropic/claude-sonnet-5`,
+  `anthropic/claude-sonnet-4.5`). No eval in the repo ranks another vendor above the
+  current pins; a labelled bottle-reading comparison runs after this lands and any
+  re-pin will be its own PR with the numbers.
+- **Key.** `OPENROUTER_API_KEY` set on Railway production and staging (staging can
+  now scan; it never carried the Anthropic key) and as the GitHub Actions secret the
+  scoring workflow reads. `ANTHROPIC_API_KEY` remains on production, unread; the
+  owner deletes it. The §7 item "export the Anthropic key before starting
+  `dev-local.sh`" is gone: the shell carries the OpenRouter key from the vault, and
+  `.claude/launch.json` now starts the preview through `zsh` so the same holds there.
+- **Consequences to know.** Spend moves to the owner's OpenRouter credits. Photos and
+  invoice text transit OpenRouter as well as the model vendor, and OpenRouter may
+  serve Anthropic models via Bedrock or Vertex at its discretion; no provider pin in
+  this change.

@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "terroir-dev",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["scripts/local/dev-local.sh"],
+      "runtimeExecutable": "zsh",
+      "runtimeArgs": ["-c", "exec bash scripts/local/dev-local.sh"],
       "port": 3000
     }
   ]

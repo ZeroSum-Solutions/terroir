@@ -133,7 +133,7 @@ describe("extractFromOcr", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     __resetAnthropicClientForTests();
-    process.env.ANTHROPIC_API_KEY = "sk-test";
+    process.env.OPENROUTER_API_KEY = "sk-test";
   });
 
   it("returns the parsed_output on success", async () => {
@@ -146,7 +146,7 @@ describe("extractFromOcr", () => {
     expect(parsed.lineItems[0].name).toBe("Pinot Noir");
     // Sanity: the route's intended args were forwarded.
     const callArgs = anthropic.parse.mock.calls[0][0];
-    expect(callArgs.model).toBe("claude-sonnet-5");
+    expect(callArgs.model).toBe("anthropic/claude-sonnet-5");
     expect(callArgs.max_tokens).toBe(16000);
     expect(callArgs.output_config.effort).toBe("medium");
     expect(callArgs.messages[0].role).toBe("user");
@@ -157,19 +157,19 @@ describe("extractFromOcr", () => {
     anthropic.parse.mockResolvedValue(happyParse());
 
     await extractFromOcr(okOcr(), {
-      model: "claude-sonnet-5",
+      model: "anthropic/claude-sonnet-5",
       effort: "high",
       maxTokens: 24000,
     });
 
     const callArgs = anthropic.parse.mock.calls[0][0];
-    expect(callArgs.model).toBe("claude-sonnet-5");
+    expect(callArgs.model).toBe("anthropic/claude-sonnet-5");
     expect(callArgs.max_tokens).toBe(24000);
     expect(callArgs.output_config.effort).toBe("high");
   });
 
-  it("throws AiExtractError('not_configured') when ANTHROPIC_API_KEY is missing", async () => {
-    delete process.env.ANTHROPIC_API_KEY;
+  it("throws AiExtractError('not_configured') when OPENROUTER_API_KEY is missing", async () => {
+    delete process.env.OPENROUTER_API_KEY;
 
     const err = await extractFromOcr(okOcr()).catch((e) => e);
 

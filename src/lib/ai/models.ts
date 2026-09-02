@@ -1,6 +1,16 @@
 /**
  * Per-task Claude model profiles.
  *
+ * Ids are OpenRouter ids (`vendor/model`) since the 2026-09-01 cutover: every
+ * call goes through OpenRouter's Anthropic-compatible endpoint (see
+ * `anthropic-client.ts`), so moving a task to another vendor is a change to
+ * that one string — `google/gemini-3.7-flash`, `openai/gpt-5.6-sol`, … — with
+ * two caveats. `effort` is Anthropic's parameter: OpenRouter honours it for
+ * Claude (verified: thinking tokens rise low → high) and maps or drops it for
+ * other vendors. And the eval notes below stay binding: a task moves only on
+ * measured evidence, never on list price. OpenRouter bills Anthropic models at
+ * Anthropic's list price (Sonnet 5 $2/$10 on both, checked 2026-09-01).
+ *
  * Every production Claude call used to pin its own model string inline, so a
  * model refresh meant hunting three call sites plus a test plus the accuracy
  * harness — and two of them drifted (`claude-sonnet-4-6` in the scanner,
@@ -57,7 +67,7 @@ export type ModelProfile = {
  * already generous for the response alone and comfortably absorbs thinking.
  */
 export const INVOICE_EXTRACTION: ModelProfile = {
-  model: "claude-sonnet-5",
+  model: "anthropic/claude-sonnet-5",
   effort: "medium",
   maxTokens: 16000,
 };
@@ -74,7 +84,7 @@ export const INVOICE_EXTRACTION: ModelProfile = {
  * since a bad read is a reasoning-budget problem, not a model problem.
  */
 export const INVOICE_EXTRACTION_RETRY: ModelProfile = {
-  model: "claude-sonnet-5",
+  model: "anthropic/claude-sonnet-5",
   effort: "high",
   maxTokens: 24000,
 };
@@ -98,14 +108,14 @@ export const INVOICE_EXTRACTION_RETRY: ModelProfile = {
  * response costs the whole call.
  */
 export const BOTTLE_SCAN: ModelProfile = {
-  model: "claude-sonnet-5",
+  model: "anthropic/claude-sonnet-5",
   effort: "medium",
   maxTokens: 4000,
 };
 
 /** Structured, WCAG-aware brand theme proposals for public wine lists. */
 export const MENU_DESIGN: ModelProfile = {
-  model: "claude-sonnet-5",
+  model: "anthropic/claude-sonnet-5",
   effort: "medium",
   maxTokens: 12000,
 };
@@ -145,7 +155,7 @@ export const MENU_DESIGN: ModelProfile = {
  * respected it. Enforce the cap in code rather than trusting the prompt.
  */
 export const WINE_ENRICHMENT: ModelProfile = {
-  model: "claude-sonnet-4-5-20250929",
+  model: "anthropic/claude-sonnet-4.5",
   maxTokens: 400,
 };
 

@@ -19,7 +19,7 @@
  *     produces an actual review excerpt the user can read.
  *
  * Failure modes:
- *   • ANTHROPIC_API_KEY not set → throw on first call (logged once)
+ *   • OPENROUTER_API_KEY not set → throw on first call (logged once)
  *   • Network/timeout → results array of nulls + Sentry
  *   • Rate limit 429/529 → results array of nulls + Sentry tag rateLimited:true
  *   • JSON parse failure → results array of nulls + Sentry tag parseError:true

@@ -87,7 +87,7 @@ hold and change what "failure blocks promotion" can mean today:
 - Turning PR Environments on as-is would fail the isolation bar this document
   already sets (do not enable until every preview has its own Supabase
   credentials, etc.): `railway variables --service terroir-web` on the
-  `production` environment shows live `ANTHROPIC_API_KEY`,
+  `production` environment shows live `OPENROUTER_API_KEY`,
   `NEXT_PUBLIC_SUPABASE_URL`/publishable key, `SENTRY_AUTH_TOKEN`, and
   `ACTIVE_RESTAURANT_COOKIE_SECRET`. Railway's PR Environments feature clones
   variables from a chosen base environment; only `production` and `staging`

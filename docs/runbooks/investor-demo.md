@@ -6,21 +6,17 @@ Written 2026-08-30 on branch `feat/xwines-corpus-and-labels`; revised 2026-09-01
 
 ```bash
 npx supabase start            # if the stack is not already up
-export ANTHROPIC_API_KEY="$(railway variables --service terroir-web --environment production --kv | sed -n 's/^ANTHROPIC_API_KEY=//p')"
 scripts/local/dev-local.sh    # NOT `pnpm dev`
 ```
 
-The second line matters if you will scan a bottle label: `dev-local.sh` pins the
-local Supabase stack but does not carry a provider key, and without
-`ANTHROPIC_API_KEY` in the shell `POST /api/scan-bottle` answers a redacted 500.
-The script now warns on start when the key is missing; the dev server also logs the
-real error to the terminal outside production (it used to be silent).
-
-**Do the export before the room, not in it.** It needs the Railway CLI logged in and
-the network up; if either is doubtful, put `ANTHROPIC_API_KEY=…` into `.env.local`
-instead — that file already holds the production credentials, so the production
-provider key belongs there too — and skip the export line. And keep the terminal off
-the big screen while scanning: a provider error is now printed in full locally.
+Bottle-label scan needs `OPENROUTER_API_KEY` in the shell: since 2026-09-01 every
+model call goes through OpenRouter (the direct Anthropic key is no longer read), and
+`dev-local.sh` pins the local Supabase stack but does not carry a provider key. On
+this machine the shell sources the key from the vault automatically; the script warns
+on start if it is missing, and `.env.local` is the fallback place to put it. Without
+it `POST /api/scan-bottle` answers a redacted 500 — the dev server logs the real error
+to the terminal outside production, so keep the terminal off the big screen while
+scanning.
 
 **Do not re-seed before the demo.** The seeded database on this machine was audited
 and corrected on 2026-09-01 (cellar sections, scan statuses, guest-menu names). The

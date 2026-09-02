@@ -240,7 +240,7 @@ pnpm exec vitest run src/lib/jobs/tenant-isolation.test.ts
    the repo root, alongside the web service's `railway.toml`).
 3. Copy `terroir-web`'s service variables to `terroir-worker` for the same
    environment: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
-   `ANTHROPIC_API_KEY`, `AZURE_DOC_INTELLIGENCE_ENDPOINT`,
+   `OPENROUTER_API_KEY`, `AZURE_DOC_INTELLIGENCE_ENDPOINT`,
    `AZURE_DOC_INTELLIGENCE_KEY`. No new variables are introduced by this
    slice.
 4. Redeploy `terroir-worker` from `main` (or whichever branch this lands

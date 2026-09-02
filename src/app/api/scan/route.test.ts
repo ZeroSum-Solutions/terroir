@@ -96,7 +96,7 @@ describe("POST /api/scan", () => {
     __resetAnthropicClientForTests();
     process.env.AZURE_DOC_INTELLIGENCE_ENDPOINT = "https://example.invalid";
     process.env.AZURE_DOC_INTELLIGENCE_KEY = "test-key";
-    process.env.ANTHROPIC_API_KEY = "sk-test";
+    process.env.OPENROUTER_API_KEY = "sk-test";
     rateLimitMock.rateLimit.mockReturnValue({ ok: true });
   });
 
@@ -316,8 +316,8 @@ describe("POST /api/scan", () => {
     expect(azure.analyzeInvoice).not.toHaveBeenCalled();
   });
 
-  it("returns 500 when ANTHROPIC_API_KEY is missing (singleton throws)", async () => {
-    delete process.env.ANTHROPIC_API_KEY;
+  it("returns 500 when OPENROUTER_API_KEY is missing (singleton throws)", async () => {
+    delete process.env.OPENROUTER_API_KEY;
     auth.requireMembership.mockResolvedValue({
       supabase: makeSupabase(),
       user: { id: "u1" },

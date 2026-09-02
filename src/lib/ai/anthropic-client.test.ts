@@ -24,7 +24,8 @@ describe("getAnthropicClient", () => {
   beforeEach(() => {
     constructorSpy.mockClear();
     __resetAnthropicClientForTests();
-    process.env.ANTHROPIC_API_KEY = "test-key";
+    process.env.OPENROUTER_API_KEY = "test-key";
+    delete process.env.ANTHROPIC_API_KEY;
   });
 
   it("returns the same instance across repeat calls (singleton)", () => {
@@ -42,21 +43,37 @@ describe("getAnthropicClient", () => {
     expect(constructorSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("passes maxRetries: 2 and timeout: 100_000 to the SDK constructor", () => {
+  it("points the SDK at OpenRouter with maxRetries: 2 and timeout: 100_000", () => {
     getAnthropicClient();
     expect(constructorSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         apiKey: "test-key",
+        baseURL: "https://openrouter.ai/api",
         maxRetries: 2,
         timeout: 100_000,
       }),
     );
   });
 
-  it("throws a clear error when ANTHROPIC_API_KEY is not set", () => {
-    delete process.env.ANTHROPIC_API_KEY;
-    expect(() => getAnthropicClient()).toThrow(/ANTHROPIC_API_KEY/);
+  it("throws a clear error when OPENROUTER_API_KEY is not set", () => {
+    delete process.env.OPENROUTER_API_KEY;
+    expect(() => getAnthropicClient()).toThrow(/OPENROUTER_API_KEY/);
     // And nothing was constructed.
     expect(constructorSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("getAnthropicClient — provider cutover", () => {
+  beforeEach(() => {
+    constructorSpy.mockClear();
+    __resetAnthropicClientForTests();
+  });
+
+  it("ignores a direct Anthropic key: OpenRouter is the only provider", () => {
+    delete process.env.OPENROUTER_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "sk-ant-should-not-be-used";
+    expect(() => getAnthropicClient()).toThrow(/OPENROUTER_API_KEY/);
+    expect(constructorSpy).not.toHaveBeenCalled();
+    delete process.env.ANTHROPIC_API_KEY;
   });
 });

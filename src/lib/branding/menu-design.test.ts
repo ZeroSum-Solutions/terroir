@@ -45,7 +45,7 @@ describe("generateMenuThemes", () => {
     expect(result).toHaveLength(3);
     expect(mocks.parse).toHaveBeenCalledTimes(1);
     expect(mocks.parse.mock.calls[0][0]).toMatchObject({
-      model: "claude-sonnet-5",
+      model: "anthropic/claude-sonnet-5",
       output_config: { effort: "medium" },
     });
   });

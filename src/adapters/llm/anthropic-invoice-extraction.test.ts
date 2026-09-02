@@ -25,8 +25,8 @@ describe("assertInvoiceExtractionConfigured", () => {
 
   it("propagates the configuration error rather than swallowing it", () => {
     getAnthropicClient.mockImplementation(() => {
-      throw new Error("ANTHROPIC_API_KEY is not set");
+      throw new Error("OPENROUTER_API_KEY is not set");
     });
-    expect(() => assertInvoiceExtractionConfigured()).toThrow("ANTHROPIC_API_KEY is not set");
+    expect(() => assertInvoiceExtractionConfigured()).toThrow("OPENROUTER_API_KEY is not set");
   });
 });
