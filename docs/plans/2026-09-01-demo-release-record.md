@@ -225,3 +225,51 @@ referenced by open issue #108.
 - Every LWIN row does not have a professional label photograph and cannot by tomorrow:
   no open licensed source exists at 211k scale; the X-Wines set covers the corpus with
   honest label / producer / representative captions.
+
+## 8. Addendum — model-provider cutover to OpenRouter (2026-09-01, after §7)
+
+Asked after the record above was written: route the app's model calls through a
+gateway with access to more than one vendor. Done on branch `feat/openrouter-gateway`.
+
+- **Shape.** The Anthropic SDK stays; only its base URL moves to OpenRouter's
+  Anthropic-compatible Messages endpoint (`src/lib/ai/anthropic-client.ts`). Probed
+  live before the change with the project's own SDK: Zod structured output on
+  Sonnet 5 and Haiku 4.5, `effort` honoured (thinking tokens rise low → high), an
+  image call, plain `create` on Sonnet 4.5, and the same structured call answered by
+  GPT-5 nano and Gemini 3.5 Flash Lite. A bad model id surfaces as the SDK's
+  `BadRequestError`, so every route's error mapping holds unchanged.
+- **Models.** Unchanged, re-addressed by OpenRouter id (`anthropic/claude-sonnet-5`,
+  `anthropic/claude-sonnet-4.5`). No eval in the repo ranks another vendor above the
+  current pins; a labelled bottle-reading comparison runs after this lands and any
+  re-pin will be its own PR with the numbers.
+- **Key.** `OPENROUTER_API_KEY` set on Railway production and staging (staging can
+  now scan; it never carried the Anthropic key) and as the GitHub Actions secret the
+  scoring workflow reads. `ANTHROPIC_API_KEY` remains on production, unread; the
+  owner deletes it. The §7 item "export the Anthropic key before starting
+  `dev-local.sh`" is gone: the shell carries the OpenRouter key from the vault, and
+  `.claude/launch.json` now starts the preview through `zsh` so the same holds there.
+- **Consequences to know.** Spend moves to the owner's OpenRouter credits. Photos and
+  invoice text transit OpenRouter as well as the model vendor, and OpenRouter may
+  serve Anthropic models via Bedrock or Vertex at its discretion; no provider pin in
+  this change.
+
+### 8.1 Grok 4.6 review of the cutover — findings and dispositions
+
+Grok 4.6 reviewed the diff and said "do not ship" until five things were shown. Each
+was checked live the same night; three produced code changes on the same branch.
+
+| # | Finding | Evidence gathered | Disposition |
+|---|---|---|---|
+| 1 | The production key was never exercised; a bad paste or empty wallet 500s every model route | `railway run --environment production` with the stored variable reached OpenRouter (Haiku answered). Credits endpoint: **$8.35 remaining** of $231 at 03:30 | **Owner action: top up OpenRouter credits before the demo.** Code unchanged; a 402 maps to the SDK's generic `APIError`, which every route already turns into a friendly 502 |
+| 2 | Unpinned routing could land Claude on Bedrock/Vertex without feature parity | Default routing measured: Sonnet 5 → "Claude Platform on AWS" (5/5), Sonnet 4.5 → Amazon Bedrock (3/3); every probe above ran there and passed. OpenRouter's endpoint list shows Google Vertex for the same models **without** structured outputs | **Fixed:** `provider: { require_parameters: true }` injected into every Messages request (`anthropic-client.ts`), so an endpoint lacking a requested parameter is never chosen. All four paths re-run live through the wrapper |
+| 3 | 100 s SDK timeout × 2 retries behind the bottle route's `maxDuration = 60` | Pre-existing; `maxDuration` is a Vercel export and has no effect on Railway (the route's own comment says so) | Not changed; recorded |
+| 4 | 402/429/5xx mapping | SDK maps by HTTP status: 429 → `RateLimitError`, 402 and 5xx → `APIError`; routes already handle both classes | No change; the real mitigation is #1 |
+| 5 | Three of four product paths not live-tested after the cutover | Ran `extractFromOcr` (both profiles), `generateMenuThemes`, `enrichWinesWithClaudeBatch`/single through OpenRouter with the real modules | Invoice and enrichment passed. **Menu design was broken before the cutover:** `HexColorSchema`'s `.transform()` made the SDK's Zod→JSON-Schema converter throw before any request (unit tests mock that converter, so nothing caught it; `/api/brand-kit/propose` has been failing since the `.transform` landed in #73). **Fixed** with `.overwrite()` and a test that runs the real converter; four themes generated live afterwards |
+| 6 | Enrichment reads `content[0]` and a thinking block may come first | Measured: Sonnet 5 via OpenRouter returns a `thinking` block first (2/3 calls); Sonnet 4.5 (enrichment's pin) returns text first (3/3) | **Fixed** anyway: text block selected by type, pinned by `enrich-claude.blocks.test.ts`, so a future re-pin cannot silently null every drink window |
+| 7 | `parsed_output` null under load-balancing | Covered by #2 | — |
+| 8 | Demo laptop launch path | The vault exports the OpenRouter key; the preview server started through the new launch config scanned a label successfully | No change |
+| 9 | Floating model ids | `anthropic/claude-sonnet-4.5` is the only Sonnet 4.5 snapshot; contract test requires namespaced ids | No change |
+| 10–11 | Prompt caching, `:batch` suffixes | Not used; no suffixes appended | No change |
+
+CI note: the first run of PR #194 failed only at `types:check:local`, where the Supabase
+CLI exited on a PostHog telemetry timeout with no drift printed; re-run.

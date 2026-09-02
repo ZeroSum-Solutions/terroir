@@ -4,9 +4,9 @@
  *
  * Usage:
  *   cd terroir
- *   npx tsx scripts/test-invoices.ts                   # default: claude-opus-5
- *   npx tsx scripts/test-invoices.ts --model sonnet    # claude-sonnet-5 (what prod runs)
- *   npx tsx scripts/test-invoices.ts --model baseline  # claude-sonnet-4-6 (the model
+ *   npx tsx scripts/test-invoices.ts                   # default: anthropic/claude-opus-5
+ *   npx tsx scripts/test-invoices.ts --model sonnet    # anthropic/claude-sonnet-5 (what prod runs)
+ *   npx tsx scripts/test-invoices.ts --model baseline  # anthropic/claude-sonnet-4.6 (the model
  *                                                      # prod ran before 2026-08-19)
  *
  * `baseline` exists so a model change can be shown not to regress rather than
@@ -18,7 +18,8 @@
  *   sonnet    → test-results-sonnet.json
  *   baseline  → test-results-baseline.json
  *
- * Requires ANTHROPIC_API_KEY in .env.local.
+ * Requires OPENROUTER_API_KEY in the shell or .env.local — the same client prod
+ * uses (src/lib/ai/anthropic-client.ts: Anthropic SDK over OpenRouter).
  *
  * BND-027: consolidated from test-invoices.ts + test-invoices-sonnet.ts.
  * SYSTEM_PROMPT now imported from src/lib/scanner/system-prompt.ts so the
@@ -26,6 +27,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { getAnthropicClient } from "../src/lib/ai/anthropic-client.ts";
 import { readFileSync, readdirSync, writeFileSync, existsSync } from "fs";
 import { join, basename, extname } from "path";
 // scripts/ is excluded from tsconfig, so use the runtime-correct .ts
@@ -51,9 +53,9 @@ if (existsSync(envPath)) {
 
 // ── Model selection (--model opus|sonnet, default opus) ─────────────────
 const MODELS: Record<string, string> = {
-  opus: "claude-opus-5",
-  sonnet: "claude-sonnet-5",
-  baseline: "claude-sonnet-4-6",
+  opus: "anthropic/claude-opus-5",
+  sonnet: "anthropic/claude-sonnet-5",
+  baseline: "anthropic/claude-sonnet-4.6",
 };
 const args = process.argv.slice(2);
 const modelFlagIdx = args.indexOf("--model");
@@ -205,9 +207,8 @@ async function testInvoice(
 }
 
 async function main() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    console.error("ANTHROPIC_API_KEY not found in .env.local");
+  if (!process.env.OPENROUTER_API_KEY) {
+    console.error("OPENROUTER_API_KEY not found in the shell or .env.local");
     process.exit(1);
   }
 
@@ -225,7 +226,7 @@ async function main() {
   console.log(`   Model: ${MODEL_ID} (${MODEL_NAME})`);
   console.log(`   ${files.length} invoices to process\n`);
 
-  const client = new Anthropic({ apiKey });
+  const client = getAnthropicClient();
   const results: InvoiceResult[] = [];
 
   for (let i = 0; i < files.length; i++) {

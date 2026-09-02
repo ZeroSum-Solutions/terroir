@@ -6,7 +6,7 @@
  * (ParsedInvoice). Anthropic SDK errors are classified into a small
  * enumeration the route can map to HTTP statuses:
  *
- *   - `not_configured` — ANTHROPIC_API_KEY missing. (The singleton
+ *   - `not_configured` — OPENROUTER_API_KEY missing. (The singleton
  *     itself throws; we catch and wrap.) Route → 500.
  *   - `parse_failed`   — Claude responded but returned no parsed_output.
  *     Route → 422 with rawText for manual entry.
@@ -98,7 +98,7 @@ export async function extractFromOcr(
   } catch {
     throw new AiExtractError(
       "not_configured",
-      "Server not configured: ANTHROPIC_API_KEY missing.",
+      "Server not configured: OPENROUTER_API_KEY missing.",
     );
   }
 

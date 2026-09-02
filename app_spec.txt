@@ -50,7 +50,7 @@
     </communication>
     <ai_layer>
       <ocr>Azure Document Intelligence (@azure-rest/ai-document-intelligence)</ocr>
-      <extraction>Anthropic Claude (@anthropic-ai/sdk) — structured JSON via system prompt, Zod-validated</extraction>
+      <extraction>Claude via OpenRouter (@anthropic-ai/sdk against OpenRouter's Anthropic-compatible endpoint; model ids in src/lib/ai/models.ts) — structured JSON via system prompt, Zod-validated</extraction>
     </ai_layer>
     <observability>Sentry (server, edge, client) with source-map upload on Railway deploy</observability>
     <testing>Vitest 4 (unit + route), Playwright 1.59 (E2E)</testing>
@@ -60,7 +60,7 @@
     <environment_setup>
       - Node.js 20+ and pnpm 9+ installed
       - Supabase project provisioned with migrations applied: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
-      - Anthropic API key: ANTHROPIC_API_KEY
+      - OpenRouter API key (every model call): OPENROUTER_API_KEY
       - Azure Document Intelligence: AZURE_DOC_INTELLIGENCE_ENDPOINT, AZURE_DOC_INTELLIGENCE_KEY
       - Sentry: SENTRY_AUTH_TOKEN, SENTRY_DSN (and project/org IDs)
       - LWIN catalog seeded into public.lwin_catalog

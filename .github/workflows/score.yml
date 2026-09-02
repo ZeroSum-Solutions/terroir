@@ -5,7 +5,7 @@
 # resulting JSON as a workflow artifact.
 #
 # *** NOT TRIGGERED ON PUSH OR PR ***
-# This workflow fires real Azure Document Intelligence + Anthropic
+# This workflow fires real Azure Document Intelligence + OpenRouter
 # API calls. Each run costs money. Trigger manually via the GitHub
 # Actions "Run workflow" button when you want to measure scanner
 # accuracy — e.g. after a prompt or model change.
@@ -14,7 +14,7 @@
 # Actions) before the workflow can complete successfully:
 #   - AZURE_DOC_INTELLIGENCE_ENDPOINT
 #   - AZURE_DOC_INTELLIGENCE_KEY
-#   - ANTHROPIC_API_KEY
+#   - OPENROUTER_API_KEY
 #
 # INT-015: the secret names match the environment variables
 # src/lib/scanner/ocr-service.ts reads. Earlier drafts shortened
@@ -60,7 +60,7 @@ jobs:
     timeout-minutes: 30
 
     env:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       AZURE_DOC_INTELLIGENCE_ENDPOINT: ${{ secrets.AZURE_DOC_INTELLIGENCE_ENDPOINT }}
       AZURE_DOC_INTELLIGENCE_KEY: ${{ secrets.AZURE_DOC_INTELLIGENCE_KEY }}
       MODEL: ${{ inputs.model }}

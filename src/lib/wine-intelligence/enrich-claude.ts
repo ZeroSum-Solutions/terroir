@@ -19,7 +19,7 @@
  *     produces an actual review excerpt the user can read.
  *
  * Failure modes:
- *   • ANTHROPIC_API_KEY not set → throw on first call (logged once)
+ *   • OPENROUTER_API_KEY not set → throw on first call (logged once)
  *   • Network/timeout → results array of nulls + Sentry
  *   • Rate limit 429/529 → results array of nulls + Sentry tag rateLimited:true
  *   • JSON parse failure → results array of nulls + Sentry tag parseError:true
@@ -119,7 +119,7 @@ export async function enrichWineWithClaude(
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userMessage }],
     });
-    const block = response.content[0];
+    const block = response.content.find((b) => b.type === "text");
     if (block?.type !== "text") {
       Sentry.captureMessage("Claude response had no text block", {
         level: "warning",
@@ -203,7 +203,7 @@ export async function enrichWinesWithClaudeBatch(
       system: BATCH_SYSTEM_PROMPT,
       messages: [{ role: "user", content: userMessage }],
     });
-    const block = response.content[0];
+    const block = response.content.find((b) => b.type === "text");
     if (block?.type !== "text") {
       Sentry.captureMessage("Batched Claude response had no text block", {
         level: "warning",
