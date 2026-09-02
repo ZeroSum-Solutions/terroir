@@ -24,6 +24,9 @@ export type OcrTable = {
 
 export type OcrResult = {
   rawText: string;
+  /** Where the text came from. Absent means Azure; "vision" means no OCR ran
+   *  and the model read the photo directly (invoice-extraction-stage.ts). */
+  source?: "vision";
   vendorName?: string;
   invoiceNumber?: string;
   invoiceDate?: string;
