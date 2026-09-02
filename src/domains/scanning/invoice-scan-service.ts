@@ -1,20 +1,13 @@
 import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  AiExtractError,
-  extractFromOcr,
-} from "@/adapters/llm/anthropic-invoice-extraction";
-import {
-  OcrError,
-  extractOcr,
-  mergeOcrResults,
-  type OcrResult,
-} from "@/adapters/ocr/azure-document-intelligence";
+import { AiExtractError } from "@/adapters/llm/anthropic-invoice-extraction";
+import { OcrError, type OcrResult } from "@/adapters/ocr/azure-document-intelligence";
 import { INVOICE_EXTRACTION, INVOICE_EXTRACTION_RETRY } from "@/lib/ai/models";
 import { scoreItems } from "@/lib/scanner/scoring";
 import type { LineItem, Scan } from "@/lib/scanner/types";
 import type { Database } from "@/types/database";
 import { validateInvoiceArithmetic } from "./invoice-arithmetic";
+import { readInvoicePages } from "./invoice-extraction-stage";
 import { withScanSpan } from "./scan-telemetry";
 
 const OCR_STATUS = {
@@ -116,33 +109,19 @@ export async function processInvoiceScanOnce(
 
   try {
     const pages = [{ buffer: fileBuffer, mimeType }, ...(extraFiles ?? [])];
-    // M1-1: one span per page so a multi-page invoice's OCR fan-out is
-    // visible per-page, not just as a single lump sum.
-    const ocrResults = await Promise.all(
-      pages.map((page, pageIndex) =>
-        withScanSpan(
-          "ocr.page",
-          {
-            pageIndex,
-            pageCount: pages.length,
-            mimeType: page.mimeType,
-            byteSize: page.buffer.length,
-          },
-          () => extractOcr(page.buffer, page.mimeType),
-        ),
-      ),
-    );
-    ocr = await withScanSpan(
-      "ocr.merge",
-      { pageCount: pages.length },
-      async () => mergeOcrResults(ocrResults),
-    );
+    // OCR when Azure answers, the photo itself when it cannot — see
+    // invoice-extraction-stage.ts. Either way `ocr` is what gets persisted.
+    const stage = await readInvoicePages(pages);
+    ocr = stage.ocr;
     let parsed = await withScanSpan(
       "extract",
-      { attempt: 1, model: INVOICE_EXTRACTION.model, effort: INVOICE_EXTRACTION.effort ?? "default" },
-      // Non-null: `ocr` was just assigned above; TS can't carry that
-      // narrowing through a closure passed to withScanSpan.
-      () => extractFromOcr(ocr!),
+      {
+        attempt: 1,
+        model: INVOICE_EXTRACTION.model,
+        effort: INVOICE_EXTRACTION.effort ?? "default",
+        source: stage.source,
+      },
+      () => stage.extract(),
     );
 
     if (parsed.lineItems.length === 0) {
@@ -183,7 +162,7 @@ export async function processInvoiceScanOnce(
             model: INVOICE_EXTRACTION_RETRY.model,
             effort: INVOICE_EXTRACTION_RETRY.effort ?? "default",
           },
-          () => extractFromOcr(ocr!, INVOICE_EXTRACTION_RETRY),
+          () => stage.extract(INVOICE_EXTRACTION_RETRY),
         );
         // Grok-3: an empty retry is not a reconciling result — it's the
         // model finding nothing on a second pass. Adopting it would

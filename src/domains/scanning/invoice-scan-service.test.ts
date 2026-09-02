@@ -15,7 +15,7 @@ vi.mock("@/adapters/llm/anthropic-invoice-extraction", () => ({
   AiExtractError: class AiExtractError extends Error {},
   extractFromOcr: (...args: unknown[]) => mockExtractFromOcr(...args),
 }));
-vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn(), captureMessage: vi.fn() }));
 
 const { processInvoiceScanOnce } = await import("./invoice-scan-service");
 
@@ -163,6 +163,10 @@ describe("processInvoiceScanOnce catch-path recovery data (C04)", () => {
   });
 
   it("names the failing stage in status_reason for a typed OCR failure", async () => {
+    // With the vision fallback on, an OCR failure is no longer a scan
+    // failure (invoice-extraction-stage.ts); this test is about what gets
+    // persisted when OCR IS the terminal failure, so switch it off here.
+    process.env.INVOICE_VISION_FALLBACK = "off";
     const { OcrError } = await import("@/adapters/ocr/azure-document-intelligence");
     // The module mock replaces OcrError with a bare `extends Error` class,
     // so the real constructor's code argument is dropped — set it back.

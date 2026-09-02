@@ -341,7 +341,33 @@ describe("POST /api/scan", () => {
 
   // ── Upstream failures ─────────────────────────────────────────────────
 
-  it("returns 502 when Azure OCR throws (and never reaches Anthropic)", async () => {
+  it("Azure OCR throws: extracts from the image instead and succeeds (vision fallback)", async () => {
+    auth.requireMembership.mockResolvedValue({
+      supabase: makeSupabase(),
+      user: { id: "u1" },
+      restaurantId: "restaurant-A",
+      role: "owner",
+    });
+    azure.analyzeInvoice.mockRejectedValue(new Error("Azure unavailable"));
+    anthropic.parse.mockResolvedValue(makeParsedInvoice());
+
+    const fd = new FormData();
+    fd.append("file", pdfFile());
+
+    const res = await POST(makeFormRequest(fd));
+
+    expect(res.status).toBe(200);
+    // The model was handed the document itself, not OCR text.
+    const content = anthropic.parse.mock.calls[0][0].messages[0].content;
+    expect(Array.isArray(content)).toBe(true);
+    expect(content[0].type).toBe("document");
+    const body = await res.json();
+    expect(body.rawText).toBe("");
+    expect(JSON.stringify(body)).not.toContain("Azure unavailable");
+  });
+
+  it("returns 502 when Azure OCR throws and the vision fallback is switched off", async () => {
+    process.env.INVOICE_VISION_FALLBACK = "off";
     auth.requireMembership.mockResolvedValue({
       supabase: makeSupabase(),
       user: { id: "u1" },
@@ -354,6 +380,7 @@ describe("POST /api/scan", () => {
     fd.append("file", pdfFile());
 
     const res = await POST(makeFormRequest(fd));
+    delete process.env.INVOICE_VISION_FALLBACK;
 
     expect(res.status).toBe(502);
     const body = await res.json();
