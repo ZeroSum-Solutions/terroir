@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getAuthContext } from "@/lib/auth-context";
 import { ArrowLeft, ChevronLeft, ChevronRight, FileText, ScanLine } from "lucide-react";
 import { RouteDataEmpty } from "@/components/route-data-state";
+import { expireStalledScans } from "@/domains/scanning/stalled-scans";
 import { describeScanStatusReason } from "@/lib/scanner/scan-status-reason";
 import { ExportCsvButton } from "./export-csv-button";
 import { ScanStatusSelect } from "./scan-status-select";
@@ -48,6 +49,10 @@ export default async function ScansPage({
   const auth = await getAuthContext();
   if (!auth) return null;
   const { supabase, restaurantId } = auth;
+
+  // A row left in "processing" by a request that never finished would spin
+  // here forever; settle it as failed/stalled before listing (best effort).
+  await expireStalledScans({ supabase, restaurantId });
 
   let query = supabase
     .from("invoice_scans")

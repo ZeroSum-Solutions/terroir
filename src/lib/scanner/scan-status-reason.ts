@@ -26,6 +26,9 @@ const REASONS: Record<string, string> = {
   ai_upstream_error: "The extraction service failed. Try scanning again.",
   ai_unknown: "Extraction failed for an unrecognised reason.",
   unexpected_error: "The scan failed unexpectedly. Try scanning again.",
+  // Written by src/domains/scanning/stalled-scans.ts when a row has sat in
+  // "processing" longer than any synchronous scan can live.
+  stalled: "The scan did not finish — the server stopped mid-way. Scan it again.",
 };
 
 /**

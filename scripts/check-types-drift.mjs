@@ -63,16 +63,34 @@ export function compareTypeArtifacts(committed, generated) {
   return { drifted: true, diff: diff.join("\n") };
 }
 
+/**
+ * Run the generator, once more if the first run fails. The Supabase CLI has
+ * exited non-zero on a PostHog telemetry timeout with no drift printed (PR
+ * #194, 2026-09-02), which blocked a green PR on nothing. One retry is cheap;
+ * a second failure still fails the gate, and the log says the retry happened.
+ */
+export function runGeneratorWithRetry(run, log = console.error) {
+  const first = run();
+  if (first.status === 0) return first;
+  log(
+    `types generator exited ${first.status ?? "by signal"}; retrying once ` +
+      "(the Supabase CLI has failed on a telemetry timeout with no drift printed).",
+  );
+  return run();
+}
+
 function main() {
   const committed = readFileSync(OUT, "utf8");
 
-  const gen = spawnSync(
-    process.execPath,
-    [
-      "scripts/generate-supabase-types.mjs",
-      ...(process.argv.includes("--local") ? ["--local"] : []),
-    ],
-    { stdio: ["ignore", "inherit", "inherit"] },
+  const gen = runGeneratorWithRetry(() =>
+    spawnSync(
+      process.execPath,
+      [
+        "scripts/generate-supabase-types.mjs",
+        ...(process.argv.includes("--local") ? ["--local"] : []),
+      ],
+      { stdio: ["ignore", "inherit", "inherit"] },
+    ),
   );
   if (gen.status !== 0) {
     // Restore before exiting: a partial write must not be left behind.

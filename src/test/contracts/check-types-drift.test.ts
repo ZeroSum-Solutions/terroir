@@ -1,8 +1,9 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import {
   normalizeAmbientTypeFields,
   compareTypeArtifacts,
+  runGeneratorWithRetry,
 } from "../../../scripts/check-types-drift.mjs";
 import {
   HEADER,
@@ -147,5 +148,33 @@ describe("composeArtifact", () => {
     expect(composeArtifact(body)).not.toBe(
       composeArtifact(body.replace("wines", "vintages")),
     );
+  });
+});
+
+describe("runGeneratorWithRetry", () => {
+  // The Supabase CLI has exited non-zero on a PostHog telemetry timeout with
+  // no drift printed (PR #194, 2026-09-02); a green PR was blocked on it.
+  // One retry is cheap; a second failure still fails the gate.
+  test("a clean first run is not repeated", () => {
+    const run = vi.fn(() => ({ status: 0 }));
+    const result = runGeneratorWithRetry(run, () => {});
+    expect(result.status).toBe(0);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  test("a failed first run is retried once and the retry's result wins", () => {
+    const run = vi.fn().mockReturnValueOnce({ status: 1 }).mockReturnValueOnce({ status: 0 });
+    const logged: string[] = [];
+    const result = runGeneratorWithRetry(run, (m: string) => logged.push(m));
+    expect(result.status).toBe(0);
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(logged[0]).toMatch(/retrying once/);
+  });
+
+  test("two failures fail the gate", () => {
+    const run = vi.fn(() => ({ status: 1 }));
+    const result = runGeneratorWithRetry(run, () => {});
+    expect(result.status).toBe(1);
+    expect(run).toHaveBeenCalledTimes(2);
   });
 });
