@@ -4,7 +4,11 @@ import { z } from "zod";
 const HexColorSchema = z
   .string()
   .regex(/^#[0-9a-f]{6}$/i, "Expected a six-digit hex colour.")
-  .transform((value) => value.toUpperCase());
+  // `.overwrite`, not `.transform`: the SDK turns this schema into a JSON
+  // Schema for structured output, and a transform is unrepresentable there
+  // (it threw before any request went out). Overwrite keeps the type and
+  // still upper-cases on parse — see theme-output-format.test.ts.
+  .overwrite((value) => value.toUpperCase());
 
 export const GOOGLE_FONT_ALLOWLIST = [
   "Cormorant Garamond",

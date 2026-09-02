@@ -119,7 +119,7 @@ export async function enrichWineWithClaude(
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userMessage }],
     });
-    const block = response.content[0];
+    const block = response.content.find((b) => b.type === "text");
     if (block?.type !== "text") {
       Sentry.captureMessage("Claude response had no text block", {
         level: "warning",
@@ -203,7 +203,7 @@ export async function enrichWinesWithClaudeBatch(
       system: BATCH_SYSTEM_PROMPT,
       messages: [{ role: "user", content: userMessage }],
     });
-    const block = response.content[0];
+    const block = response.content.find((b) => b.type === "text");
     if (block?.type !== "text") {
       Sentry.captureMessage("Batched Claude response had no text block", {
         level: "warning",

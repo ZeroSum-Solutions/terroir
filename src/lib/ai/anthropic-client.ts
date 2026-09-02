@@ -36,6 +36,39 @@ import Anthropic from "@anthropic-ai/sdk";
  */
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api";
 
+/**
+ * OpenRouter provider-routing preferences, injected into every Messages
+ * request body (the SDK has no field for them).
+ *
+ * `require_parameters` restricts routing to upstream providers that support
+ * every parameter in the request. Measured 2026-09-01: OpenRouter's default
+ * routing put `anthropic/claude-sonnet-5` on "Claude Platform on AWS" and
+ * `anthropic/claude-sonnet-4.5` on Amazon Bedrock — both fine, every probe
+ * above ran there — but the Google Vertex endpoints for the same models do
+ * NOT advertise structured outputs, and a fallback landing there would turn
+ * `parsed_output` null (the invoice route's `parse_failed` 422) with nothing
+ * in our code to blame. This keeps such an endpoint out of the rotation.
+ */
+export const OPENROUTER_PROVIDER_PREFERENCES = { require_parameters: true } as const;
+
+/**
+ * `fetch` wrapper that adds the provider preferences to Messages requests.
+ * Only JSON bodies posted to `/v1/messages` are touched; anything else the
+ * SDK sends goes through untouched.
+ */
+function openRouterFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  if (url.endsWith("/v1/messages") && typeof init?.body === "string") {
+    try {
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      return fetch(input, { ...init, body: JSON.stringify({ ...body, provider: OPENROUTER_PROVIDER_PREFERENCES }) });
+    } catch {
+      // Not JSON after all — send it as the SDK built it.
+    }
+  }
+  return fetch(input, init);
+}
+
 /** Max retries the SDK will perform on transient errors (429/5xx). */
 const ANTHROPIC_MAX_RETRIES = 2;
 
@@ -67,6 +100,7 @@ export function getAnthropicClient(): Anthropic {
   cachedClient = new Anthropic({
     apiKey,
     baseURL: OPENROUTER_BASE_URL,
+    fetch: openRouterFetch,
     maxRetries: ANTHROPIC_MAX_RETRIES,
     timeout: ANTHROPIC_TIMEOUT_MS,
   });

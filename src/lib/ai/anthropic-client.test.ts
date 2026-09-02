@@ -77,3 +77,40 @@ describe("getAnthropicClient — provider cutover", () => {
     delete process.env.ANTHROPIC_API_KEY;
   });
 });
+
+describe("getAnthropicClient — OpenRouter provider preferences", () => {
+  beforeEach(() => {
+    constructorSpy.mockClear();
+    __resetAnthropicClientForTests();
+    process.env.OPENROUTER_API_KEY = "test-key";
+  });
+
+  it("injects provider preferences into the body of a Messages request", async () => {
+    const inner = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", inner);
+    getAnthropicClient();
+    const options = constructorSpy.mock.calls[0]![0] as { fetch: typeof fetch };
+    expect(typeof options.fetch).toBe("function");
+
+    await options.fetch("https://openrouter.ai/api/v1/messages", {
+      method: "POST",
+      body: JSON.stringify({ model: "anthropic/claude-sonnet-5", max_tokens: 1 }),
+    });
+
+    const sent = JSON.parse(inner.mock.calls[0]![1]!.body as string);
+    expect(sent.model).toBe("anthropic/claude-sonnet-5");
+    expect(sent.provider).toEqual({ require_parameters: true });
+    vi.unstubAllGlobals();
+  });
+
+  it("leaves non-Messages requests and non-JSON bodies alone", async () => {
+    const inner = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", inner);
+    getAnthropicClient();
+    const options = constructorSpy.mock.calls[0]![0] as { fetch: typeof fetch };
+
+    await options.fetch("https://openrouter.ai/api/v1/models", { method: "GET" });
+    expect(inner.mock.calls[0]![1]).toEqual({ method: "GET" });
+    vi.unstubAllGlobals();
+  });
+});
