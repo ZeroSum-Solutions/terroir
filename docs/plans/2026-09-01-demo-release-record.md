@@ -288,3 +288,23 @@ endpoints do not advertise, which under `require_parameters` left no eligible en
 (instant 502 in the route until removed). Invoice extraction, menu design and enrichment
 keep their Claude pins — no evidence against them. Rollback is one string in
 `src/lib/ai/models.ts`.
+
+## 9. Demo-day moves (2026-09-02, after §8)
+
+Asked for "the next five highest-leverage moves, done autonomously until green".
+Chosen on evidence, not preference: Azure's endpoint no longer resolved from
+production, and the production demo tenant had 42 wines with no colour, no section,
+no corpus link and one scan stuck in "processing" since May.
+
+| # | Move | Landed as | Evidence |
+|---|---|---|---|
+| 1 | Invoice scanning without Azure: the pipeline falls back to reading the photo with the vision model (`invoice-extraction-stage.ts`, `extractFromImages`), Sentry-visible, `INVOICE_VISION_FALLBACK=off` restores OCR-or-nothing; the SDK's structured-output parse failure maps to a 422 instead of a 500 | #196 | 7 fixture invoices through the real local route: 3 wine documents extracted (9, 9, 3 lines), 4 non-wine receipts answered "no wines" — no invented lines. Under production's own environment: the Astor receipt, 9 lines in 39 s |
+| 2 | Production demo tenant made demonstrable (`scripts/polish-demo-tenant-hosted.ts`, dry run by default, every write only-where-empty) | this PR (script + docs) | 22 of 42 wines linked to the corpus (11 deterministic, 11 by model adjudication among the producer's own rows, each reason printed and read before applying); 42 colours; 6 section names and 41 bottles filed; 35 tasting excerpts written; the stuck scan settled as failed. The 22 pictures are producer/representative kind — production's corpus has 514 label-kind images in total |
+| 3 | Demo assets and runbook: which fixture invoices extract cleanly, timings for both scans, the production tenant's new state | this PR | `docs/runbooks/investor-demo.md` § Scanning and § Two surfaces |
+| 4 | Stalled scans settle: processing rows older than 15 min become failed / `stalled` when the scans page loads | #197 | Unit tests on the query shape; live on the local stack a 20-minute-old row flipped and a 2-minute-old one did not |
+| 5 | CI: the Supabase types generator retries once on failure (it exited on a telemetry timeout with no drift printed and blocked #194) | #197 | Three tests on the injected runner |
+
+Not done, and why: nothing was deleted (the demo tenant's "Test Producer / Test Wine"
+row is junk and is left for the owner); the 20 picture-less demo wines have no corpus
+row for their cuvée, and a wrong picture is worse than none; the public guest menus
+render no images by design, so the pictures show in the cellar and detail pages.

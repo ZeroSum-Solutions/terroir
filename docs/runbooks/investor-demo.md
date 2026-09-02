@@ -34,8 +34,18 @@ the seeded cellar, its 250 label photographs and its corpus links. The deployed 
 code, live, on real data. On production open **DEMO — Osteria Dimostrativa** (42
 wines, every one spine-linked, no blank producers), not *My Restaurant*: that tenant
 is a real CSV import with 321 blank producers and one photograph, and it is not the
-cellar you want on a screen. Production wines have no label photographs of their
-own; detail pages fall back to the corpus picture, captioned for what it is.
+cellar you want on a screen.
+
+The production demo tenant was polished on 2026-09-02 (`scripts/polish-demo-tenant-hosted.ts`,
+every write only-where-empty): all 42 wines now carry a colour, every bottle is filed
+in a cellar section (Reds – Old World / New World, Whites, Sparkling, Rosé, Dessert &
+Fortified), 40 wines have a tasting excerpt, and 22 are linked to the corpus and so
+show a picture on their detail page. **Those 22 pictures are `producer` or
+`representative` kind, not this wine's own label** — production's corpus holds only
+514 label-kind images — and the UI captions them as such. The other 20 wines (Ridge
+Monte Bello, Louis Michel Montmains, Montevertine, J.J. Prüm…) have no corpus row for
+their cuvée and stay picture-less rather than wear a wrong one. The invoice scan that
+had sat in "processing" since May is now a failed row with a stated reason.
 
 ## Why not `pnpm dev`
 
@@ -135,19 +145,39 @@ surfaces.
 
 ## Scanning
 
-**Show the bottle-label scan** (`/scan` → *Bottle*): it photographs a label, sends it to
-Claude, and comes back with producer, wine, vintage and a confidence. An
-unidentifiable photo (0% confidence, every field flagged, or producer and wine name
-both flagged) now disables one-tap **Confirm & save** and routes through **Correct
-details** (fixed 2026-09-01) — worth showing on purpose with a non-wine photo. Use a
+**Show the bottle-label scan** (`/scan` → *Bottle*): it photographs a label, sends it
+through OpenRouter to **Gemini 3.7 Flash** (re-pinned 2026-09-02 on a measured eval,
+`docs/plans/2026-09-02-bottle-scan-model-eval.md`), and comes back in four to seven
+seconds with producer, wine, vintage and a confidence. An unidentifiable photo (0%
+confidence, every field flagged, or producer and wine name both flagged) disables
+one-tap **Confirm & save** and routes through **Correct details** — worth showing on
+purpose with a non-wine photo; verified through the real route on 2026-09-02. Use a
 clearly non-wine photo for that beat, not a blurry real label: a mediocre label at
-moderate confidence still confirms in one tap, by design.
+moderate confidence still confirms in one tap, by design. Gemini reads labels well but
+says 0.95 even when it is wrong, so do not lean on the percentage as a hedge.
 
-**Do not scan an invoice live** unless Azure Document Intelligence has been
-re-provisioned and proven with the exact file you will use. The resource behind
-`AZURE_DOC_INTELLIGENCE_ENDPOINT` no longer exists (issue #116, since 2026-08-23), so
-invoice OCR fails in every environment. The scan **history** (`/scans`) is safe to show:
-60 seeded scans, 56 complete and 4 in review, each with a stated reason.
+**Invoice scanning works again, everywhere, without Azure** (PR #196, 2026-09-02).
+Azure Document Intelligence is still gone (issue #116; the endpoint no longer
+resolves), and the pipeline now hands the photo straight to the vision model when
+OCR is unavailable — the row records `source: "vision"` and has no raw OCR text. Expect
+**5 to 30 seconds** per invoice (the model reads the whole page), and choose the
+document before the room:
+
+- `test-invoices/OIP-1998228646.jpg` — an Astor Wines & Spirits till receipt, ten
+  lines of Riesling: extracts 9 wines, arithmetic reconciles, lands as *complete*
+  (about 19 s locally, 39 s under production's environment).
+- `test-invoices/OIP-2427424005.jpg` — a Robert Mondavi wine-club sheet with
+  handwritten notes: 9 wines, reconciles, *complete* (about 15 s).
+- `test-invoices/OIP-863239403.jpg` — 3 wines, arithmetic does **not** reconcile, so it
+  lands in *review* with the reason stated: the honest beat, if you want one.
+- The other four fixtures are not wine invoices (a lorem-ipsum receipt, a beer
+  receipt) and correctly answer "No wines could be extracted" in three to twelve
+  seconds — the model does not invent lines.
+
+A scan that never finishes (a killed request, a deploy mid-scan) no longer spins
+forever: the scans page settles any row older than fifteen minutes as *failed —
+stalled* (#197). The scan **history** (`/scans`) is safe to show locally:
+60 seeded scans plus today's fixture runs, each with a stated reason.
 
 The **reconciliation queue** (`/reconcile-queue`) is real work, not a bug: 318 items
 sit unplaced or mismatched, $107k at risk, because the seed leaves stock to place.
