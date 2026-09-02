@@ -92,24 +92,34 @@ export const INVOICE_EXTRACTION_RETRY: ModelProfile = {
 /**
  * Bottle-label identification from a phone photo (vision).
  *
- * Medium, not low. This path has no eval — there is no labelled corpus of
- * bottle photographs to grade against, so there is no evidence to justify
- * stepping below the quality-neutral setting. The enrichment eval, which could
- * be measured, found low effort produced more factual errors than medium on
- * the same model (5 vs 3), so low is not a free saving. Revisit with a labelled
- * set; the route already returns a `confidence` field to grade against.
+ * Re-pinned 2026-09-02 to Gemini 3.7 Flash on a measured eval — the first this
+ * path has had (docs/plans/2026-09-02-bottle-scan-model-eval.md, harness at
+ * scripts/eval-bottle-labels.ts). A five-model screening put Gemini first, and
+ * the confirmation run below is the shipped shape: production prompt, schema
+ * and cap, through the production client, on 40 corpus label images with known
+ * producer / name / country plus 16 of them degraded to phone quality:
  *
- * The route returns the parse to the client for confirmation rather than
- * persisting it, so a wrong vintage is caught by a human before it becomes a
- * row — but that is a safety net, not a reason to spend less.
+ *   run                                ok   producer  name  country   p50    $/call
+ *   Gemini 3.7 Flash    clean 40       40      36      40     40     4.9 s   0.0030
+ *   Sonnet 5 (medium)   clean 40       39      35      38     34     4.7 s   0.0074
+ *   Gemini 3.7 Flash    degraded 16    16      14      16     16     5.1 s   0.0031
+ *   Sonnet 5 (medium)   degraded 16    15      12      13     13     4.9 s   0.0070
  *
- * The cap moved 2000 → 4000 purely for thinking headroom: `max_tokens` is a
- * ceiling, not a charge, so unused budget costs nothing, but a truncated
- * response costs the whole call.
+ * The producer misses both share are brand-versus-producer naming (La Linda is
+ * a Luigi Bosca label); Sonnet's extra failures were structured-output parse
+ * errors, which the route turns into a 500. Both answer a non-wine photo with
+ * confidence 0 and every identity field flagged, so the Confirm gate holds.
+ * The known trade: Gemini says 0.95 when wrong, where Sonnet hedges. Rollback
+ * is this one string.
+ *
+ * No `effort`: through OpenRouter's Anthropic-compatible endpoint the parameter
+ * is translated into one the Gemini endpoints do not advertise, and with
+ * `require_parameters` (anthropic-client.ts) that leaves no eligible endpoint —
+ * a 404 in 0.2 s, measured 2026-09-02. Gemini runs at its default thinking
+ * level; the numbers above are that configuration. The 4000 cap stays.
  */
 export const BOTTLE_SCAN: ModelProfile = {
-  model: "anthropic/claude-sonnet-5",
-  effort: "medium",
+  model: "google/gemini-3.7-flash",
   maxTokens: 4000,
 };
 

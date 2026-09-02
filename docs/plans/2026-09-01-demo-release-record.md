@@ -273,3 +273,18 @@ was checked live the same night; three produced code changes on the same branch.
 
 CI note: the first run of PR #194 failed only at `types:check:local`, where the Supabase
 CLI exited on a PostHog telemetry timeout with no drift printed; re-run.
+
+### 8.2 Bottle-scan model re-pin (2026-09-02)
+
+Landed after #194 as its own PR. A five-model screening and a like-for-like
+confirmation on the shipped request shape (`docs/plans/2026-09-02-bottle-scan-model-eval.md`,
+harness `scripts/eval-bottle-labels.ts`) moved `BOTTLE_SCAN` to
+`google/gemini-3.7-flash` without `effort`: on 40 labelled corpus label images
+producer 36 / name 40 / country 40 against Sonnet 5's 35 / 38 / 34 with one parse
+error; on 16 degraded copies 14 / 16 / 16 against 12 / 13 / 13 with one parse error;
+same latency, 40 % of the cost; the non-wine photo still gates Confirm through the real
+route. `effort` is omitted because OpenRouter translates it into a parameter Gemini's
+endpoints do not advertise, which under `require_parameters` left no eligible endpoint
+(instant 502 in the route until removed). Invoice extraction, menu design and enrichment
+keep their Claude pins — no evidence against them. Rollback is one string in
+`src/lib/ai/models.ts`.

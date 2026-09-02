@@ -32,9 +32,10 @@ describe("Model profile contract (OpenRouter ids)", () => {
   });
 
   it("pins the bottle scan profile", () => {
+    // Re-pinned 2026-09-02 on a measured label-reading eval — see the
+    // rationale block in models.ts and docs/plans/2026-09-02-bottle-scan-model-eval.md.
     expect(BOTTLE_SCAN).toEqual({
-      model: "anthropic/claude-sonnet-5",
-      effort: "medium",
+      model: "google/gemini-3.7-flash",
       maxTokens: 4000,
     });
   });
@@ -61,6 +62,10 @@ describe("Model profile contract (OpenRouter ids)", () => {
     // anthropic/claude-sonnet-4.5 (Sonnet 4.5) is absent from Anthropic's effort-supported
     // model list, so sending the parameter would be silently ignored.
     expect(WINE_ENRICHMENT.effort).toBeUndefined();
+    // Gemini via OpenRouter's Anthropic-compatible endpoint: `effort` becomes a
+    // parameter its endpoints do not advertise, and require_parameters then
+    // leaves no eligible endpoint (404 in 0.2 s, measured 2026-09-02).
+    expect(BOTTLE_SCAN.effort).toBeUndefined();
   });
 
   it("names every model by its OpenRouter id (vendor/model), never a bare vendor id", () => {
