@@ -408,3 +408,72 @@ page's block order puts commerce first even for a signed-in user with no purchas
 floating nav, Sommelier — lives only in the iOS/Android app, which no browser session can
 reach. **To audit those flows, Devin's own phone screenshots or a screen recording are the
 evidence; the web account cannot produce them.**
+
+---
+
+## 15. The iOS app, from Devin's own screenshots — 2026-09-02
+
+Seven screenshots of the Vivino iPhone app (a scan of a Napa Cabernet and its wine page,
+taken 30 Aug–2 Sep 2026), supplied by Devin. This is the surface the owner's original brief
+described; the web walkthrough in §14 could not reach it. Observed, not inferred:
+
+### 15.1 Scanner
+
+Full-screen camera with a corner-bracket viewfinder, top bar = close · AUTO (auto-capture)
+· flash; a **Wine label / Wine list** segmented toggle sits directly above the shutter, and a
+**gallery button** sits left of the shutter — photo-library import is one tap from the camera,
+the same affordance Delectable pioneered. A **"Recent scans" sheet** is docked at the bottom
+with a drag handle; its card shows the user's own photo thumbnail, producer as an eyebrow,
+wine name + vintage as the title, and a flag + "Red from Napa Valley, United States" line.
+Pull the sheet up to browse history without leaving the camera.
+
+### 15.2 Wine page, top to bottom (this is the reference layout)
+
+1. **Hero**: a full-bleed vineyard photograph as the background, the catalogue bottle render
+   in front, and **the user's own scan photo as a rounded thumbnail** beside it — identity is
+   shown twice, canonical and personal. Back and cart buttons float over the photo. A white
+   "bubble" carries the rating: `4.0`, four orange stars, `3,176 ratings ›`.
+2. **Identity**: producer as a link with chevron ("Precision ›"), wine name as the heading,
+   vintage as a chip ("2020 ›") that opens the vintage picker.
+3. **Action row**: `Rate` (outlined pill) on the left; on the right four circular buttons —
+   add-to-cellar (three-bottle glyph), bookmark (wishlist), "…" (more: change wine, share,
+   note, place/price/drinking window), and a **claret sparkle button** — the Sommelier entry
+   point, the only coloured control on the page.
+4. **Marketplace banner** ("Shop the World's Largest Wine Marketplace… WELCOMEUS10 · Apply
+   coupon") — commerce before facts, as §9 #1 says.
+5. **Insights card**: "You have one insight about this wine in My Wines", then a fact list
+   with glyphs — flag + region, bottle + wine style ("Napa Valley Cabernet Sauvignon"),
+   grape + variety, calendar + **"Drinks best 2023 – 2030"** — and "Show more insights ›".
+6. **"How does this wine taste?"**: a horizontal carousel of large cards, each an aroma
+   family with a headline trio ("Oak, Vanilla, Chocolate…"), an underlined **mention count**
+   ("642 mentions of oaky notes", "475 mentions of black fruit notes") and a photographic
+   still-life of the descriptors (oak chips, chocolate, vanilla pod; blackberries).
+7. **Taste characteristics**: four full-width tracks with a claret pill marking the position
+   — Soft–Acidic, Dry–Sweet, Smooth–Tannic, Light–Bold — the active end label in bold, and a
+   **pencil icon** to submit your own reading.
+8. **Pairs great with**: chips (Lamb, Beef, Game, Poultry, Mature and hard cheese) and a
+   full-width "Choose a dish" search button.
+9. **Sponsored card** (dark, full-width, "Check it out!") inside the page.
+10. **Community reviews**: the average, stars and count on the left, a **five-bar histogram**
+    on the right; then review cards — star + numeric rating, the text with "read more", the
+    reviewer with their ratings count and a badge, time since, like and comment counts.
+11. **Sticky buy bar** pinned to the bottom of every scroll position: delivery-window row
+    ("Estimated between Thu, Sep 10 and Thu, Sep 17", collapsible) above "2023 vintage ·
+    $27.50" and a green "Add" cart button. Note it quietly sells a *different vintage* from
+    the one scanned.
+
+### 15.3 What the screenshots settle
+
+- The scanner's **label / list toggle**, **gallery-from-camera** and **docked recent-scans
+  sheet** are the three interaction ideas to copy for Terroir's bottle scan (S each); Terroir
+  already has the vision model behind them.
+- The wine page's **own-photo-beside-canonical-render** is the cheapest credibility win in
+  the set: Terroir stores the scan image already.
+- **Taste block with mention counts + four tracks + pencil** is exactly §8 #1, now with the
+  visual grammar confirmed; **"Drinks best YYYY – YYYY"** with a calendar glyph is the
+  drinking-window line Vinous and InVintory also converge on.
+- **Do not copy** the marketplace banner, the sponsored card, or a sticky bar that switches
+  vintage on the buyer — three commerce intrusions on one page (§9 #1–#2 stand).
+- Palette in the app: near-white ground, one claret for taste pills and the Sommelier button,
+  green for commerce, orange for stars. The *roles* (one accent for judgement, one for
+  commerce) are worth keeping; the values are not (`DESIGN.md`).
