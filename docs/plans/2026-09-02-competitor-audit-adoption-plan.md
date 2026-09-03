@@ -187,6 +187,18 @@ and shows seven shelf planes cleanly. That is the input shape for the scan → l
 (step B above): detect the horizontal planes, derive rows, then columns and depth from the
 objects between them, and propose `cols × rows × depth` for the user to correct.
 
+**A second fixture is an actual wine cellar.** Devin's phone scan of 2026-08-28 (OBJ + MTL +
+two atlases, 14,330 vertices, 21,458 faces, bounding box 2.37 × 2.93 × 2.65 m) captures a room
+corner: two rack walls meeting at right angles, wooden angled shelves with bottles neck-out and
+LED strips, herringbone floor. It lives at `~/Inbox/misc/terroir-cellar-scan-2026-08-28/`; a
+plan-view projection (`assets/cellar-scan-2026-08-28-plan.png`) shows the L of the two walls,
+and a wall-facing projection (`assets/cellar-scan-2026-08-28-rack-wall.png`) shows about seven
+rack rows across the wider wall. It is coarser than the shelf scan (about a tenth of the
+points), which is the realistic case: the generator must work from the texture atlas as much as
+from the mesh, reading bottle punts and neck rows off the photo where the geometry is thin.
+Between the two scans the pipeline has one clean-geometry case and one photo-heavy case to
+be evaluated against before any code is written.
+
 Do not copy: paywalled bottle-finding, vendor-locked cellars, refusing custom labels,
 cosmetic-only settings, dated notes imported as public reviews with defaults that differ by
 platform, unrevocable snapshot wine lists, Enterprise-gated selling price, dead Android
