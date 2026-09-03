@@ -353,3 +353,129 @@ Slots are *derived*, not stored — only occupancy is persisted (`bottle_slots(b
 - Every `[PUBLISHED]` quote was byte-verified with `cite-check.sh` against the fetched page bytes.
 - An adversarial verification pass judged 18 load-bearing claims against their quotes alone. It returned 13 `supported` and 5 `overreach`; all five were corrected in this brief before publication — the tier scope of the section-at-a-time 3D view, the removal of an unsupported "OCR" mechanism claim, the "note that has a date on it" qualifier on the CellarTracker public-review behaviour, the iPhone-or-iPad device scope on sensor bridging, and attributing the three vendor concessions specifically to InVintory's labelled App Store Developer Responses.
 - Not attempted, by rule: any login, any account creation, any paid-tier screen, the billed Anthropic API, and any read of `~/.config/zs-api-keys.env`.
+
+---
+
+## 12. Logged-in walkthrough (web app) — 2026-09-02
+
+Signed in to `app.invintory.com` through Devin's Google identity in his own Chrome session.
+Devin's account is a **Viewer** on a friend's real collection (about 150 bottles across two
+Eurocaves, two kitchen fridges and an off-site fridge), so the walkthrough was read-only by
+permission as well as by intent: the app itself refused "Add wine" with "As a Viewer of this
+collection, you don't have permission…". No bottle, note, chat or setting was touched, and
+the collection's contents and values are not recorded here.
+
+### 12.1 Information architecture, as shipped on the web
+
+Top bar: a **collection selector** (the account can switch between its own empty collection
+and the shared one), global "Search wine", dark/light toggle, Help, notifications, avatar.
+Sidebar: **Quick Actions** (Add Bottle, Remove Bottle, Create Review) · Dashboard ·
+Collection (`/collection/bottles`) · Purchases (`/collection/deliveries`) · Analytics ·
+Activity · Past bottles · Explore · Reviews · **Vincent** (the AI sommelier) · Saved lists
+(Wishlist) · Quick filters (Premium-gated, "Upgrade to premium to save a set of filters") ·
+Tags · **Cellars & Fridges** (one row per storage with its bottle count). No 3D anywhere on
+the web: the storage page is analytics + a section list, confirming §3.5's "VinLocate is
+iOS-only". Two routes the brief guessed (`/collection`, `/purchases`) 404; the real ones are
+above.
+
+### 12.2 Dashboard
+
+Header counts: bottles, labels, market value, purchase value, **slots open**. Actions: Add,
+Remove, Review, Ask Vincent, "Hide values". Then: **Cellar and fridges** (a card per storage
+with "N slots open" and a bottle count), **Ready to drink** (ready + expiring-soon bottles,
+each card "N btl · Best through YYYY", linking to the collection pre-filtered by
+`drink_window_status`), Saved lists, Recently removed, a right rail with Upcoming deliveries
+and "Latest community reviews", and a Get Started checklist on an empty collection (Add
+bottles · Import from CellarTracker · Import from Vivino · Upload a spreadsheet). The empty
+collection also shows an iOS-app banner; Android is "in progress".
+
+### 12.3 Collection table and the bottle panel
+
+Filters: Wine Type · Storage · Tags · Drink Status · Filters; actions: Import, Add wine,
+Change columns, Export CSV, **Print barcodes**, **Create Wine List**, Custom column. Twenty
+sort orders (A–Z, added date, vintage, quantity, purchase/market price, **start year / end
+year** of the window, critic score). Columns: name (with flag, region path, grape chip), size,
+purchase price, market value, qty, **Window** (a status word — Ready to drink / Drink soon /
+Hold / Past prime — over the year range), critic score with "View reviews", ABV, Body,
+Sweetness, Acidity, Tannin, Photos (up to 5). Clicking a row opens a right-hand **bottle
+panel**: name, region, grape, est. value, Add, **Wine guide**, bookmark, more; then per-bottle
+rows with size, an internal id, added date and the **coordinate breadcrumb** `Storage › Shelf
+N › R2, C8, D1`, plus **Locate all**. Locate opens a full-screen "Located Bottles" view for the
+shelf with a search box over the located set. The coordinate model in §3.3 is exactly what
+ships.
+
+### 12.4 Storage page
+
+`/storage/<id>`: name and kind (Fridge), Add Wine / Add photo / More; **Analytics** (slots
+occupied "90 of 132", bottle count, labels, consumed, market and purchase value); **Cases**
+("Create"); **Sections** — one card per shelf with a rendered thumbnail of the slot lattice,
+"Bottle Slots 6/12", a fill bar and a **Type: Rack / Bin** badge (a Bin section shows
+"0/0"); then Labels / Bottles tabs listing what the storage holds. Sections are the unit;
+there is no whole-storage view on the web.
+
+### 12.5 Explore and the wine page
+
+Explore: tiles by Type, Countries, Regions, Food Pairing, with a Type · Grapes · Country ·
+Region · Subregion · Pairing filter bar. A wine page has a tab strip that scrolls to sections:
+**Vintage score** (a regional average labelled "Excellent" with the explicit caveat "A regional
+average for this grape and vintage. An individual producer can sit well above or below it",
+growing-season and "the wine" prose, "All Vintages"), **Grapes** (blurb), **Drink window** (a
+green-to-red slider with the current position and a status line "Ready to drink — the wine
+is at its peak"), **Pairings** (tiles), **Market price** ("We could not find a market value"
+when absent), **Region** (blurb), **Producer**, **Reviews** (rating / value ★ / maturity
+split, Loved-Liked-Disliked bars, per-review chips Off Dry · Acidity · Tannin · Body), and
+"More from <producer>". Left column: vintage picker, bottle image, grape chip, name in an
+italic display serif, Add, Ask Vincent, producer, region path, est. value, drinking window,
+avg critic, review count.
+
+### 12.6 Analytics, Activity, Purchases, Reviews
+
+**Analytics**: Est. Market Value with the footnote "calculated using a combination of Wine
+Searcher and InVintory community pricing. For prices that aren't available, we use an
+algorithm to make our best estimation"; Activity (bottles added / consumed / spend, period
+picker); Collection breakdowns as tappable rows (top countries, regions, cellars, wine types,
+vintages, grapes, purchase-price bands) — every row is a filter into the collection, as §7 #9
+described. **Activity**: a ledger (date, user, bottle, size, action) filterable by
+collaborators, storage, event type, removal type, date range, wine type, tags. **Purchases**:
+list with source filter, CSV export, Create. **Reviews**: Community / My Reviews, a
+"Write a review" composer, and cards with rating, value, reaction, maturity and structure
+chips.
+
+### 12.7 Vincent (AI sommelier)
+
+A chat with "New" and **Preferences** ("Tell Vincent about your wine preferences, what you
+like, what you don't like" — one free-text field), a "Previous Chats" rail, and ten seeded
+prompts that mix the collection with context ("Which aged Nebbiolo should I finally enjoy
+from my collection", "Pair a bottle with a casual dinner tonight from my cellar", "Suggest a
+crisp white that I can enjoy in this clear weather"). Not exercised, to avoid writing chat
+history into a shared collection. Nothing in the UI suggests it can place or move bottles
+(§7 #11 stands).
+
+### 12.8 Import and add
+
+Import modal: **Import to** (collection picker) and **Import from** Vivino · CellarTracker ·
+spreadsheet ("using our provided csv template"). Add wine is the search-first flow. Both
+were viewed, not used.
+
+### 12.9 Design, first-hand
+
+Near-black ground with warm dark-grey cards, a muted rose accent for the primary action,
+gold for the wordmark and ratings, an italic display serif for wine names over a geometric
+sans, dense but well-spaced tables, and rendered slot-lattice thumbnails for sections. It is
+a considered dark UI — and it is theirs; the palette is exactly what `DESIGN.md` excludes.
+
+### 12.10 What this changes in §7
+
+- **Confirms** #1–#3 and #6 as shipped: the coordinate, the precision-level idea (Rack / Bin
+  as a section *type*), Locate everywhere, and slots-open as a headline number.
+- **Adds** (S): **status word over the window** in the collection table and a
+  `drink_window_status` filter in the URL — the same six-state idea Vinous uses, here as a
+  first-class column and deep link.
+- **Adds** (S): the **regional vintage score with its own caveat** ("an individual producer
+  can sit well above or below it") — the honesty pattern Terroir should reuse when a wine has
+  no note but its region-vintage does.
+- **Adds** (M): **collaborator roles that actually block writes in the UI** (Viewer), which
+  is what Terroir's per-location scoping should feel like on the floor.
+- **Downgrades** nothing; the web is faithful to the docs. The whole-room 3D and photo-to-rack
+  proposal (§7.1) remains Terroir's opening, because on the web InVintory has no spatial
+  view at all.

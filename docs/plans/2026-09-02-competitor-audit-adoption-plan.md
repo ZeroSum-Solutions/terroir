@@ -47,12 +47,15 @@ value to the agent.
 | `delectable_login` | Delectable | https://delectable.com | Owned by Vinous; iOS app last shipped 2021 |
 | `vinous_login` | Vinous | https://vinous.com | Shared account from IB Hospitality (Rohan) |
 | `invintory_login` | InVintory | https://invintory.com | Web app exists; 3D view is iOS-only |
-| `bevly_login` | Bevly | https://bevlypos.com | See §0 — if Devin meant Bevrly (bevrly.com), this entry gets repointed |
+| `bevly_login` | Bevrly | https://bevrly.com/login | Repointed 2026-09-02: Devin's account is on Bevrly, an admin seat on a friend's production org — read-only, always |
 
 Entries were created 2026-09-02 with URL, username where known, and a placeholder password;
-Devin sets the real passwords with `zsvault edit <id>` (hidden prompt). The logged-in
-walkthroughs that close each brief's "Gaps" section need the Chrome extension connected and
-the same logins present in 1Password.
+Devin sets the real passwords with `zsvault edit <id>` (hidden prompt). Vivino, InVintory and
+Delectable sign in with Devin's Google identity (devszerosum@gmail.com), so in his own Chrome
+they need no password at all; Bevrly's session already lived in Chrome; Vinous is the one
+email-and-password login, and Devin typed it himself. **Logged-in walkthroughs done
+2026-09-02:** Bevrly (§16 of its brief), Vivino web (§14), Vinous (§14), InVintory web (§12);
+Delectable's web has no Google sign-in, so its app flows remain phone-only evidence.
 
 ---
 
