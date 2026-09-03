@@ -4,8 +4,7 @@ import {
   INVOICE_EXTRACTION,
   INVOICE_EXTRACTION_RETRY,
   MENU_DESIGN,
-  WINE_ENRICHMENT,
-  WINE_ENRICHMENT_TOKENS_PER_WINE,
+  DESCRIPTOR_SUGGESTION,
 } from "./models";
 
 /**
@@ -51,17 +50,13 @@ describe("Model profile contract (OpenRouter ids)", () => {
   it("pins the wine enrichment profile", () => {
     // Held at the incumbent on purpose: every newer candidate lost a blind
     // quality eval. See the rationale block in models.ts before changing this.
-    expect(WINE_ENRICHMENT).toEqual({
-      model: "anthropic/claude-sonnet-4.5",
-      maxTokens: 400,
+    expect(DESCRIPTOR_SUGGESTION).toEqual({
+      model: "anthropic/claude-haiku-4.5",
+      maxTokens: 200,
     });
-    expect(WINE_ENRICHMENT_TOKENS_PER_WINE).toBe(300);
-  });
-
-  it("omits effort on models that do not support the parameter", () => {
-    // anthropic/claude-sonnet-4.5 (Sonnet 4.5) is absent from Anthropic's effort-supported
-    // model list, so sending the parameter would be silently ignored.
-    expect(WINE_ENRICHMENT.effort).toBeUndefined();
+    // Haiku 4.5 is not on Anthropic's effort-supported list, so no effort is
+    // sent — a value here would be silently ignored at best.
+    expect(DESCRIPTOR_SUGGESTION.effort).toBeUndefined();
     // Gemini via OpenRouter's Anthropic-compatible endpoint: `effort` becomes a
     // parameter its endpoints do not advertise, and require_parameters then
     // leaves no eligible endpoint (404 in 0.2 s, measured 2026-09-02).
@@ -76,7 +71,7 @@ describe("Model profile contract (OpenRouter ids)", () => {
       INVOICE_EXTRACTION_RETRY,
       BOTTLE_SCAN,
       MENU_DESIGN,
-      WINE_ENRICHMENT,
+      DESCRIPTOR_SUGGESTION,
     ]) {
       expect(profile.model).toMatch(/^[a-z0-9-]+\/[a-z0-9.-]+$/);
     }
