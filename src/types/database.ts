@@ -476,6 +476,27 @@ export type Database = {
           },
         ]
       }
+      descriptors: {
+        Row: {
+          family: string
+          label: string
+          slug: string
+          sort: number
+        }
+        Insert: {
+          family: string
+          label: string
+          slug: string
+          sort?: number
+        }
+        Update: {
+          family?: string
+          label?: string
+          slug?: string
+          sort?: number
+        }
+        Relationships: []
+      }
       identity_merge_log: {
         Row: {
           id: string
@@ -1900,6 +1921,143 @@ export type Database = {
           },
         ]
       }
+      wine_note_descriptors: {
+        Row: {
+          descriptor_slug: string
+          note_id: string
+          origin: string
+        }
+        Insert: {
+          descriptor_slug: string
+          note_id: string
+          origin: string
+        }
+        Update: {
+          descriptor_slug?: string
+          note_id?: string
+          origin?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wine_note_descriptors_descriptor_slug_fkey"
+            columns: ["descriptor_slug"]
+            isOneToOne: false
+            referencedRelation: "descriptors"
+            referencedColumns: ["slug"]
+          },
+          {
+            foreignKeyName: "wine_note_descriptors_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "wine_notes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wine_notes: {
+        Row: {
+          author_user_id: string
+          body: string
+          created_at: string
+          id: string
+          restaurant_id: string
+          score: number | null
+          tasted_on: string | null
+          updated_at: string
+          wine_id: string
+        }
+        Insert: {
+          author_user_id: string
+          body: string
+          created_at?: string
+          id?: string
+          restaurant_id: string
+          score?: number | null
+          tasted_on?: string | null
+          updated_at?: string
+          wine_id: string
+        }
+        Update: {
+          author_user_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          restaurant_id?: string
+          score?: number | null
+          tasted_on?: string | null
+          updated_at?: string
+          wine_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wine_notes_restaurant_id_fkey"
+            columns: ["restaurant_id"]
+            isOneToOne: false
+            referencedRelation: "restaurants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wine_notes_wine_id_fkey"
+            columns: ["wine_id"]
+            isOneToOne: false
+            referencedRelation: "wines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wine_reference_notes: {
+        Row: {
+          body: string | null
+          canonical_wine_id: string
+          drink_window_end: number | null
+          drink_window_start: number | null
+          fetched_at: string
+          id: string
+          score: number | null
+          score_scale: number | null
+          source_kind: string
+          source_name: string
+          source_url: string
+          vintage: number
+        }
+        Insert: {
+          body?: string | null
+          canonical_wine_id: string
+          drink_window_end?: number | null
+          drink_window_start?: number | null
+          fetched_at: string
+          id?: string
+          score?: number | null
+          score_scale?: number | null
+          source_kind: string
+          source_name: string
+          source_url: string
+          vintage: number
+        }
+        Update: {
+          body?: string | null
+          canonical_wine_id?: string
+          drink_window_end?: number | null
+          drink_window_start?: number | null
+          fetched_at?: string
+          id?: string
+          score?: number | null
+          score_scale?: number | null
+          source_kind?: string
+          source_name?: string
+          source_url?: string
+          vintage?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wine_reference_notes_canonical_wine_id_fkey"
+            columns: ["canonical_wine_id"]
+            isOneToOne: false
+            referencedRelation: "canonical_wines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wine_variants: {
         Row: {
           canonical_wine_id: string
@@ -1965,7 +2123,10 @@ export type Database = {
           country: string | null
           created_at: string
           decant_minutes: number | null
+          drink_window_basis: string | null
           drink_window_end: number | null
+          drink_window_set_at: string | null
+          drink_window_set_by: string | null
           drink_window_start: number | null
           eightysixed_at: string | null
           eightysixed_by: string | null
@@ -2012,7 +2173,10 @@ export type Database = {
           country?: string | null
           created_at?: string
           decant_minutes?: number | null
+          drink_window_basis?: string | null
           drink_window_end?: number | null
+          drink_window_set_at?: string | null
+          drink_window_set_by?: string | null
           drink_window_start?: number | null
           eightysixed_at?: string | null
           eightysixed_by?: string | null
@@ -2059,7 +2223,10 @@ export type Database = {
           country?: string | null
           created_at?: string
           decant_minutes?: number | null
+          drink_window_basis?: string | null
           drink_window_end?: number | null
+          drink_window_set_at?: string | null
+          drink_window_set_by?: string | null
           drink_window_start?: number | null
           eightysixed_at?: string | null
           eightysixed_by?: string | null
