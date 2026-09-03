@@ -694,3 +694,209 @@ list-style generator) ·
   describes in-app behaviour, the evidence is Bevrly's own published documentation plus strings
   and data structures shipped in its public client bundles — strong evidence of what the code
   does, not proof of what a user experiences.
+
+---
+
+## 16. Logged-in walkthrough — 2026-09-02
+
+Devin holds an admin seat on a live production organisation (a friend's restaurant). The
+walkthrough was **read-only**: navigation, page reads, and report generation only; no
+adjustment, edit, delete, count, publish or setting was touched. Business figures, people,
+vendors and item-level data are deliberately omitted here. Everything below is product
+mechanics observed first-hand, and it supersedes the reconstructions in §5–§7 where they
+differ.
+
+### 16.1 Navigation, as shipped
+
+Top bar: **Home** (`/insights`) · **Inventory** ▾ (All Locations, Variance, Value Tracker,
+Counting Mode) · **Items** ▾ (All Items, Recipes, Batches, Freehand Items, Sold Out, New
+Items, List Builder, Barcodes) · **Invoices** ▾ (All Invoices, Vendors, Consignment, Purchase
+Order) · **POS** ▾ (Menu, Sales, Modifiers) · **Reports**. Right side: Requests, dark-mode
+toggle, global search, an **organisation switcher** (the account belongs to two
+organisations), and an avatar menu (Account Settings, Switch Organization, Help & Docs, Sign
+out). Settings (`/settings?tab=…`) has fifteen sections: Account, Organization, Users,
+Permissions, Billing, Point of Sale, Ordering, Sizes, Reasons, Types, Notifications, Locations,
+Audit Mode, R365 Export, Tickets.
+
+### 16.2 Home is the daily digest, date-scoped
+
+`/insights` renders one business day (previous day's activity) with previous/next-day arrows
+and a date picker. Panels, in order: Summary (revenue, beverage revenue and its share, beverage
+profit with COGS %) · Total Sales / Check Total · Average Bottle Price (45-day average, with
+last month beside it) · Median Bottle Price · Average Bottle Profit · **Beverage Breakdown**
+table + pie by type (units, revenue, %) with a footnote for the non-beverage share that is not
+charted · Top Bottle Sales · Top BTG Sales · **Recently 86'd Items** (units sold, revenue,
+stock — negative stock is shown as-is) · Top Liquor Sales · Top Cocktail Sales · **Sleepy
+Inventory** (empty state: "You have no sleepy inventory items. Great job!"). This confirms the
+§4 panel set byte-for-byte and adds that the page is a day, not a dashboard.
+
+### 16.3 Inventory page and the period banner
+
+Header KPIs: item count, stock count, inventory value. Controls: location selector, **Start
+Inventory Mode**, Stock Pull, Export, search, category, and four state chips — **Empty
+Locations · Stale · Variance · Uncounted** — plus Columns. A banner states the current period:
+"Inventory Date: <date> · Sales pause: <timestamp>" with an Edit link. Rows show barcode, a
+colour dot + name, price, last cost, **locations as breadcrumb chips** (`Walker Storage ›
+Rack 10 › R10 - Shelf 3`; the holding location "Recently Added" renders in red), running
+count, total quantity, last-inventory timestamp, and a per-row **Adjust running stock**
+action. Running counts are fractional (a bottle poured by the glass reads 5.29).
+
+### 16.4 Variance, Counting Mode, Value Tracker — what they actually show
+
+**Variance** (`/variance`): banner with Inventory Date and "Sales Paused as of"; toggles
+**Zero out uncounted** and **Show uncounted**; actions **Correct Variance**, Export, **Reopen
+Audit**, **Close Inventory**. Two views: *Summary* (Category · Running Count Value · Actual
+Value · Value Variance · Variance % · Sales · COGS $ · COGS % · COGS % with Variance) and *All
+Items* (23 columns, per item). Rows with variance are tinted pink.
+**Observed defect worth designing against:** with no counts submitted, the summary treats
+every item as counted at zero — every category shows −100 % value variance and one shows
+"Infinity %" COGS. The page cannot tell "not counted yet" from "counted zero". Terroir's
+variance view must carry an explicit *uncounted* state and refuse to compute variance against
+it (the "Keep Uncounted / Zero Out" toggle on the Variance *report* shows Bevrly knows this,
+but the live page does not apply it by default).
+
+**Counting Mode** (`/counting-mode`): three tabs — **Counting** (header "Total Counted"; a
+location picker "Tap to select a location"; one field "Search items or scan barcode…"; "Click
+an item to add +1 count"; a "Your recent counts" list; **Upload CSV**) · **History** (filters
+All Users / All Uploads; "Counts will appear here as your team scans and uploads inventory")
+· **Confirm** (KPIs Items / Total Counts / Variance; "No counts to confirm — start counting
+items first"). Blind counting is an organisation setting ("Hide counts while counting —
+counters will not see running totals; managers and admins still see all totals").
+
+**Value Tracker** (`/value-tracker`): Opening Value (since last inventory) · Purchases
+(received since) · Value Sold (COGS since) · **Current Value = opening + purchases − value
+sold + other movement (adjustments, comps, cost changes)** · Change; an "Inventory Value Over
+Time" chart; a by-category table with the same five columns.
+
+### 16.5 The item record
+
+Item detail is a modal over the list: header (vintage + name, Print Barcodes, barcode, last
+cost) and seven tabs — **Inventory · Purchase History · Sales · Inventory Activity · Location
+History · Details · Related Items**.
+- *Inventory*: one card per location with running count, last-updated timestamp, **Adjust
+  Count** and **Move Stock**; an "86'd this inventory" toggle; and the sentence "Grab the
+  dots to change the order of depletion from location" — **depletion order across locations
+  is set per item by drag**. Beside it, **Sold As**: every POS item mapped to this inventory
+  item, each with a custom name, a **depletion size** (🍷 1 oz, 2.5 oz, 5 oz, 10 oz carafe,
+  750 ml bottle…) and price, plus a "No Match" state and an Edit per row; footers "Sold As
+  Count" and "Recipe Count".
+- *Inventory Activity*: a ledger — user, date, location, type (e.g. Sale Depletion), qty & unit
+  (`1× 🍷2.5 oz`), new qty, change, previous qty, total qty.
+- *Location History*: location, last seen, status.
+- *Details*: Custom Name, Vintage, Size, **Bevrly Global Item Name** (the link to their global
+  catalogue), Type; "Add New Field".
+
+### 16.6 Receiving-side pages
+
+**New Items** (`/new-items`): the "Recently Added" holding location made into a worklist. KPIs
+*Needs Binning* / *Needs Matching*; chips **Unmatched Only · Needs Binning · Unlisted ·
+Listed**; columns barcode, name, **Sold As** match state, last unit cost, last purchase date,
+location, running count, total qty; actions Create Invoice, Export.
+**Sold Out** (`/sold-out`): KPI count; columns barcode, name, last sale price, last sale date,
+last vendor, last ordered qty, last cost, locations (negative counts in red), total qty;
+vendor filter.
+**Invoices**: status filter, Export, **Distribution**, Upload Invoice, Add Invoice; columns
+invoice no, vendor, invoice date, cost, entered by, status, consigned, line total, entered on,
+shipping, other fees, vendor credit; row Edit/Delete. Detail modal: vendor, invoice number,
+ordered date, vendor note; tabs Details / Activity; vendor rep, entered by/on, invoice date,
+consigned; **Set Invoice Status** (Completed / Closed); Print Barcodes; Export; line grid
+(barcode, name, qty, unit $, total $) with Add New Item; Attachments; Notes; Subtotal,
+Shipping, Other Fees, Credit, Total. Organisation setting **Invoice Placement**: "Confirm
+placement when completing an invoice" opens a modal to place each line's stock; when off,
+stock lands automatically at a default placement location (defaults to "Recently Added").
+Ordering setting: **Blend shipping & fees into item costs** (spread by quantity into last
+cost, average cost, inventory value, COGS and the R365 export).
+**Vendors**: name, address, class, default rep, order count, total paid. **Purchase Order**:
+Draft / Complete, same column shape as invoices (empty on this org). **Consignment**:
+consignor filter, KPIs items sold / revenue / cost; views Sales / Inventory / Consignors.
+
+### 16.7 POS side
+
+**POS Menu**: every POS item with price, a **Match** state (Accept / Ignore / Match / Unmatch;
+"Not an inventory item" for ignored), the matched inventory item + depletion size, source
+menu, updated and last-sale dates. **POS Sales**: Line Items / Tickets views with status
+(Matched…) and date filters. **POS Modifiers**: modifier → action mapping with match status
+and usage count. **Recipes**: name, category, ingredient count, POS item match, price, cost,
+profit, COGS %. Settings › Point of Sale: a Toast API instance (sync menu, sync tickets,
+location IDs, **ignored menus**), **void-reason behaviour synced from Toast** (whether a void
+still depletes), a Shopify connector, **serving-size defaults per type for the POS matcher**,
+and an **AI POS suggestions** switch ("automatic after catalog syncs, and manual").
+
+### 16.8 List Builder and its style engine
+
+`/builder` lists lists (name, Draft/Published, item count, created, updated). The editor:
+Publish · **Styling & Preview** · Create List Group; Published Status select; public link slug
++ Save link; a **Table of Contents (print only)**; groups → subgroups → items with drag
+handles, item counts, Edit Description, Subgroup, Hide. Styling opens a modal with tabs **Web
+Style / Print Style / Fonts**, sections Basic (style name), Columns, Header Typography,
+Description Styles (font family, style, size, colour, alignment, line height, bottom margin),
+Level 1 / Level 2 description overrides with "Reset to Base" and an enable checkbox, and a
+live **Web Preview** column. Matches §5's reconstruction; the two-record (web/print) style
+model is confirmed.
+
+### 16.9 Reports, verified by running two
+
+Sidebar: Favorites · Recommended (4) · Inventory (7) · Sales & Depletions (6) · Invoices &
+POs (4) · Point of Sale (1) · Scheduled Reports · Report History. Each card has **Run Report**
+and a "+" to schedule. Inventory: Inventory, **Detailed Inventory** (producer, region,
+variety…), Inventory by Location, **Sleepy Inventory** (no sales or purchases in 90 days with
+stock; tied-up capital and potential profit), **Variance Report** (per item: starting qty,
+purchases, sales, running vs actual, variance costs; **Keep Uncounted / Zero Out** toggle),
+Variance Summary, Out of Stock. Sales & Depletions: Sales, Sales Summary, Consignment,
+Depletions, **Manual Adjustments** (reason codes), **Void Reason**. Invoices & POs: Invoices,
+Invoice Line Items, Purchase Orders, PO Line Items. The runner page: filter bar (Date Range vs
+Inventory Date, type, reason) → Generate → a results grid marked "Saved" with Export CSV /
+Excel and a Past Reports counter. Manual Adjustments output columns: item, adjustment type,
+sub type, quantity, reason, reason note, user, location, inventory date, adjustment date.
+
+### 16.10 Settings that encode the model
+
+- **Organization**: start-of-day hour ("used for inventory calculations"); create new items
+  for new consignment vendors; hide counts while counting; invoice placement (above).
+- **Permissions**: "The platform currently supports three controls: Inventory Close, Audit
+  Mode, and View Costs. Organization admins and Bevrly staff always see costs." Every seat on
+  this org is Admin. The finer permission keys in the JS bundle (§5) are not exposed here.
+- **Audit Mode**: closing an inventory opens an audit period; corrections to counts,
+  invoices and movements for the previous period; ending the audit makes corrected counts the
+  starting point; sales keep deducting from the current period meanwhile. Switches: Use Audit
+  Mode; **Enforce Inventory Cooldown** (no close within 5 days of the previous close);
+  Auto-close; Audit Duration slider (20 days here).
+- **Locations**: a hierarchy table (name, **priority**, **available** toggle, stocked items,
+  children) with a "Navigate to" drill-down; naming in the wild is `Storage › Rack › Shelf`
+  and `Cellar › Shelf B › B - S8`.
+- **Sizes**: global vs local size definitions (name, volume ml, inventory size) — the same
+  list backs depletion sizes and POS serving defaults. **Types**: a global taxonomy (name,
+  code, reporting category) with item counts across the *global* catalogue (tens of
+  thousands of reds and whites), i.e. the home-grown universal catalogue is real and large.
+- **Reasons**: reason codes with an active toggle (this org has one, named "0" — reason
+  discipline is optional in practice). **Notifications**: generate daily metrics (feeds Home
+  and Insights; turning it off turns off emails), daily email on/off, send hour, timezone,
+  recipient list. **Tickets / Requests**: an in-app request tracker ("everything you have
+  asked us for, and what we have done about it").
+
+### 16.11 Design, first-hand
+
+Dark navy top bar, light grey ground, one violet accent for primary actions, Inter-class sans
+at small sizes, dense data tables with a colour dot for wine colour, breadcrumb location chips,
+pink row tint for variance, red for the holding location and negative stock. Modals for
+detail records rather than routes. Competent, undifferentiated SaaS; nothing to copy visually,
+per `DESIGN.md`.
+
+### 16.12 What this changes in §10
+
+- **Add** (S): the "Recently Added" holding location + invoice-placement modal as one
+  receiving contract — every received bottle either gets a slot at completion or lands in a
+  named queue the New Items page drains. Terroir has `bins` and an "unplaced is a queue
+  state" rule already; this is the UI for it.
+- **Add** (S): **per-item depletion order across locations**, set by drag — the answer to
+  "which bottle gets pulled first" that `bins.priority` only half-answers.
+- **Add** (M): **Sold-As mapping with depletion sizes** driving fractional running counts,
+  and per-type serving-size defaults for the matcher. Terroir's `pour_events` already hold
+  millilitres; the missing piece is the POS-item → inventory-item → size mapping surface.
+- **Strengthen** #2 (variance arithmetic): the live page's "uncounted = zero" failure is the
+  concrete reason Terroir's variance must model *uncounted* explicitly.
+- **Strengthen** #1 (inventory cycle): the cooldown, the sales-pause timestamp with an Edit
+  affordance, and start-of-day hour are all first-class settings; copy all three.
+- **Downgrade** #8 (permission keys): the shipped UI exposes three controls, not a key
+  system; `simple_mode` is not visible in settings. Keep the idea, drop the claim that
+  Bevrly ships it.
