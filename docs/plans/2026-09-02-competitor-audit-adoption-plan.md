@@ -82,6 +82,12 @@ mention count is an operational fact.
 | 7 | Compare-vintages spine under one canonical wine | `canonical_wines`/`wine_variants` is already the shape; add what the house paid, poured and sold per vintage | M |
 | 8 | Published, tiered pricing page | Tier by venue or list size instead of country | S |
 
+**App screenshots (2026-09-02, brief §15)** confirmed the flows Devin praised: the label /
+list toggle and gallery button on the camera, the docked recent-scans sheet, the user's own
+photo beside the canonical bottle render, the mention-count taste cards with four tracks and a
+pencil, "Drinks best YYYY – YYYY", and a sticky buy bar that sells a different vintage from
+the one scanned.
+
 Do not copy: commerce above taste on the wine page, sponsored cards inside the primary object,
 a bare 5-star global average (Vivino's own mean is 3.6 and 4.0 beats 85% of its database),
 40px controls (below the 44px floor), gating the daily job behind the paywall, the
@@ -171,6 +177,15 @@ iOS-only 209 MB binary does not. Slots are derived, only occupancy is stored. Pr
 L, shippable in order: layout doc + text coordinate (M) → 2D map + Locate everywhere (M) →
 import-to-placement (M) → 3D room (M–L) → photo-to-rack (L). Restaurant multi-location and a
 pull-list-in-walk-order service loop are what make it a tool rather than a showpiece.
+
+**A real scan fixture exists.** Devin captured a textured 3D scan of a bookshelf with his phone
+on 2026-08-30 (OBJ + MTL + two texture atlases, 121,333 vertices, 196,913 faces, bounding box
+1.39 × 2.64 × 0.68 m, two objects). It lives outside the repo at
+`~/Inbox/misc/terroir-shelf-scan-2026-08-30/` (23 MB); a depth-shaded front projection is
+checked in at `docs/plans/competitor-audit-2026-09-02/assets/shelf-scan-2026-08-30-front.png`
+and shows seven shelf planes cleanly. That is the input shape for the scan → layout generator
+(step B above): detect the horizontal planes, derive rows, then columns and depth from the
+objects between them, and propose `cols × rows × depth` for the user to correct.
 
 Do not copy: paywalled bottle-finding, vendor-locked cellars, refusing custom labels,
 cosmetic-only settings, dated notes imported as public reviews with defaults that differ by
