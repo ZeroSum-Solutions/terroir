@@ -328,9 +328,12 @@ describe("checked-in API contract gate", () => {
       // P1 slice 1 (unified search program) added GET /api/search, the
       // merged cellar + two-corpus tier-1 endpoint the palette will consume
       // — 111 + 1 = 112.
-      discoveredOperationCount: 112,
+      // The wine page's house tasting notes added
+      // POST /api/wines/[id]/notes, the write path for the note corpus the
+      // taste block aggregates — 112 + 1 = 113.
+      discoveredOperationCount: 113,
       plannedOperationCount: 15,
-      classificationCount: 112,
+      classificationCount: 113,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,
