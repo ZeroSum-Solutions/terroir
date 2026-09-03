@@ -199,6 +199,26 @@ from the mesh, reading bottle punts and neck rows off the photo where the geomet
 Between the two scans the pipeline has one clean-geometry case and one photo-heavy case to
 be evaluated against before any code is written.
 
+**Photographs of the same cellar** (five iPhone frames, 2026-08-28; originals in
+`~/Inbox/misc/terroir-cellar-scan-2026-08-28/photos/`, two people-free frames checked in as
+`assets/cellar-2026-08-28-rack-detail.jpg` and `assets/cellar-2026-08-28-corner.jpg`) fix what
+the generator must model for a restaurant display cellar, which is not a collector's rack:
+- **Angled display rails, not slots.** Each row is a tilted wooden rail with a scalloped front
+  edge; bottles lie neck-out and label-up, roughly ten to twelve per rail, and there is no
+  per-bottle pocket — a row is an ordered sequence with capacity, not a grid of cells. The
+  layout document's section `kind` needs a `rail` value alongside rack, bin and case, with
+  capacity and an optional scallop pitch, and the coordinate collapses to `Wall › Rail › position`.
+- **Mixed section kinds on one wall.** Upper rails hold lying bottles; the lowest one or two
+  shelves hold standing bottles in rows; wooden cases and a stool sit on the floor — three
+  storage kinds in one 3 m elevation, which is why sections carry their own kind and geometry.
+- **Glass in the way.** The cellar is viewed through a steel-framed glass wall, so photos
+  and scans carry mullions, reflections and the photographer; slot detection has to mask the
+  frame grid first. This is the normal condition in a restaurant.
+- **Labels face the room.** Because every lying bottle shows its label, a photo of a rail is
+  also a scan of its contents — the same vision model that reads a single label can enumerate
+  a rail left to right, which is the bulk-capture idea from Delectable applied to a fixed
+  camera position rather than a phone in the hand.
+
 Do not copy: paywalled bottle-finding, vendor-locked cellars, refusing custom labels,
 cosmetic-only settings, dated notes imported as public reviews with defaults that differ by
 platform, unrevocable snapshot wine lists, Enterprise-gated selling price, dead Android
