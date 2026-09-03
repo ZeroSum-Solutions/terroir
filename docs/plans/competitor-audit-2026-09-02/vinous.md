@@ -355,3 +355,92 @@ Build sizes (S ≤ ~1 day, M ≈ ~2–5 days, L ≈ ~1–3 weeks) are **my estim
 - **Adversarial verify:** `verify-codex.sh` tripped its circuit breaker (both batches rc=124, GPT-5.6 Sol unavailable/rate-limited); fell back to a Claude adversarial verifier per the skill's exit-1 path. It returned 11 `supported`, 3 `unsupported_by_source` and 1 `stale` out of 15 claims. **All five corrections were applied**: the archive-size comparison is now shown as an explicit conflict with dates rather than a single claim; "the API exists only through Liv-ex" was softened to "the only documented route found"; the copy-block exemption is now stated as `role === "publisher"` or `is_user_pro` rather than "non-Pro"; Delectable's Vinous ownership is now sourced to the 2016 acquisition release rather than to the App Store listing; and the design-token claims are now stated as what the stylesheet literally declares.
 - **Stage 5 (triangulation):** not triggered — no facts-needed item was gated behind an absent primary source in a way that ≥3 dated third-party reports could have filled. There are no [ESTIMATE] figures in this brief.
 - **Hard rules observed:** public sources only; no login attempted; no paywall bypassed; no credentials read or entered; no billed Anthropic API call.
+
+---
+
+## 14. Logged-in walkthrough — 2026-09-02
+
+Signed in on a subscriber account Devin was given access to (Devin typed the password in his
+own browser; no agent handled it). Read-only: nothing was favourited, printed, posted or
+changed, and the account holder's details are not recorded here. The account is on the
+**Classic, one-year, personal / non-commercial** plan, which matters for §8.1: what a
+restaurant person is actually using day to day is the consumer licence.
+
+### 14.1 What the subscription unlocks, exactly
+
+Every review card and wine page renders in full: score (or barrel range in parentheses),
+integer drinking window, article title with month/year as a link, tasting text, author and
+date. Nothing else changes structurally versus the locked state in §5 — the gate is the
+score and the note, as the brief said. Two trade tools appear on every wine page for a
+subscriber: **Print Wines** and **Make Shelftalkers**. Prices come from a Wine-Searcher
+"powered by" block plus a Banquet (Vinous's own commerce app) badge; on a new-release
+Argentine white the retailer block was empty.
+
+### 14.2 Search, as it behaves
+
+The header box has a scope dropdown (**Reviews / Articles / Videos**) and submits to
+`/wines?term=…` — the `q=` parameter the brief guessed is ignored and returns the default
+index, so the query key is `term`. Results have four tabs over the same query:
+- **Reviews** — one card per review (score, drinking window, author, date, note, "Read More").
+- **Vintages** — the same cards without the note text: a dense list for scanning scores and
+  windows across years.
+- **Wines** — one row per wine identity with **every reviewed vintage as a clickable year chip
+  and a "View All"**; this is the vertical rail the brief (§8 #12) recommended, shipped.
+- **Producers** — one row per producer with "N wines, N vintages, N reviews" counts.
+The left rail is the filter set from §3.1 (sort; vintage, score, price and review-date
+ranges; country; colour incl. sparkling/sweet/fortified sub-colours; author). **Still no
+region or appellation facet**, logged in or out. A search for a producer name returned the
+producer's own wines first, then homonym producers, then loose token matches ("Hermitage" →
+"Herman", "Hermanos"), so relevance is token-based, not entity-based.
+
+### 14.3 Producer and wine pages
+
+Producer page: Reviews / Wines tabs, sort by vintage, a per-card expander. Wine page: left
+column *Wine Details* (producer, place-of-origin hierarchy country → region → subregion,
+colour, grape/blend), a **vintage chip list**, Print Wines, Make Shelftalkers; main column
+*Reviews & Tasting Notes* (score, window, source article, note, author/date) and *Prices &
+Retailers*. Region hierarchy exists on the record (three levels) but is not a filter.
+
+### 14.4 Vintage Chart, Grape Guide, Maps, Articles
+
+**Vintage Chart** (`/vintages`): tabs Highlights / Countries / Vintage; twelve highlight
+regions (Bordeaux both banks, three Burgundy splits, Champagne, Barbaresco, Barolo,
+Brunello, Chianti Classico, Napa, Sonoma Pinot). A region page lists every vintage with a
+**score, a maturity status word (Not Yet Released / Hold / Drink or Hold / Drink / Mature /
+Past Peak), a dated, initialled prose assessment, and a "see all wines" link** — back to the
+1950s for Bordeaux. This is the reference-quality artefact of the site and it is entirely
+static content.
+**Grape Guide**: a sortable table of grape → colour dot → body ("Light", "Medium to full").
+**Maps**: a shop for printed AVA maps, not an interactive surface. **Articles**: list with
+a category facet (e.g. a country) and author facet; an article page has the prose with
+photos, a right rail of **"Producers in this Article"** (each a link filtered to that
+article), "Related Articles" grouped by year, and a **"Show all the wines (sorted by score)"**
+link to the article's own review index. Notes therefore live in three places at once —
+article, wine page, producer page — all keyed off the same review record.
+
+### 14.5 Design, first-hand
+
+Serif display (Antonio Galloni's wordmark), light sans body, red accent only for scores,
+links and the user name; generous white space; cards separated by hairlines; almost no
+imagery outside articles. Score is always the loudest element on a card (§9 #10 stands).
+The "Prefer the old site? Launch →" banner is on every page.
+
+### 14.6 What this changes in §8
+
+- **Confirms** #2 (year-sniffing) and #12 (per-wine vintage rail): both are live, and the
+  Wines tab's chip rail is the pattern to copy — with Terroir adding "which of these do we
+  own, and where".
+- **Confirms** #6's gap: no region facet even for subscribers, despite a three-level region
+  hierarchy on every wine record. Terroir's hierarchical region facet is a genuine edge.
+- **Adds** (S): a **maturity status vocabulary** on top of the drinking window — Vinous's six
+  words (Not Yet Released / Hold / Drink or Hold / Drink / Mature / Past Peak) are exactly the
+  states a cellar filter needs; derive them from the window and the current year, and let
+  the house override.
+- **Adds** (S): **provenance links in three directions** (article ↔ note ↔ producer, with
+  `article_id` carried in the producer link) — the same record rendered in three contexts,
+  which is how Terroir's enrichment excerpts should behave on wine, producer and list pages.
+- **Adds** (S): shelf-talker / print export from a wine record — cheap for Terroir given the
+  branded list renderer already exists.
+- **Licensing note for §8.1**: a subscriber sees the trade tools on a personal plan, but the
+  plan's terms remain personal/non-commercial; nothing seen here loosens the contract
+  analysis.
