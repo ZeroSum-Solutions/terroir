@@ -16,9 +16,6 @@
     "text-[15px]": 1,
     "text-[17px]": 1
   },
-  "src/app/(app)/cellar/[wineId]/wine-detail-view.tsx": {
-    "class:font-mono": 3
-  },
   "src/app/(app)/cellar/auto-eightysix-modal.tsx": {
     "text-[14px]": 1,
     "text-[18px]": 1
