@@ -1,16 +1,14 @@
 /**
  * Reads the house's notes on one wine, with their authors resolved.
  *
- * The service-role client is used ONLY to turn user ids into names, and only
- * for ids that came from a `memberships` query already scoped to the caller's
- * own restaurant — the same gate `app/(app)/team/(index)/page.tsx` uses. A note
- * whose author has since left the restaurant resolves to the honest fallback
- * rather than reaching outside that roster.
+ * Author names come from resolveRestaurantMemberNames, which holds the single
+ * membership gate in front of the service role (AGENTS.md non-negotiable #3).
+ * A note whose author has since left the restaurant resolves to the honest
+ * fallback rather than reaching outside that roster.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
-import { resolveMemberIdentities } from "@/lib/team/member-identities";
+import { resolveRestaurantMemberNames } from "@/lib/team/restaurant-member-names";
 import type { HouseNote } from "./note-list";
 
 export async function loadWineNotes(
@@ -27,16 +25,11 @@ export async function loadWineNotes(
   if (error) throw error;
   if (!notes || notes.length === 0) return [];
 
-  const { data: roster } = await supabase
-    .from("memberships")
-    .select("user_id")
-    .eq("restaurant_id", restaurantId);
-
-  const memberIds = new Set((roster ?? []).map((m) => m.user_id));
-  const admin = createServiceRoleClient();
-  const identities = admin
-    ? await resolveMemberIdentities(admin, [...memberIds])
-    : new Map();
+  const names = await resolveRestaurantMemberNames(
+    supabase,
+    restaurantId,
+    notes.map((note) => note.author_user_id).filter((id): id is string => id !== null),
+  );
 
   return notes.map((note) => ({
     id: note.id,
@@ -47,10 +40,7 @@ export async function loadWineNotes(
     // A null author is a legacy note seeded from wines.tasting_notes, which
     // recorded none. That is different from a colleague we cannot name.
     attributed: note.author_user_id !== null,
-    authorName:
-      note.author_user_id !== null && memberIds.has(note.author_user_id)
-        ? (identities.get(note.author_user_id)?.name ?? null)
-        : null,
+    authorName: note.author_user_id === null ? null : (names.get(note.author_user_id) ?? null),
     // Only confirmed descriptors are ever shown or counted. An untouched
     // model inference is a vote, not a mention.
     descriptors: (note.wine_note_descriptors ?? [])
