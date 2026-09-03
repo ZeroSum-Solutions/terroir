@@ -69,6 +69,7 @@ overlay. Multi-venue rollups. Anything in the audit's "do not copy" lists.
 | D12 | `wine_reference_notes` is keyed on vintage, and vintage is not nullable | A vintage-less row attaches a 2015 retailer score to a 2019 bottle, globally, with a URL beside it — worse than an unsourced guess, because the UI claims a source. |
 | D13 | Retirement is a flagged worker job, not a migration; and the enrichment writer is stopped first | `batch.ts:234` selects on `drink_window_start is null`, so nulling without stopping the writer re-queues every retired wine for re-invention. |
 | D14 | Mis-binned is dropped | Its two clauses were different things OR'd together: a wine in more than one bin is normal, and `bin_location` drifting from `bins.code` is a data-quality matter, not a wine-page warning. |
+| D15 | The house side carries **no** structural axes. Body and acidity come from the corpus; tannin and sweetness are not shown at all | Amended 2026-09-03, after Task 11 found this spec contradicting itself: §4.2 promised "the four structural axes" from a `wine_notes` schema §3.2 defines with no structural columns and a vocabulary that is aroma-and-flavour only. Nobody was ever asked for structure, so there is nothing to aggregate and nothing to backfill. Adding four optional 1–5 fields to the composer was considered and rejected: against a floor of n ≥ 3, optional inputs on a capture path with zero organic notes and 41 structureless legacy rows aggregate to n = 0 on every axis, so it ships the same empty block while adding a rating surface purely to make a type non-empty — D7's manufactured signal wearing a schema. X-Wines already supplies body and acidity with a real basis; tannin and sweetness exist in neither source and are therefore not promised. |
 | D10 | No per-aroma-family colour. The claret-derived rating ramp only | See §5.6 — the family palette is the exact zone `check-design-palette.mjs` bans, and DESIGN.md forbids a fifth hue. This is a documented departure from the adoption plan's §2.1 item 4. |
 
 ## 3. Phase 1 — a working tasting log
@@ -207,7 +208,7 @@ composition is a whole resolver, never a subset of one.
 
 | Resolver | Returns |
 |---|---|
-| `resolveHouseProfile(restaurantId, wineId)` | confirmed descriptor counts, the four structural axes above the floor, house score with its n, recent notes |
+| `resolveHouseProfile(restaurantId, wineId)` | confirmed descriptor counts, house score with its n, the notes themselves (see D15 — the house side carries no structural axes) |
 | `resolveReferenceProfile(canonicalWineId, vintage)` | reference notes, reference score, **the resolved drink window and its basis**, corpus structure from X-Wines |
 | `resolveCellarContext(restaurantId, wineId)` | inventory, lots, bins, list membership, movement |
 
@@ -228,12 +229,14 @@ Each is its own component file.
 | `OperationalBadges` | `Sourced<Badge[]>` |
 | `VintageRail` | `Sourced<VintageRow[]>` |
 
-**One floor, n ≥ 3, for the whole aggregate block** — chips and axes alike. A chip cloud from a
-single palate beside hidden axes reads as *"we know the flavours and nothing about the structure,"*
-which is the opposite of what one note said. Below the floor the block renders per-note chips
+**One floor, n ≥ 3, for the house aggregate.** Below it the block renders per-note chips
 attributed to their notes, which is honest, and the aggregate appears only when there is an
-aggregate. Each axis states its own n, and an axis below the floor is omitted with the block
-saying so — never drawn faintly, because a faint axis reads as data rather than absence.
+aggregate.
+
+**Structure is corpus-sourced, never house-aggregated (D15).** The block's two halves have two
+different origins and say so: confirmed descriptors and the house score come from `HouseTaste`,
+while body and acidity come from `CorpusStructure` with the corpus's own wording. Nothing is drawn
+faintly — a faint axis reads as data rather than absence.
 
 ### 4.4 The badges — five, not six
 
