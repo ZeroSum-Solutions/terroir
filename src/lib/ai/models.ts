@@ -131,43 +131,30 @@ export const MENU_DESIGN: ModelProfile = {
 };
 
 /**
- * Sommelier enrichment — drink window, peak year, tasting note, decant time.
+ * Descriptor suggestion for a house tasting note.
  *
- * DELIBERATELY NOT REFRESHED. This is the one path where the newer models lost.
+ * The model reads one sommelier's prose and returns which of a closed
+ * vocabulary of about twenty slugs it mentions. Its answer is filtered against
+ * that vocabulary, and a human taps to confirm before anything is stored, so
+ * the model's output is a pre-selection rather than a fact. Failure is cheap by
+ * design: every error path returns no suggestions and the composer still saves.
  *
- * A blind eval (22 wines across obscure producers, mature vintages, releases
- * after Haiku's knowledge cutoff, non-European wines, and underspecified
- * records) scored every candidate against this incumbent. An independent model
- * graded anonymised output pairs in randomised order:
- *
- *   candidate                 wins vs 4.5   factual errors (cand. vs 4.5)
- *   claude-haiku-4-5             4 - 16            8 vs 2
- *   claude-sonnet-5 @ low        6 - 15            5 vs 3
- *   claude-sonnet-5 @ medium     8 - 13            3 vs 3
- *
- * Haiku's failure mode was systematic, not random: it truncates the ageing
- * curve of benchmark long-lived wines (Vin de Constance closed out at 2035,
- * Monte Bello at 2045, Musar at 2028). That is precisely the error a wine
- * director notices first, on prose shown to their staff.
- *
- * Cost was never the deciding factor once measured: a 2,000-wine cellar runs
- * $6.04 on this model against $4.88 on Sonnet 5 and $1.95 on Haiku. The whole
- * spread is under five dollars per cellar, one time — far too small to buy a
- * measurable quality regression with.
- *
- * MIGRATION RISK: Sonnet 4.5 is a legacy model and will eventually be retired.
- * `claude-sonnet-5` at medium effort is the designated successor — it reached
- * factual parity (3 errors each) and lost only on grader preference. Re-run the
- * eval when retirement is announced rather than swapping under time pressure.
- *
- * Known defect, independent of model choice: this prompt caps `reviewExcerpt`
- * at 200 characters and Sonnet 4.5 overran it on 4 of 22 wines. Both candidates
- * respected it. Enforce the cap in code rather than trusting the prompt.
+ * NOTE ON WHAT USED TO BE HERE. This slot held WINE_ENRICHMENT, the profile for
+ * the Claude tier that inferred drink windows, peak years and a "tasting-note
+ * style sentence". That tier is gone — its outputs were unsourced values shown
+ * on the wine page as though they were sourced. Its eval (22 wines, blind
+ * pairwise grading, Sonnet 4.5 beating Haiku 4.5 16-4 and Sonnet 5 13-8, with
+ * Haiku systematically truncating the ageing curve of long-lived wines) remains
+ * in git history and is worth re-reading before anyone asks a model to estimate
+ * a drinking window again. It does not transfer to this profile: choosing from
+ * a closed list is a different task from recalling a wine's ageing curve.
  */
-export const WINE_ENRICHMENT: ModelProfile = {
-  model: "anthropic/claude-sonnet-4.5",
-  maxTokens: 400,
+export const DESCRIPTOR_SUGGESTION: ModelProfile = {
+  // Haiku, because this is extraction against a closed list of about twenty
+  // slugs, not judgement: the model is choosing which of a fixed vocabulary a
+  // short note mentions, the answer is filtered against that vocabulary
+  // anyway, and a human confirms every suggestion before it is stored. Haiku
+  // 4.5 is not on Anthropic's effort-supported list, so no effort is sent.
+  model: "anthropic/claude-haiku-4.5",
+  maxTokens: 200,
 };
-
-/** Per-wine token budget for the batched enrichment call. */
-export const WINE_ENRICHMENT_TOKENS_PER_WINE = 300;
