@@ -8,6 +8,8 @@ import type {
   VintageRating,
   XWinesProfile,
 } from "@/lib/wine-intelligence/xwines-profile";
+import type { ReactNode } from "react";
+import { Section } from "@/components/detail-sections";
 import { CellarSection } from "./blocks/cellar-section";
 import { CorpusUnavailableNote, NoProfileNote } from "./blocks/corpus-notes";
 import { FactsSection } from "./blocks/facts-section";
@@ -25,6 +27,13 @@ export type WineDetailViewProps = {
   facts: ResolvedWineFacts;
   profile: CorpusRead<XWinesProfile | null>;
   vintageRatings: CorpusRead<VintageRating[]>;
+  /**
+   * The house tasting log. Passed in as a slot rather than rendered here so
+   * this component stays presentational: the log is a client component that
+   * uses the router, and burying it would make every test of the reference
+   * sections above need an app-router mock to say anything about a hero image.
+   */
+  notesSlot?: ReactNode;
 };
 
 export function WineDetailView({
@@ -34,6 +43,7 @@ export function WineDetailView({
   facts,
   profile: profileRead,
   vintageRatings: ratingsRead,
+  notesSlot,
 }: WineDetailViewProps) {
   // An unreadable corpus renders like an unmatched wine — no taste sections —
   // but says so in its own words below rather than borrowing "no match".
@@ -119,6 +129,10 @@ export function WineDetailView({
         )}
 
         <CellarSection wine={wine} bottleCount={bottleCount} locations={locations} />
+
+        {notesSlot !== undefined && (
+          <Section title="House tasting notes">{notesSlot}</Section>
+        )}
       </div>
     </div>
   );

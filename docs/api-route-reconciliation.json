@@ -9,7 +9,7 @@
     "concreteRequirementCount": 32,
     "exactDiscoveredCount": 17,
     "plannedPromiseCount": 15,
-    "extensionDiscoveredCount": 96,
+    "extensionDiscoveredCount": 97,
     "crossCuttingRequirementCount": 6,
     "ter020LeafCount": 8
   },
@@ -950,6 +950,12 @@
     },
     {
       "operationId": "api:POST:/api/wines/{param}/notes",
+      "classification": "extension",
+      "concreteRequirementId": null,
+      "semanticAliasContext": []
+    },
+    {
+      "operationId": "api:POST:/api/wines/{param}/notes/suggest",
       "classification": "extension",
       "concreteRequirementId": null,
       "semanticAliasContext": []

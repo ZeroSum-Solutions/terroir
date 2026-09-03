@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "generatorVersion": 1,
   "sourceRoot": "src/app/api",
-  "routeFileCount": 97,
-  "discoveredOperationCount": 113,
+  "routeFileCount": 98,
+  "discoveredOperationCount": 114,
   "discoveredOperations": [
     {
       "operationId": "api:GET:/api/assistant",
@@ -1089,6 +1089,17 @@
       "path": "/api/wines/[id]/notes",
       "source": {
         "file": "src/app/api/wines/[id]/notes/route.ts",
+        "exportKind": "function-declaration",
+        "localName": "POST",
+        "moduleSpecifier": null
+      }
+    },
+    {
+      "operationId": "api:POST:/api/wines/{param}/notes/suggest",
+      "method": "POST",
+      "path": "/api/wines/[id]/notes/suggest",
+      "source": {
+        "file": "src/app/api/wines/[id]/notes/suggest/route.ts",
         "exportKind": "function-declaration",
         "localName": "POST",
         "moduleSpecifier": null

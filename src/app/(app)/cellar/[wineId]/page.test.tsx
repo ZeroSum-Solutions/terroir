@@ -42,6 +42,13 @@ function supabaseReturning(
             filters[`${table}.${column}`] = value;
             return self;
           },
+          /**
+           * Phase 1 of the wine page reads the house tasting log and the
+           * descriptor vocabulary alongside everything else. Both are ordered
+           * queries returning plain arrays; neither carries an assertion here,
+           * so both resolve empty.
+           */
+          order: () => self,
           maybeSingle: () => ({
             then: (r: (v: unknown) => unknown) =>
               r(
