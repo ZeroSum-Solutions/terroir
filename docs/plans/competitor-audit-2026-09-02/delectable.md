@@ -278,3 +278,16 @@ Ranked by (value to Terroir × confidence it works) ÷ build size. Each item sta
 - **Discovery:** `gemini-search.sh` timed out (rc=124) → fell back to the built-in WebSearch tool, as the skill prescribes.
 - **Verification:** `verify-codex.sh` failed both batches (rc=1, circuit breaker tripped) → Claude verify subagent covered the full claim set. The verifier returned `overstated`/`unsupported_by_source` on 10 of 18 claims for **under-scoped quotes**; every one was re-quoted with a wider self-contained span and re-passed `cite-check.sh`. All 54 `cite-check.sh` runs across the final claim set returned OK — every quoted span byte-verifies against its harvest file.
 - **Stage 5 (triangulate) deliberately not run:** the one gated fact (current transcription turnaround) has only two independent dated reports, below the three-report floor. No range was invented — see §3.
+
+---
+
+## Logged-in attempt — 2026-09-02
+
+Devin's Delectable account was created with Google sign-in. `delectable.com/sign-in` and
+`/register` offer only **Connect with Facebook** or email + password (plus a reCAPTCHA on
+register); there is no Google or Apple option on the web, so a Google-created account cannot
+be used there at all. The web surface is the marketing feed, category pages and wine search
+described in §2; the capture, bulk-import, feed and profile flows in §1 and §3 exist only in
+the iOS/Android app. **To audit them first-hand, Devin's phone screenshots or a screen
+recording of the capture → pending → identified flow and the photo-library multi-select are
+the evidence; no browser session can produce them.** Nothing here changes §7.
