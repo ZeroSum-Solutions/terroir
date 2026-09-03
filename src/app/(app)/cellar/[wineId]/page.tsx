@@ -11,6 +11,8 @@ import {
   fetchLwinReference,
   resolveWineFacts,
 } from "@/lib/wine-intelligence/wine-reference-facts";
+import { loadWineNotes } from "@/domains/notes/load-wine-notes";
+import { NotesSection } from "@/domains/notes/notes-section";
 import { WineDetailView } from "./wine-detail-view";
 
 export const metadata: Metadata = { title: "Wine" };
@@ -57,7 +59,7 @@ export default async function WineDetailPage({ params }: { params: Params }) {
   if (wineError) throw wineError;
   if (!wine) notFound();
 
-  const [inventoryResult, profile, lwin] = await Promise.all([
+  const [inventoryResult, profile, lwin, notes, vocabularyResult] = await Promise.all([
     supabase
       .from("inventory_items")
       .select("quantity, bin_location, section")
@@ -73,6 +75,10 @@ export default async function WineDetailPage({ params }: { params: Params }) {
     // the wine query already returned, so serialising it would add a round
     // trip to every wine detail page for nothing.
     fetchLwinReference(supabase, wine.lwin_id),
+    // The house's own tasting log. Alongside the rest for the same reason:
+    // serialising it would add a round trip to every wine detail page.
+    loadWineNotes(supabase, restaurantId, wineId),
+    supabase.from("descriptors").select("slug, label, family").order("sort"),
   ]);
 
   // Same reasoning as the wine query, with a worse failure mode: a null here
@@ -114,6 +120,13 @@ export default async function WineDetailPage({ params }: { params: Params }) {
       facts={facts}
       profile={profile}
       vintageRatings={vintageRatings}
+      notesSlot={
+        <NotesSection
+          wineId={wine.id}
+          vocabulary={vocabularyResult.data ?? []}
+          notes={notes}
+        />
+      }
     />
   );
 }

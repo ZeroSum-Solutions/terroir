@@ -330,10 +330,12 @@ describe("checked-in API contract gate", () => {
       // — 111 + 1 = 112.
       // The wine page's house tasting notes added
       // POST /api/wines/[id]/notes, the write path for the note corpus the
-      // taste block aggregates — 112 + 1 = 113.
-      discoveredOperationCount: 113,
+      // taste block aggregates — 112 + 1 = 113. Its sibling
+      // POST /api/wines/[id]/notes/suggest pre-ticks the composer's chips and
+      // writes nothing — 113 + 1 = 114.
+      discoveredOperationCount: 114,
       plannedOperationCount: 15,
-      classificationCount: 113,
+      classificationCount: 114,
     });
     expect(paths.map((file) => readFileSync(resolve(file), "utf8"))).toEqual(
       before,
