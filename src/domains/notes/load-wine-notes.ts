@@ -44,9 +44,13 @@ export async function loadWineNotes(
     score: note.score,
     tastedOn: note.tasted_on,
     createdAt: note.created_at,
-    authorName: memberIds.has(note.author_user_id)
-      ? (identities.get(note.author_user_id)?.name ?? null)
-      : null,
+    // A null author is a legacy note seeded from wines.tasting_notes, which
+    // recorded none. That is different from a colleague we cannot name.
+    attributed: note.author_user_id !== null,
+    authorName:
+      note.author_user_id !== null && memberIds.has(note.author_user_id)
+        ? (identities.get(note.author_user_id)?.name ?? null)
+        : null,
     // Only confirmed descriptors are ever shown or counted. An untouched
     // model inference is a vote, not a mention.
     descriptors: (note.wine_note_descriptors ?? [])

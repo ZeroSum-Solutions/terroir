@@ -6,6 +6,15 @@ export type HouseNote = {
   score: number | null;
   tastedOn: string | null;
   createdAt: string;
+  /**
+   * Two different absences, kept apart on purpose. `attributed: false` means
+   * the note genuinely has no author — it was seeded from the legacy
+   * wines.tasting_notes field, which recorded none. `attributed: true` with a
+   * null name means a colleague wrote it and we could not resolve their name
+   * just now. Collapsing the two would either credit nobody for real work or
+   * imply the cellar record was written by a person.
+   */
+  attributed: boolean;
   authorName: string | null;
   descriptors: { slug: string; label: string }[];
 };
@@ -33,7 +42,9 @@ export function NoteList({ notes }: { notes: HouseNote[] }) {
         <li key={note.id} className="card-surface rounded-card p-lg">
           <div className="flex flex-wrap items-baseline justify-between gap-sm">
             <p className="text-caption uppercase tracking-[0.18em] text-grey">
-              {note.authorName ?? "Someone here"}
+              {!note.attributed
+                ? "From the cellar record"
+                : (note.authorName ?? "Someone here")}
             </p>
             {note.score !== null && (
               <p className="tabular text-ledger text-ink">{note.score}</p>

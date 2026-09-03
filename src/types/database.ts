@@ -1956,7 +1956,7 @@ export type Database = {
       }
       wine_notes: {
         Row: {
-          author_user_id: string
+          author_user_id: string | null
           body: string
           created_at: string
           id: string
@@ -1967,7 +1967,7 @@ export type Database = {
           wine_id: string
         }
         Insert: {
-          author_user_id: string
+          author_user_id?: string | null
           body: string
           created_at?: string
           id?: string
@@ -1978,7 +1978,7 @@ export type Database = {
           wine_id: string
         }
         Update: {
-          author_user_id?: string
+          author_user_id?: string | null
           body?: string
           created_at?: string
           id?: string
