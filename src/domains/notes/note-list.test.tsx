@@ -33,7 +33,7 @@ const NOTE: HouseNote = {
   createdAt: "2026-09-02T10:00:00Z",
   attributed: true,
   authorName: "Devin",
-  descriptors: [{ slug: "oaky", label: "Oaky" }],
+  descriptors: [{ slug: "oaky", label: "Oaky", family: "oak" }],
 };
 
 describe("NoteList", () => {

@@ -20,7 +20,7 @@ export async function loadWineNotes(
 ): Promise<HouseNote[]> {
   const { data: notes, error } = await supabase
     .from("wine_notes")
-    .select("id, body, score, tasted_on, created_at, author_user_id, wine_note_descriptors(descriptor_slug, origin, descriptors(label))")
+    .select("id, body, score, tasted_on, created_at, author_user_id, wine_note_descriptors(descriptor_slug, origin, descriptors(label, family))")
     .eq("wine_id", wineId)
     .eq("restaurant_id", restaurantId)
     .order("created_at", { ascending: false });
@@ -58,6 +58,10 @@ export async function loadWineNotes(
       .map((d) => ({
         slug: d.descriptor_slug,
         label: d.descriptors?.label ?? d.descriptor_slug,
+        // Carried for the aggregate, which groups chips by family. The note
+        // list ignores it: a family labels a group, it never tints a chip
+        // (D10).
+        family: d.descriptors?.family ?? "",
       })),
   }));
 }

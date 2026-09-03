@@ -16,7 +16,7 @@ export type HouseNote = {
    */
   attributed: boolean;
   authorName: string | null;
-  descriptors: { slug: string; label: string }[];
+  descriptors: { slug: string; label: string; family: string }[];
 };
 
 /**
