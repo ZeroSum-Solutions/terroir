@@ -42,9 +42,6 @@ export function EditMetadataModal({
   );
   const [varietal, setVarietal] = useState(initial.varietal ?? "");
   const [region, setRegion] = useState(initial.region ?? "");
-  const [tastingNotes, setTastingNotes] = useState(
-    initial.tasting_notes ?? "",
-  );
   // BND-277 — manual drink-window override (#72)
   const [dwStart, setDwStart] = useState(
     initial.drink_window_start != null ? String(initial.drink_window_start) : "",
@@ -62,7 +59,6 @@ export function EditMetadataModal({
     (vintage.trim() === "" ? null : parseInt(vintage, 10)) !== initial.vintage ||
     (varietal.trim() || null) !== (initial.varietal ?? null) ||
     (region.trim() || null) !== (initial.region ?? null) ||
-    (tastingNotes.trim() || null) !== (initial.tasting_notes ?? null) ||
     (dwStart.trim() === "" ? null : parseInt(dwStart, 10)) !== (initial.drink_window_start ?? null) ||
     (dwEnd.trim() === "" ? null : parseInt(dwEnd, 10)) !== (initial.drink_window_end ?? null) ||
     (dwPeak.trim() === "" ? null : parseInt(dwPeak, 10)) !== (initial.peak_year ?? null);
@@ -122,10 +118,6 @@ export function EditMetadataModal({
       body.region = trimmedRegion;
     }
 
-    const trimmedNotes = tastingNotes.trim() || null;
-    if (trimmedNotes !== (initial.tasting_notes ?? null)) {
-      body.tasting_notes = trimmedNotes;
-    }
 
     // BND-277 — drink-window override (#72)
     const parsedDwStart = dwStart.trim() === "" ? null : parseInt(dwStart, 10);
@@ -171,7 +163,7 @@ export function EditMetadataModal({
       setBusy(false);
     }
   }, [
-    producer, name, vintage, varietal, region, tastingNotes,
+    producer, name, vintage, varietal, region,
     dwStart, dwEnd, dwPeak,
     initial, wineId, onClose, router, toast,
   ]);
@@ -265,17 +257,15 @@ export function EditMetadataModal({
           />
         </Field>
 
-        {/* Tasting Notes */}
-        <Field label="Tasting notes" htmlFor="edit-tasting-notes">
-          <textarea
-            id="edit-tasting-notes"
-            value={tastingNotes}
-            onChange={(e) => setTastingNotes(e.target.value)}
-            placeholder="Enter free-form tasting notes..."
-            rows={4}
-            className="w-full rounded-md border border-rule bg-surface px-sm py-sm text-[14px] text-ink outline-none focus-visible:border-accent focus-ring resize-y"
-          />
-        </Field>
+        {/*
+          The free-text tasting-note field is retired here on purpose (0150).
+          Notes now live in the house corpus on the wine page, where they carry
+          an author, a date, an optional score and confirmed descriptors, and
+          where the taste block can aggregate them. Two places to write a note
+          is how a corpus goes inconsistent and a mention count stops meaning
+          anything. Existing values were migrated and are still rendered; this
+          modal simply no longer creates new ones.
+        */}
 
         {/* BND-277 — drink-window override (#72) */}
         <fieldset className="rounded-md border border-rule p-sm">
