@@ -361,3 +361,50 @@ Build-size tags are engineering judgements about Terroir's codebase, not measure
 - **Design-language evidence** came from direct computed-style and CSS-custom-property inspection of the live wine page, not from a screenshot or a description.
 - **Adversarial verification:** GPT-5.6 Sol (`verify-codex.sh`) failed with a tripped circuit breaker; verification fell back to a Claude adversarial subagent per the skill's failure path. 15 claims judged: 10 supported, 5 partially supported, 0 contradicted. Every `partially_supported` verdict was applied — the cellar-location claim was demoted from fact to inference-from-silence, the Vuforia/PTC attribution was narrowed to what the case study's own "Products Used" field states, and the guide-vs-About figure comparison was restated as a table of what each surface says rather than a directional claim. Two verdicts (the sub-40% Match band, and community-review sourcing of Taste Characteristics) were re-checked against the harvested bytes and confirmed — the claims file had quoted a shorter span than the brief uses. Two `STALE` flags (2016 OCR architecture, 2020 cellar review) are carried into §2 and §10 rather than being dropped.
 - **Not used:** an SEO page circulating unattributed accuracy/latency/pHash figures for Vivino's matcher. Excluded on credibility grounds even though the text was fetchable.
+
+---
+
+## 14. Logged-in walkthrough (web) — 2026-09-02
+
+Signed in via Devin's Google identity in his own Chrome session; no password was typed by an
+agent. Read-only: nothing was rated, added to a cellar or list, or purchased.
+
+**What the web account exposes.** The avatar menu is the whole logged-in surface: Cellar
+(`/cellars/<id>`), My Wines (`/users/<id>/wines` — tabs Latest Ratings / Top Ratings / Wish
+List), My Lists (`/lists`, "Create List"), Orders, Profile, Invite Friends, Settings
+(`/settings` — Public profile / Account management / Privacy & sharing / Notifications, with a
+banner that changes here "will automatically be reflected in the settings in your Vivino
+app"), Log out. Devin's account is fresh (no ratings), so the empty states were what rendered:
+the Cellar page's entire pitch is one sentence — "Storing wine at home? Keep track of the wines
+you own, so you'll always know what you have on hand" — with a placeholder of three bottle
+rows carrying +/− steppers and a grape glyph, which confirms §9's point that Vivino's cellar is
+a quantity list with no location dimension. My Wines' empty state sends the user to the app:
+"Scan using the app, or search and rate here."
+
+**The web wine page, logged in,** is the same page as logged out plus Add to Wishlist / Add to
+cellar (Premium badge on the latter). Order of blocks, verified on a live page: buy box (price
+per bottle, bottle stepper defaulting to 12, vintage select, Add to cart, "You are saving 36 %",
+delivery estimate, merchant) → two highlight badges (Featured in Top 25 …, Featured in Wine
+Style Awards) → a Sponsored card → Facts about the wine (winery, grapes, region path, wine
+style, alcohol, allergens, description) → Compare Vintages (per vintage: a one-line reason such
+as "A top rated year for this wine" / "Among top 1 % of all wines in the world" / "Popular among
+Vivino users", rating, count, availability, price) → the four taste axes → **Wine Lovers Taste
+Summary** ("based on 5,266 user reviews", thirteen aroma families each with a mention count,
+largest first) → food pairing ("Our wine experts think…") → winery card (wines, total ratings).
+No rating control is offered on the web page at all; rating is app-only.
+
+**Premium, as sold on the web (2026-09-02):** free shipping from $100, **Unlimited Sommelier**
+("combines your personal taste profile with all of Vivino's wine data within an easy-to-use AI
+chat"), and the **Wine List scanner** ("reveal the star rating for every wine on the list").
+Both AI features are app-only; the web has no Sommelier entry point.
+
+**Explore facets, logged in:** the same URL-encoded filter state as logged out (§3.2); a
+"Sponsored" tile leads the grid, and each card carries the "Popular among Vivino users. More
+than N ratings" sentence — the same rating-basis honesty pattern as §8 #5.
+
+**What this changes in §8.** Nothing in the ranking. It sharpens two points: (a) the wine
+page's block order puts commerce first even for a signed-in user with no purchase intent
+(§9 #1 stands); (b) every experience Devin praised — camera scan, slide-up suggestion card,
+floating nav, Sommelier — lives only in the iOS/Android app, which no browser session can
+reach. **To audit those flows, Devin's own phone screenshots or a screen recording are the
+evidence; the web account cannot produce them.**
