@@ -234,3 +234,31 @@ update public.wines
  where drink_window_basis is null
    and rating_source = 'claude_inference'
    and drink_window_start is not null;
+
+-- === grants ===
+--
+-- RLS filters rows; a GRANT decides whether the role may touch the table at
+-- all. Creating policies without grants produces `42501 permission denied`,
+-- which is not a degraded feature but a dead code path — the defect 0141
+-- documents at length, where a column-level grant silently omitted two columns
+-- and the wine detail page showed no taste profile for every wine, in every
+-- environment, for six migrations.
+--
+-- wine_notes and wine_note_descriptors take the ordinary tenant-table shape:
+-- full CRUD to `authenticated`, with the policies above deciding which rows.
+--
+-- wine_reference_notes takes SELECT only. It already has no INSERT, UPDATE or
+-- DELETE policy, so the grant is a second, independent reason a tenant cannot
+-- author a row that every other tenant would read as sourced fact. Two locks,
+-- because one of them is an absence and absences are easy to add back by
+-- accident.
+
+grant select, insert, update, delete on public.wine_notes            to authenticated;
+grant select, insert, update, delete on public.wine_note_descriptors to authenticated;
+grant select                         on public.descriptors           to authenticated;
+grant select                         on public.wine_reference_notes  to authenticated;
+
+grant select, insert, update, delete on public.wine_notes            to service_role;
+grant select, insert, update, delete on public.wine_note_descriptors to service_role;
+grant select, insert, update, delete on public.descriptors           to service_role;
+grant select, insert, update, delete on public.wine_reference_notes  to service_role;
