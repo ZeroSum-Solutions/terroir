@@ -7,23 +7,23 @@ import { NextResponse } from "next/server";
  * The route ships enrichments to the `enrich_wines_batch` RPC in a single
  * round-trip. BND-039 added:
  *   • new metadata fields (peak_year, rating_source, review_excerpt)
- *   • Claude inference fallback for wines the rule engine misses
+ *   • LWIN catalog fallback for wines the rule engine misses
  *
  * BND-261 added enrichment_metadata per wine in the payload.
  *
- * BND-262 (feature #75): Claude calls are batched — all candidate wines
- * go in a single `enrichWinesWithClaudeBatch` call instead of one
- * `enrichWineWithClaude` call per wine.
+ * BND-262's batched Claude tier has been REMOVED. Its only outputs were a
+ * drink window, a peak year and a "tasting-note style sentence" — values with
+ * no source, written under rating_source = 'claude_inference'. A wine the rule
+ * engine cannot place now falls to the LWIN catalog instead.
  *
  * Tests pin:
  *   1. Auth: 401 skips everything
  *   2. Fetch error: 500, no RPC call
  *   3. Happy path: rule-engine matches include enrichment_metadata
- *   4. Empty payload (no wines match, Claude returns all nulls): no RPC
+ *   4. Empty payload (no wines match): no RPC
  *   5. RPC error → 500 with no LWIN fallback attempted
- *   6. Claude batch: all candidates in one call, results include
- *      enrichment_metadata with source="claude_inference"
- *   7. Claude failures return all-null, partial batch enrichment still works
+ *   6. A rule-engine miss reaches the LWIN catalog and never an inference tier
+ *   7. The rule engine's successes are written even when the misses find nothing
  */
 
 const mockRequireMembership = vi.fn();
@@ -34,13 +34,6 @@ vi.mock("@/lib/api/auth", () => ({
 const mockEnrichWine = vi.fn();
 vi.mock("@/lib/wine-intelligence/enrich", () => ({
   enrichWine: (...args: unknown[]) => mockEnrichWine(...args),
-}));
-
-const mockEnrichWinesWithClaudeBatch = vi.fn();
-vi.mock("@/lib/wine-intelligence/enrich-claude", () => ({
-  enrichWinesWithClaudeBatch: (...args: unknown[]) => mockEnrichWinesWithClaudeBatch(...args),
-  // Keep the single-wine export for other consumers (not used by batch.ts anymore)
-  enrichWineWithClaude: () => Promise.resolve(null),
 }));
 
 const { POST } = await import("./route");
@@ -57,7 +50,7 @@ type Wine = {
 
 type FromResult = { data: Wine[] | { id: string }[] | null; error: unknown };
 
-// Default rule-engine miss shape — used by Claude-fallback tests.
+// Default rule-engine miss shape — used by the LWIN-fallback tests.
 const RULE_MISS = {
   drinkWindowStart: null,
   drinkWindowEnd: null,
@@ -117,8 +110,6 @@ function buildSupabase(opts: {
 describe("POST /api/wines/enrich", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default batch mock: returns array of nulls (no Claude enrichment).
-    mockEnrichWinesWithClaudeBatch.mockResolvedValue([]);
   });
 
   it("401s when requireMembership returns a NextResponse", async () => {
@@ -142,7 +133,6 @@ describe("POST /api/wines/enrich", () => {
     const res = await POST();
     expect(res.status).toBe(403);
     expect(mockEnrichWine).not.toHaveBeenCalled();
-    expect(mockEnrichWinesWithClaudeBatch).not.toHaveBeenCalled();
   });
 
   it("500s on wines fetch error without calling RPC", async () => {
@@ -186,7 +176,9 @@ describe("POST /api/wines/enrich", () => {
     expect(body.total).toBe(3);
     expect(body.enriched).toBe(2);
     expect(body.ruleEnrichedCount).toBe(2);
-    expect(body.claudeAttemptedCount).toBe(1);
+    // Always zero now: the Claude inference tier is gone. The counter is
+    // retained in the response shape so removing it is not an API break.
+    expect(body.claudeAttemptedCount).toBe(0);
     expect(body.claudeEnrichedCount).toBe(0);
 
     const enrichCall = rpcCalls.find((c) => c.fn === "enrich_wines_batch");
@@ -204,76 +196,45 @@ describe("POST /api/wines/enrich", () => {
     expect(args.p_enrichments[1].id).toBe("w-3");
   });
 
-  it("Claude batch enriches all candidates in one call (BND-262)", async () => {
+  it("sends a rule-engine miss to the LWIN catalog, never to a paid inference tier", async () => {
+    // BND-262 removed. The Claude tier's only outputs were a drink window, a
+    // peak year and a "tasting-note style sentence" -- values with no source,
+    // written under rating_source = 'claude_inference' and rendered on the
+    // wine page as though they were sourced. A wine the rule engine cannot
+    // place now falls straight to the LWIN catalog, which is free and derived
+    // from a real reference.
     const wines: Wine[] = [
       { id: "w-1", producer: "Krug", name: "Grande Cuvee", varietal: "Champagne Blend", region: "Champagne", country: "FR", vintage: 2008 },
       { id: "w-2", producer: "Chateau X", name: "Rare Bordeaux", varietal: "Cabernet Blend", region: "Bordeaux", country: "FR", vintage: 2010 },
     ];
-    // Both wines miss the rule engine
-    mockEnrichWine
-      .mockReturnValueOnce(RULE_MISS)
-      .mockReturnValueOnce(RULE_MISS);
-
-    // BND-262: single batched call with 2 results
-    mockEnrichWinesWithClaudeBatch.mockResolvedValueOnce([
-      {
-        drinkWindowStart: 2018,
-        drinkWindowEnd: 2032,
-        peakYear: 2025,
-        ratingSource: "claude_inference",
-        reviewExcerpt: "Krug's flagship — drink with patience.",
-        servingTempMin: null,
-        servingTempMax: null,
-        servingTempLabel: null,
-      },
-      {
-        drinkWindowStart: 2020,
-        drinkWindowEnd: 2045,
-        peakYear: 2035,
-        ratingSource: "claude_inference",
-        reviewExcerpt: "Structured and powerful, needs time.",
-        servingTempMin: null,
-        servingTempMax: null,
-        servingTempLabel: null,
-      },
-    ]);
+    mockEnrichWine.mockReturnValueOnce(RULE_MISS).mockReturnValueOnce(RULE_MISS);
 
     const { supabase, rpcCalls } = buildSupabase({
       winesResult: { data: wines, error: null },
-      rpcEnrichResult: { data: 2, error: null },
+      rpcEnrichResult: { data: 0, error: null },
     });
     mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
     const res = await POST();
     expect(res.status).toBe(200);
     const body = await res.json();
+
     expect(body.ruleEnrichedCount).toBe(0);
-    expect(body.claudeAttemptedCount).toBe(2);
-    expect(body.claudeEnrichedCount).toBe(2);
+    expect(body.claudeAttemptedCount).toBe(0);
+    expect(body.claudeEnrichedCount).toBe(0);
 
-    // Verify a single Claude batch call was made
-    expect(mockEnrichWinesWithClaudeBatch).toHaveBeenCalledTimes(1);
-    const batchArg = mockEnrichWinesWithClaudeBatch.mock.calls[0][0] as Wine[];
-    expect(batchArg).toHaveLength(2);
-    expect(batchArg[0].producer).toBe("Krug");
-    expect(batchArg[1].producer).toBe("Chateau X");
+    // The LWIN fallback is the tier that now sees them.
+    expect(rpcCalls.some((c) => c.fn === "match_lwin_batch")).toBe(true);
 
+    // And nothing anywhere claims an inference source.
     const enrichCall = rpcCalls.find((c) => c.fn === "enrich_wines_batch");
-    const args = enrichCall!.args as { p_enrichments: Array<Record<string, unknown>> };
-    expect(args.p_enrichments).toHaveLength(2);
-    expect(args.p_enrichments[0].id).toBe("w-1");
-    expect(args.p_enrichments[0].rating_source).toBe("claude_inference");
-    expect(args.p_enrichments[1].id).toBe("w-2");
-
-    // Both should have enrichment_metadata with source=claude_inference
-    for (const row of args.p_enrichments) {
-      const meta = row.enrichment_metadata as Record<string, unknown>;
-      expect(meta.source).toBe("claude_inference");
-      expect(meta.enriched_at).toEqual(expect.any(String));
+    const rows = (enrichCall?.args as { p_enrichments?: Array<Record<string, unknown>> })?.p_enrichments ?? [];
+    for (const row of rows) {
+      expect(row.rating_source).not.toBe("claude_inference");
     }
   });
 
-  it("Claude batch failures (all null) still allow rule-engine partial success", async () => {
+  it("writes the rule engine's successes even when the misses find nothing", async () => {
     const wines: Wine[] = [
       { id: "w-1", producer: "X", name: "Pinot", varietal: "Pinot Noir", region: "Burgundy", country: "FR", vintage: 2019 },
       { id: "w-2", producer: "Y", name: "Mystery", varietal: "Obscure", region: null, country: null, vintage: 2020 },
@@ -287,44 +248,22 @@ describe("POST /api/wines/enrich", () => {
       .mockReturnValueOnce(RULE_MISS)
       .mockReturnValueOnce(RULE_MISS);
 
-    // BND-262: batch Claude returns some nulls (failed) and some successes
-    mockEnrichWinesWithClaudeBatch.mockResolvedValueOnce([
-      null, // w-2 failed
-      {
-        drinkWindowStart: 2021,
-        drinkWindowEnd: 2030,
-        peakYear: 2026,
-        ratingSource: "claude_inference",
-        reviewExcerpt: "Approachable now, peaks 2026.",
-        servingTempMin: null,
-        servingTempMax: null,
-        servingTempLabel: null,
-      },
-    ]);
-
     const { supabase, rpcCalls } = buildSupabase({
       winesResult: { data: wines, error: null },
-      rpcEnrichResult: { data: 2, error: null },
+      rpcEnrichResult: { data: 1, error: null },
     });
     mockRequireMembership.mockResolvedValue({ supabase, restaurantId: "r-1", role: "owner" });
 
     const res = await POST();
     expect(res.status).toBe(200);
     const body = await res.json();
+
+    // One partial failure must not cost the wine the rule engine did place.
     expect(body.ruleEnrichedCount).toBe(1);
-    expect(body.claudeAttemptedCount).toBe(2);
-    expect(body.claudeEnrichedCount).toBe(1); // only w-3 succeeded
-
-    // Verify single batch call
-    expect(mockEnrichWinesWithClaudeBatch).toHaveBeenCalledTimes(1);
-
     const enrichCall = rpcCalls.find((c) => c.fn === "enrich_wines_batch");
     const args = enrichCall!.args as { p_enrichments: Array<Record<string, unknown>> };
-    expect(args.p_enrichments).toHaveLength(2);
-    // w-1 (rule) + w-3 (claude) = 2 enriched
-    const ids = args.p_enrichments.map((r) => r.id);
-    expect(ids).toContain("w-1");
-    expect(ids).toContain("w-3");
+    expect(args.p_enrichments[0].id).toBe("w-1");
+    expect(args.p_enrichments[0].rating_source).toBe("rule_engine");
   });
 
   it("skips the RPC entirely when no wine matches any rule and Claude returns all nulls", async () => {

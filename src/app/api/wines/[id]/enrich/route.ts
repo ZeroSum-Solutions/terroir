@@ -3,7 +3,6 @@ import * as Sentry from "@sentry/nextjs";
 import { requireMembership } from "@/lib/api/auth";
 import { Errors } from "@/lib/api/errors";
 import { enrichWine } from "@/lib/wine-intelligence/enrich";
-import { enrichWineWithClaude } from "@/lib/wine-intelligence/enrich-claude";
 import type { Json } from "@/types/database";
 
 export const runtime = "nodejs";
@@ -12,13 +11,13 @@ export const runtime = "nodejs";
  * BND-039 + BND-261 + BND-277 — single-wine on-demand enrichment.
  *
  * Powers the "Re-enrich" action in the cellar detail drawer. Runs
- * Tier 1 (rule engine) + Tier 2 (Claude fallback) + Tier 3 (LWIN catalog
+ * Tier 1 (rule engine) + Tier 2 (LWIN catalog fallback). The former Claude
  * fallback) for a single wine.
  *
  * BND-261: includes enrichment_metadata in the RPC payload so the
  * per-wine provenance is tracked alongside the enrichment data.
  *
- * BND-277 (feature #77): LWIN fallback — when Claude returns null,
+ * BND-277 (feature #77): LWIN fallback — when the rule engine returns null,
  * populates region/country/varietal/colour from LWIN catalog with
  * source='lwin_fallback'.
  *
@@ -81,38 +80,22 @@ export async function POST(
 
   let metadataSource = "rule_engine";
 
-  // Tier 2 — Claude fallback when rule engine produced nothing useful.
-  if (
-    ruleResult.drinkWindowStart == null &&
-    ruleResult.servingTempMin == null
-  ) {
-    const claudeResult = await enrichWineWithClaude({
-      producer: wine.producer,
-      name: wine.name,
-      vintage: wine.vintage,
-      varietal: wine.varietal,
-      region: wine.region,
-      country: wine.country,
-    });
-    if (claudeResult && claudeResult.drinkWindowStart != null) {
-      source = "claude_inference";
-      metadataSource = "claude_inference";
-      payload = {
-        id: wine.id,
-        drink_window_start: claudeResult.drinkWindowStart,
-        drink_window_end: claudeResult.drinkWindowEnd,
-        peak_year: claudeResult.peakYear,
-        rating_source: claudeResult.ratingSource,
-        review_excerpt: claudeResult.reviewExcerpt,
-        serving_temp_min: null,
-        serving_temp_max: null,
-        serving_temp_label: null,
-        decant_minutes: null,
-      };
-    }
-  }
+  // Tier 2 (Claude inference) is GONE, deliberately. Its only outputs were
+  // drink_window_start/end, peak_year and a review_excerpt the prompt asked
+  // for as a "tasting-note style sentence" — values with no source, stored
+  // under rating_source = 'claude_inference' and rendered on the wine page
+  // looking like sourced fact. It wrote decant_minutes: null and contributed
+  // nothing else, so removing those fields removes the tier. A wine the rule
+  // engine cannot place now falls straight to the LWIN catalog below, which is
+  // free and derived from a real reference rather than invented.
+  //
+  // See D7 and §3.7 of docs/superpowers/specs/2026-09-03-wine-page-design.md.
+  // Removing this is a precondition of the retirement job, not a tidy-up: the
+  // batch selector keyed on `drink_window_start is null`, so nulling those
+  // values while this tier still ran would have made every retired wine the
+  // primary target of the next enrichment run.
 
-  // BND-277 — Tier 3: LWIN catalog fallback when Claude also produced nothing.
+  // BND-277 — Tier 3: LWIN catalog fallback when the rule engine produced nothing.
   if (source == null) {
     const { data: lwinMatch } = await supabase.rpc("match_lwin", {
       p_producer: wine.producer,

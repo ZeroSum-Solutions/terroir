@@ -6,17 +6,16 @@
  *
  * Orchestration tiers:
  *   Tier 1 — rule engine (deterministic, free): enrichWine()
- *   Tier 2 — Claude fallback (paid, higher coverage): enrichWinesWithClaudeBatch()
- *   Tier 3 — LWIN catalog fallback (free, best-effort metadata): lwinEnrichFallback()
+ *   Tier 2 — LWIN catalog fallback (free, best-effort): lwinEnrichFallback()
  *
- * BND-039: Claude fallback is hard-capped per request to avoid burning
- * Anthropic budget on a single click. Clients re-invoke until hasMore=false.
+ * There used to be a Claude inference tier between them (BND-039, BND-262).
+ * It is gone. Its only outputs were a drink window, a peak year and a
+ * "tasting-note style sentence" — values with no source, written under
+ * rating_source = 'claude_inference' and shown on the wine page as though
+ * they were sourced. Both remaining tiers derive from something real: a
+ * documented rule set, or the LWIN catalog.
  *
- * BND-262 (feature #75): Claude calls are batched — all candidate wines
- * go in a single Claude API call (one system prompt, one round trip),
- * instead of one call per wine.
- *
- * BND-277 (feature #77): LWIN fallback — when Claude returns null, the
+ * BND-277 (feature #77): LWIN fallback — when the rule engine finds nothing, the
  * system populates region/country/varietal/colour from the LWIN catalog
  * and marks enrichment_metadata.source = 'lwin_fallback'.
  *
@@ -32,13 +31,10 @@ import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { enrichWine } from "./enrich";
-import { enrichWinesWithClaudeBatch } from "./enrich-claude";
 
 // ARCH-021: cap per-request workload.
 const ENRICH_BATCH_LIMIT = 2000;
 
-// BND-039: Claude fallback hard cap per request.
-const CLAUDE_FALLBACK_MAX_PER_REQUEST = 50;
 
 type EnrichmentMetadata = {
   source: string;
@@ -100,7 +96,7 @@ function buildMetadata(source: string, result: {
 /**
  * BND-277 — Tier 3 LWIN catalog fallback.
  *
- * For wines where neither the rule engine nor Claude produced enrichment,
+ * For wines the rule engine could not place,
  * match against the LWIN catalog and populate region/country/varietal/colour
  * metadata with source='lwin_fallback'.
  */
@@ -225,13 +221,13 @@ export async function enrichRestaurantBatch(
   const { supabase, restaurantId } = input;
 
   // ARCH-021: delta-fetch only wines that actually need enrichment.
-  // BND-039: also include `producer, name` so Claude fallback has enough signal.
+  // BND-039: also include `producer, name` so the LWIN fallback has enough signal.
   // BND-278: also fetch manual_overrides for field-preservation checks.
   const { data: wines, error } = await supabase
     .from("wines")
-    .select("id, producer, name, varietal, region, country, vintage, manual_overrides")
+    .select("id, producer, name, varietal, region, country, vintage, manual_overrides, drink_window_basis")
     .eq("restaurant_id", restaurantId)
-    .or("drink_window_start.is.null,serving_temp_min.is.null")
+    .or("and(drink_window_start.is.null,drink_window_basis.is.null),serving_temp_min.is.null")
     .limit(ENRICH_BATCH_LIMIT);
 
   if (error) {
@@ -245,7 +241,7 @@ export async function enrichRestaurantBatch(
 
   // BND-031 / DEBT-008 / BND-039 — Tier 1 (rule engine, deterministic, free).
   const ruleEnriched: EnrichmentPayloadRow[] = [];
-  const claudeCandidates: typeof wines = [];
+  const ruleEngineMissWines: typeof wines = [];
 
   for (const wine of wines ?? []) {
     const result = enrichWine({
@@ -255,7 +251,7 @@ export async function enrichRestaurantBatch(
       vintage: wine.vintage,
     });
     if (result.servingTempMin == null && result.drinkWindowStart == null) {
-      claudeCandidates.push(wine);
+      ruleEngineMissWines.push(wine);
       continue;
     }
     ruleEnriched.push({
@@ -273,49 +269,33 @@ export async function enrichRestaurantBatch(
     });
   }
 
-  // BND-262 — Tier 2 (Claude fallback, single batched call, paid).
-  const claudeWork = claudeCandidates.slice(0, CLAUDE_FALLBACK_MAX_PER_REQUEST);
-  const claudeRemaining = Math.max(
-    0,
-    claudeCandidates.length - CLAUDE_FALLBACK_MAX_PER_REQUEST,
-  );
-
-  const claudeResults: EnrichmentPayloadRow[] = [];
-  const claudeNullResults: Array<{ id: string; producer: string; name: string }> = [];
-
-  if (claudeWork.length > 0) {
-    const batchResults = await enrichWinesWithClaudeBatch(claudeWork);
-    for (let i = 0; i < claudeWork.length; i++) {
-      const result = batchResults[i];
-      if (!result || result.drinkWindowStart == null) {
-        // BND-277 — collect for LWIN fallback
-        claudeNullResults.push({
-          id: claudeWork[i].id,
-          producer: claudeWork[i].producer,
-          name: claudeWork[i].name,
-        });
-        continue;
-      }
-      claudeResults.push({
-        id: claudeWork[i].id,
-        drink_window_start: result.drinkWindowStart,
-        drink_window_end: result.drinkWindowEnd,
-        peak_year: result.peakYear,
-        rating_source: result.ratingSource,
-        review_excerpt: result.reviewExcerpt,
-        serving_temp_min: null,
-        serving_temp_max: null,
-        serving_temp_label: null,
-        decant_minutes: null,
-        enrichment_metadata: buildMetadata("claude_inference", result),
-      });
-    }
-  }
+  // Tier 2 (Claude inference) is GONE, deliberately. Its only outputs were
+  // drink_window_start/end, peak_year and a review_excerpt the prompt asked for
+  // as a "tasting-note style sentence" — values with no source, stored under
+  // rating_source = 'claude_inference' and rendered on the wine page looking
+  // like sourced fact. It set decant_minutes and every serving_temp field to
+  // null and contributed nothing else, so removing those fields removes the
+  // tier. Candidates the rule engine cannot place now fall straight to the
+  // LWIN catalog below: free, and derived from a real reference.
+  //
+  // The selector above changed with it. It keyed on `drink_window_start is
+  // null`, which is exactly the state the phase-2 retirement job leaves a wine
+  // in — so retiring a wine while that predicate stood would have made it the
+  // PRIMARY TARGET of the next enrichment run and regenerated what was
+  // removed. It now also requires drink_window_basis to be null, which
+  // separates "never enriched" from "deliberately retired".
+  //
+  // See D7, D13 and §3.7 of docs/superpowers/specs/2026-09-03-wine-page-design.md.
+  const ruleEngineMisses = ruleEngineMissWines.map((w) => ({
+    id: w.id,
+    producer: w.producer,
+    name: w.name,
+  }));
 
   // BND-277 — Tier 3 (LWIN catalog fallback, free, best-effort).
-  const lwinFallbackResults = await lwinEnrichFallback(supabase, claudeNullResults);
+  const lwinFallbackResults = await lwinEnrichFallback(supabase, ruleEngineMisses);
 
-  const payload = [...ruleEnriched, ...claudeResults, ...lwinFallbackResults];
+  const payload = [...ruleEnriched, ...lwinFallbackResults];
 
   let enriched = 0;
   if (payload.length > 0) {
@@ -356,14 +336,17 @@ export async function enrichRestaurantBatch(
     total: processed,
     enriched,
     ruleEnrichedCount: ruleEnriched.length,
-    claudeEnrichedCount: claudeResults.length,
-    claudeAttemptedCount: claudeWork.length,
-    claudeRemaining,
+    // The three claude* counters are retained at zero rather than removed.
+    // They are part of the /api/wines/enrich response shape, and the tier they
+    // counted is gone; dropping the keys would be an API break to report the
+    // absence of work nobody is doing.
+    claudeEnrichedCount: 0,
+    claudeAttemptedCount: 0,
+    claudeRemaining: 0,
     lwinFallbackCount: lwinFallbackResults.length,
     lwinMatched,
     hasMore:
       processed >= ENRICH_BATCH_LIMIT ||
-      (unmatched?.length ?? 0) >= ENRICH_BATCH_LIMIT ||
-      claudeRemaining > 0,
+      (unmatched?.length ?? 0) >= ENRICH_BATCH_LIMIT,
   };
 }
