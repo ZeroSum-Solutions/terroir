@@ -46,7 +46,7 @@ export function VintageSection({
               >
                 <th
                   scope="row"
-                  className={`py-sm text-left font-mono text-ledger ${isThisBottle ? "text-mark" : "text-ink"}`}
+                  className={`py-sm text-left tabular text-ledger ${isThisBottle ? "text-mark" : "text-ink"}`}
                 >
                   {row.vintage}
                   {isThisBottle && (
@@ -56,7 +56,7 @@ export function VintageSection({
                 <td className="py-sm">
                   <Stars value={row.ratingAvg} />
                 </td>
-                <td className="py-sm text-right font-mono text-ledger text-grey">
+                <td className="py-sm text-right tabular text-ledger text-grey">
                   {row.ratingCount.toLocaleString()}
                 </td>
               </tr>
@@ -72,7 +72,7 @@ function Stars({ value }: { value: number }) {
   return (
     <span className="flex items-center gap-xs">
       <Star aria-hidden="true" className="h-3.5 w-3.5 fill-mark text-mark" />
-      <span className="font-mono text-ledger text-ink">{value.toFixed(1)}</span>
+      <span className="tabular text-ledger text-ink">{value.toFixed(1)}</span>
     </span>
   );
 }
