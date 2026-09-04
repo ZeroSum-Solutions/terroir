@@ -29,7 +29,8 @@ export type BadgeKind =
 export type Badge = { kind: BadgeKind; label: string; rule: string };
 
 export type BadgeInput = {
-  year: number;
+  /** The date the badges are computed for, as YYYY-MM-DD. */
+  asOf: string;
   /** The resolved window, or null when none is trustworthy. */
   window: { start: number; end: number } | null;
   /**
@@ -57,6 +58,7 @@ export type BadgeInput = {
 export function computeBadges(input: BadgeInput): Badge[] {
   const badges: Badge[] = [];
   const onHand = input.sellingFormatUnits + input.otherFormatUnits;
+  const year = Number(input.asOf.slice(0, 4));
 
   // ── Drink now ───────────────────────────────────────────────────────────
   // Reuses getDrinkWindowStatus rather than comparing years here. That helper
@@ -67,14 +69,14 @@ export function computeBadges(input: BadgeInput): Badge[] {
   if (
     input.window !== null &&
     (input.windowBasis === "sourced" || input.windowBasis === "override") &&
-    getDrinkWindowStatus(input.window.start, input.window.end, input.year) === "drink_now"
+    getDrinkWindowStatus(input.window.start, input.window.end, year) === "drink_now"
   ) {
     const whose =
       input.windowBasis === "override" ? "the window the house set" : "the sourced window";
     badges.push({
       kind: "drink_now",
       label: "Drink now",
-      rule: `${input.year} is within ${DRINK_NOW_THRESHOLD_YEARS} years of ${whose} closing in ${input.window.end}.`,
+      rule: `${year} is within ${DRINK_NOW_THRESHOLD_YEARS} years of ${whose} closing in ${input.window.end}.`,
     });
   }
 
@@ -99,7 +101,7 @@ export function computeBadges(input: BadgeInput): Badge[] {
   // badge row becomes noise on its first week.
   if (onHand > 0 && input.lastPutAwayAt !== null) {
     const since = input.lastDepletionAt ?? input.lastPutAwayAt;
-    const days = daysBetween(since, input.year);
+    const days = daysBetween(since, input.asOf);
     if (days !== null && days > input.deadStockDays) {
       badges.push({
         kind: "slow_mover",
@@ -142,13 +144,13 @@ export function computeBadges(input: BadgeInput): Badge[] {
 }
 
 /**
- * Whole days between an ISO date and the end of `year`. Returns null on an
- * unparseable date rather than a wrong number, so a bad row goes quiet instead
- * of raising a confident false badge.
+ * Whole days between two YYYY-MM-DD dates. Returns null on an unparseable
+ * date rather than a wrong number, so a bad row goes quiet instead of raising
+ * a confident false badge.
  */
-function daysBetween(iso: string, year: number): number | null {
+function daysBetween(iso: string, asOf: string): number | null {
   const then = new Date(`${iso}T00:00:00Z`);
-  if (Number.isNaN(then.getTime())) return null;
-  const now = new Date(Date.UTC(year, 8, 3));
+  const now = new Date(`${asOf}T00:00:00Z`);
+  if (Number.isNaN(then.getTime()) || Number.isNaN(now.getTime())) return null;
   return Math.floor((now.getTime() - then.getTime()) / 86_400_000);
 }
