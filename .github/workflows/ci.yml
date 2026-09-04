@@ -232,13 +232,11 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: E2E — critical journeys (scan→commit, list publish, pour)
-        # playwright.config.ts's webServer starts `pnpm dev` itself and
-        # waits for port 3000. That has to be dev mode, not a production
-        # build/start: /api/dev-login hard-404s whenever NODE_ENV=production,
-        # unconditionally and by design (docs/BREAK-GLASS.md) — there is no
-        # env var that reopens it, so E2E can only drive auth through dev
-        # mode's bypass.
-        run: pnpm exec playwright test e2e/demo-critical-journeys.test.ts e2e/pour-flow.test.ts
+        # The config starts scripts/local/dev-local.sh, which re-reads the
+        # disposable stack and refuses any hosted or wrong-project database.
+        # A skipped critical journey is a failed gate: green must mean the
+        # tests ran, not that their local-target safety rail skipped them.
+        run: FAIL_ON_SKIPPED_TESTS=1 pnpm exec playwright test e2e/demo-critical-journeys.test.ts e2e/pour-flow.test.ts
 
       - name: Upload Playwright artifacts
         if: failure()
