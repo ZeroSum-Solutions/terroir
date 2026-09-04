@@ -1,5 +1,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import {
+  DEMO_RESTAURANT_ID,
+  PRODSHAPE_RESTAURANT_ID,
+  enterProdShape,
+  leaveProdShape,
+} from "./prodshape";
 
 /**
  * "If I click on any wine anywhere in the application on my mobile phone, I
@@ -8,10 +14,10 @@ import { createClient } from "@supabase/supabase-js";
  * That sentence, encoded. Every surface that puts a wine in front of a phone
  * user gets one test: tap it, then prove the destination shows the producer,
  * at least one substantive attribute (region / country / varietal / vintage /
- * size), and a picture that is ACTUALLY ON SCREEN — an <img> with a non-zero
- * box that finished loading. `toBeVisible()` on some node is not that
- * assertion: next/image renders an <img> whether or not the URL resolves, and
- * a broken one passes every visibility check while showing the user nothing.
+ * size), and an honest visual identity. A wine that owns a photograph must
+ * show a loaded <img>; a reproducible seed wine with no photograph may show a
+ * resolved corpus image or the explicit initials fallback. The test never
+ * pretends a fallback is a label photograph.
  *
  * The viewport is 390x844 throughout, because "on my mobile phone" is half the
  * requirement: several of these surfaces have a `md:` layout that carries a
@@ -176,6 +182,7 @@ function isOnScreen(image: ImageBox): boolean {
 async function expectWineImageOnScreen(
   page: Page,
   scope: Locator,
+  wine: WineFacts,
   surface: string,
 ) {
   const seen = await until(
@@ -184,12 +191,21 @@ async function expectWineImageOnScreen(
     (images) => images.some(isOnScreen),
     10_000,
   );
+  if (seen.some(isOnScreen)) return;
+
   expect(
-    seen.filter(isOnScreen),
-    `${surface}: no wine image on screen. ` +
-      `Wanted one <img> at least ${MIN_IMAGE_PX}px on both sides, loaded ` +
-      `(complete && naturalWidth > 0). Saw: ${JSON.stringify(seen)}`,
-  ).not.toHaveLength(0);
+    wine.hero_image_url,
+    `${surface}: the fixture promises a wine image, but no loaded image was ` +
+      `on screen. Saw: ${JSON.stringify(seen)}`,
+  ).toBeNull();
+  const fallback = scope.locator('[data-wine-image-fallback="true"]');
+  await expect(
+    fallback,
+    `${surface}: no loaded corpus image and no explicit no-photo fallback appeared`,
+  ).toBeVisible();
+  const box = await fallback.boundingBox();
+  expect(box?.width ?? 0).toBeGreaterThanOrEqual(MIN_IMAGE_PX);
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(MIN_IMAGE_PX);
 }
 
 /** Text a phone user can actually read: excludes display:none subtrees (so a
@@ -275,7 +291,7 @@ async function expectWineIsShown(
       `Saw: ${text.slice(0, 400)}`,
   ).toBe(true);
 
-  await expectWineImageOnScreen(page, scope, surface);
+  await expectWineImageOnScreen(page, scope, wine, surface);
 }
 
 /**
@@ -357,13 +373,14 @@ test.describe("@mobile-wine-detail tapping a wine shows the wine, at 390px", () 
 
   test.beforeAll(async () => {
     const restaurantId = await resolveRestaurantId();
+    expect(restaurantId).toBe(DEMO_RESTAURANT_ID);
     const admin = adminClient();
     const { data, error } = await admin
       .from("wines")
       .select(
         "id, name, producer, vintage, region, country, varietal, size_ml, hero_image_url",
       )
-      .eq("restaurant_id", restaurantId);
+      .in("restaurant_id", [restaurantId, PRODSHAPE_RESTAURANT_ID]);
     if (error) throw error;
     winesById = new Map((data ?? []).map((wine) => [wine.id, wine as WineFacts]));
     expect(
@@ -453,11 +470,9 @@ test.describe("@mobile-wine-detail tapping a wine shows the wine, at 390px", () 
     await expect(occupied, "no occupied bin on the cellar grid").toBeVisible();
     await occupied.click();
 
-    // The bin sheet's wine buttons carry "Qty <n>"; nothing else on the panel
-    // does, and they have no data hook of their own (cellar-grid.tsx:301).
-    const bottle = page.getByRole("button").filter({ hasText: /Qty \d/ }).first();
+    const bottle = page.locator("button[data-bin-wine]").first();
     await expect(bottle, "the opened bin lists no bottles").toBeVisible();
-    const producerLine = (await bottle.innerText()).split("\n")[0] ?? "";
+    const expectedWineId = await bottle.getAttribute("data-bin-wine");
     await bottle.click();
 
     const drawer = wineDrawer(page);
@@ -469,11 +484,10 @@ test.describe("@mobile-wine-detail tapping a wine shows the wine, at 390px", () 
       () =>
         new URL(window.location.href).searchParams.get("wine") ?? "",
     );
+    expect(wineId, "cellar grid opened a different wine than the one tapped").toBe(
+      expectedWineId,
+    );
     const wine = wineFacts(wineId || null);
-    expect(
-      producerLine.toLocaleLowerCase(),
-      "cellar grid: the drawer opened a different wine than the one tapped",
-    ).toContain((wine.producer ?? "").toLocaleLowerCase());
     await expectWineIsShown(page, drawer, wine, "cellar grid bin → drawer");
   });
 
@@ -507,28 +521,26 @@ test.describe("@mobile-wine-detail tapping a wine shows the wine, at 390px", () 
   test("bins: a bottle inside an expanded bin opens the wine", async ({
     page,
   }) => {
-    await page.goto("/bins");
-    const expandable = page
-      .locator("[data-bin-row] button[aria-expanded]")
-      .filter({ visible: true });
-    const count = await expandable.count();
-    let opened = false;
-    for (let index = 0; index < count; index += 1) {
-      const toggle = expandable.nth(index);
-      if (await toggle.isDisabled()) continue;
-      await toggle.click();
-      opened = true;
-      break;
+    await enterProdShape(page);
+    try {
+      await page.goto("/bins");
+      const expandable = page
+        .locator("[data-bin-row] button[aria-expanded]:not([disabled])")
+        .filter({ visible: true })
+        .first();
+      await expect(expandable, "no bin on /bins holds any bottles").toBeVisible();
+      await expandable.click();
+
+      const link = page.locator("[data-bin-wine]").first();
+      await expect(link).toBeVisible();
+      const wine = wineFacts(await link.getAttribute("data-bin-wine"));
+      await link.click();
+
+      const scope = await wineDetailScope(page, wine.id, "/bins expanded bin");
+      await expectWineIsShown(page, scope, wine, "/bins bin bottle → drawer");
+    } finally {
+      await leaveProdShape(page);
     }
-    expect(opened, "no bin on /bins holds any bottles").toBe(true);
-
-    const link = page.locator("[data-bin-wine]").first();
-    await expect(link).toBeVisible();
-    const wine = wineFacts(await link.getAttribute("data-bin-wine"));
-    await link.click();
-
-    const scope = await wineDetailScope(page, wine.id, "/bins expanded bin");
-    await expectWineIsShown(page, scope, wine, "/bins bin bottle → drawer");
   });
 
   test("bins: a 'Find a bottle' search result opens the wine", async ({
@@ -537,29 +549,43 @@ test.describe("@mobile-wine-detail tapping a wine shows the wine, at 390px", () 
     // bin-manager.tsx:81 — SearchResults renders each match as a plain
     // <div data-bottle-match>. Somebody sent to the floor to find a bottle
     // searches for it here, sees it, taps it and nothing happens.
-    await page.goto("/bins");
-    const anyWine = [...winesById.values()].find((w) => w.producer);
-    expect(anyWine, "no wine with a producer in the dev tenant").toBeTruthy();
+    await enterProdShape(page);
+    try {
+      await page.goto("/bins");
+      const { data: placed, error: placedError } = await adminClient()
+        .from("inventory_items")
+        .select("wine_id")
+        .eq("restaurant_id", PRODSHAPE_RESTAURANT_ID)
+        .not("bin_id", "is", null);
+      if (placedError) throw placedError;
+      const anyWine = (placed ?? [])
+        .map((item) => winesById.get(item.wine_id))
+        .find((wine) => wine?.producer?.trim());
+      expect(
+        anyWine,
+        "no placed wine with a producer in the prodshape tenant",
+      ).toBeTruthy();
 
-    const search = page.getByRole("searchbox", { name: "Find a bottle" });
-    await expect(search).toBeVisible();
-    await search.fill(anyWine!.name.slice(0, 10).toLowerCase());
+      const search = page.getByRole("searchbox", { name: "Find a bottle" });
+      await expect(search).toBeVisible();
+      await search.fill(anyWine!.producer!.toLowerCase());
 
-    const match = page.locator("[data-bottle-match]").first();
-    await expect(match, "the bottle search returned nothing to tap").toBeVisible();
+      const tappable = page.locator(
+        `[data-bottle-match] a[href="/cellar?wine=${anyWine!.id}"]`,
+      ).first();
+      await expect(
+        tappable,
+        "the bottle search did not return the placed fixture wine",
+      ).toBeVisible();
 
-    const tappable = match.locator("a[href], button, [role='button'], [role='link']");
-    expect(
-      await tappable.count(),
-      "/bins bottle search: the result is a plain <div> with no link or button " +
-        "(src/app/(app)/bins/bin-manager.tsx:81) — the wine is shown but cannot be opened",
-    ).toBeGreaterThan(0);
-
-    await tappable.first().click();
-    const wineId = wineIdFromHref(await tappable.first().getAttribute("href"));
-    const wine = wineFacts(wineId);
-    const scope = await wineDetailScope(page, wine.id, "/bins bottle search");
-    await expectWineIsShown(page, scope, wine, "/bins bottle search → drawer");
+      const wineId = wineIdFromHref(await tappable.getAttribute("href"));
+      const wine = wineFacts(wineId);
+      await tappable.click();
+      const scope = await wineDetailScope(page, wine.id, "/bins bottle search");
+      await expectWineIsShown(page, scope, wine, "/bins bottle search → drawer");
+    } finally {
+      await leaveProdShape(page);
+    }
   });
 
   test("insights drill-down opens the wine", async ({ page }) => {

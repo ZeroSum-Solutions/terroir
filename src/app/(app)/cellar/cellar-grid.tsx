@@ -302,6 +302,7 @@ export function CellarGridView({
                     <button
                       key={`${w.wineId}-${i}`}
                       type="button"
+                      data-bin-wine={w.wineId}
                       onClick={() => onSelectWine(w.wineId)}
                       className="flex w-full items-center gap-sm rounded-md border border-rule px-sm py-sm text-left transition-colors hover:bg-wash focus-ring"
                     >

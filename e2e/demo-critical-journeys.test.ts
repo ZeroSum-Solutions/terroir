@@ -222,7 +222,11 @@ test.describe("mobile demo critical journeys", () => {
   });
 
   test("password recovery, session refresh, and logout work at 390px", async ({ page }) => {
-    test.setTimeout(60_000);
+    // This is the longest real-auth journey in the suite: it creates a user,
+    // sends and polls Mailpit for a reset email, updates the password, signs
+    // back in, refreshes the session, and signs out. Cold Next.js compilation
+    // can consume most of the default CI budget before the mailbox poll begins.
+    test.setTimeout(120_000);
     const admin = localAdminClient();
     const identity = await resolveDevIdentity();
     const run = Date.now();

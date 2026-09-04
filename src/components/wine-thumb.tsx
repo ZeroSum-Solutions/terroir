@@ -80,6 +80,7 @@ export function WineThumb({ src, producer, name, colour, size, className }: Wine
   return (
     <span
       aria-hidden="true"
+      data-wine-image-fallback="true"
       style={{ width: size, height: size, fontSize: Math.round(size * 0.34) }}
       className={cn(
         shared,

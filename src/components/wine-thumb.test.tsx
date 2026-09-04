@@ -67,6 +67,7 @@ describe("WineThumb", () => {
     );
     expect(markup).not.toContain("<img");
     expect(markup).toContain("DL");
+    expect(markup).toContain('data-wine-image-fallback="true"');
   });
 
   it("reserves the same box whether or not there is a picture", () => {
