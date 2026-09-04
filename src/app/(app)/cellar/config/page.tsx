@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Pencil, Trash2, Check, X, GripVertical } from "lucide-react";
 import {
@@ -173,6 +173,19 @@ export default function CellarConfigPage() {
     [sections, save],
   );
 
+  const moveSectionWithKeyboard = useCallback(
+    (id: string, direction: -1 | 1) => {
+      const oldIndex = sections.findIndex((section) => section.id === id);
+      const newIndex = oldIndex + direction;
+      if (oldIndex === -1 || newIndex < 0 || newIndex >= sections.length) return;
+
+      const reordered = arrayMove(sections, oldIndex, newIndex);
+      setSections(reordered);
+      save(reordered);
+    },
+    [sections, save],
+  );
+
   if (!loaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -233,6 +246,7 @@ export default function CellarConfigPage() {
                   onCommitEdit={commitEdit}
                   onCancelEdit={cancelEdit}
                   onDelete={setDeleteTarget}
+                  onKeyboardMove={moveSectionWithKeyboard}
                 />
               ))}
             </ul>
@@ -329,6 +343,7 @@ function SortableSectionItem({
   onCommitEdit,
   onCancelEdit,
   onDelete,
+  onKeyboardMove,
 }: {
   section: Section;
   editingId: string | null;
@@ -339,7 +354,9 @@ function SortableSectionItem({
   onCommitEdit: (id: string) => void;
   onCancelEdit: () => void;
   onDelete: (s: Section) => void;
+  onKeyboardMove: (id: string, direction: -1 | 1) => void;
 }) {
+  const reorderHelpId = useId();
   const {
     attributes,
     listeners,
@@ -400,11 +417,21 @@ function SortableSectionItem({
       ) : (
         <>
           <div className="flex items-center gap-sm min-w-0">
+            <p id={reorderHelpId} className="sr-only">
+              Use the Up and Down arrow keys to move this section.
+            </p>
             <button
               type="button"
               {...attributes}
               {...listeners}
               aria-label={`Drag to reorder ${section.name}`}
+              aria-describedby={reorderHelpId}
+              aria-keyshortcuts="ArrowUp ArrowDown"
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                event.preventDefault();
+                onKeyboardMove(section.id, event.key === "ArrowUp" ? -1 : 1);
+              }}
               className="flex h-11 w-11 shrink-0 touch-none items-center justify-center cursor-grab active:cursor-grabbing text-grey hover:text-ink focus-ring"
             >
               <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
