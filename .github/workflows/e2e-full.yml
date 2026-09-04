@@ -1,12 +1,10 @@
 # Full end-to-end suite.
 #
 # Why this exists: ci.yml runs exactly two spec files —
-# e2e/demo-critical-journeys.test.ts and e2e/pour-flow.test.ts. The repo has
-# nineteen. The other seventeen (import journey, reconcile queue, cellar
-# health, insights drilldown, pricing recommendations, branded menus,
-# taxonomy, lineage, bins, team, and every mobile variant) were executed by
-# no workflow at all, so a regression in any of them was invisible on merge
-# and stayed invisible until someone ran Playwright by hand.
+# e2e/demo-critical-journeys.test.ts and e2e/pour-flow.test.ts. The remaining
+# specs cover import, reconciliation, cellar health, insights, pricing, menus,
+# taxonomy, lineage, bins, team, and mobile behavior. Before this workflow,
+# regressions there stayed invisible until someone ran Playwright by hand.
 #
 # This does not touch the PR gate. ci.yml keeps its fast two-spec subset as
 # the required check; this runs the whole suite on a schedule and on pushes
@@ -44,7 +42,7 @@ jobs:
     name: E2E — full suite
     runs-on: ubuntu-latest
     # The two-spec subset fits inside ci.yml's 25 min alongside everything
-    # else; nineteen specs against a cold stack needs its own headroom.
+    # else; the complete suite against a cold stack needs its own headroom.
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -150,8 +148,8 @@ jobs:
               `Run: ${runUrl}`,
               `Commit: ${sha}`,
               '',
-              'This suite covers the seventeen specs the required PR check does',
-              'not run, so a failure here is a real regression that merged clean.',
+              'This suite covers specs outside the required PR check, so a',
+              'failure here is a real regression that merged clean.',
               'Playwright traces and screenshots are attached to the run as the',
               '`playwright-report-full` artifact.',
             ].join('\n');

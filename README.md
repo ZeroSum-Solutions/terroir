@@ -1,6 +1,6 @@
 # Terroir
 
-Restaurant wine-management SaaS. Photograph an invoice on your phone → Azure Document Intelligence extracts the text → Claude structures it into typed line items → save to your cellar. The app also covers physical bin placement, cellar health, reconciliation, partial-bottle close-out, pricing and staff analytics, branded wine lists, bottle-label scan, and team management.
+Restaurant wine-management SaaS. Photograph an invoice on your phone → Azure Document Intelligence extracts the text → Claude structures it into typed line items → save to your cellar. The app also covers physical bin placement, cellar health, reconciliation, partial-bottle close-out, pricing and staff analytics, branded wine lists, bottle-label scan, team management, and keyboard-operable cellar section ordering.
 
 Single Next.js 16 (App Router) deployable backed by Supabase (Postgres + Auth). No separate microservices.
 
@@ -24,7 +24,7 @@ There are two env templates and they are **not** interchangeable:
 
 | Template | What it is | Use it for |
 |---|---|---|
-| `.env.local.example` | The **local-stack** template. Ships the well-known supabase-cli local defaults — loopback URL, local publishable and service-role keys. Committed on purpose; none of it is a secret. | Local development. This is the one you copy. |
+| `.env.local.example` | The **local-stack** template. Ships the well-known supabase-cli local defaults — loopback URL, local publishable and service-role keys. Committed on purpose; none of it is a secret. | A new checkout with no `.env.local`. Never overwrite an existing file. |
 | `.env.example` | The **deployment variable inventory** — every variable the app reads, with notes and no values. | Filling in Railway service variables, or auditing what the app needs. It is not a local-dev starting point. |
 
 This distinction is load-bearing. On a configured machine **`.env.local` holds
@@ -32,19 +32,21 @@ This distinction is load-bearing. On a configured machine **`.env.local` holds
 (`AGENTS.md` non-negotiable #1) — and `pnpm dev` resolves that file silently, with
 nothing in the terminal to tell you which database you are on. Copying `.env.example`
 and "filling in the keys" is exactly how a local stack ends up pointed at production
-data. Start from the local template and the local stack instead:
+data. Start the local stack and the guarded dev server instead. Do not replace an
+existing `.env.local`; configured machines may keep production credentials there,
+and the wrapper supplies local values through the process environment.
 
 ```bash
 pnpm install
-cp .env.local.example .env.local   # local Supabase defaults; no production keys
-scripts/local/dev-stack.sh         # boots local Supabase, resets + seeds it
-pnpm dev -p 3000
+supabase start
+scripts/local/dev-local.sh
 ```
 
-`dev-stack.sh` creates `.env.local` from `.env.local.example` itself if it is missing,
-and refuses to run at all if the configured Supabase URL is not loopback.
+For a fresh reset and seed, `dev-stack.sh` creates `.env.local` from
+`.env.local.example` only when the file is missing. It refuses to run when the
+configured Supabase URL is not loopback.
 
-Open http://localhost:3000. See
+Open http://127.0.0.1:3000. See
 [`docs/runbooks/local-stack.md`](docs/runbooks/local-stack.md) for the full local stack
 and [`docs/runbooks/investor-demo.md`](docs/runbooks/investor-demo.md) for why a bare
 `pnpm dev` is the wrong entry point.
@@ -52,12 +54,12 @@ and [`docs/runbooks/investor-demo.md`](docs/runbooks/investor-demo.md) for why a
 ## Common commands
 
 ```bash
-pnpm dev                 # Next.js dev server (Turbopack)
+scripts/local/dev-local.sh # guarded Next.js dev server (Turbopack)
 pnpm build               # production build
 pnpm start               # serve the production build locally
 pnpm lint                # ESLint
 pnpm test                # Vitest unit + route tests
-pnpm test:e2e            # Playwright end-to-end
+pnpm test:e2e            # Playwright; starts a fresh guarded local server
 pnpm verify:api-contract  # verify discovered API routes against the checked-in inventory
 pnpm verify:product-conformance # check TER-CF classification artifact drift
 pnpm verify:feature-ledger # verify the authoritative feature ledger
@@ -66,6 +68,9 @@ pnpm run snapshot        # regenerate supabase/schema.snapshot.sql after a new m
 pnpm run types:check     # regenerate and diff the Supabase TypeScript types
 pnpm run downs:check     # verify migrations 0011+ have paired down files
 ```
+
+Playwright runs with zero retries. The required CI journey subset also fails if
+any selected test skips, so a missing local fixture cannot pass as coverage.
 
 [`docs/feature-ledger.json`](docs/feature-ledger.json) is the sole authoritative
 completion and status ledger for all 269 active core requirements. Run

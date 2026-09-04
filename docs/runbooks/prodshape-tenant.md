@@ -7,20 +7,19 @@ data rather than on a fixture built to look good.
 
 ## Why it exists
 
-`scripts/seed-local-supabase.mjs` builds `LOCAL SEED - Osteria Scala`, and that
-tenant is the **best case on every axis a wine renders on**. Production is the
-worst case on all four. A QA session that only drives the demo tenant is blind to
-the defects that only appear when the data is thin — which has already happened:
-a full work session went green against the demo tenant while "no wine images
-anywhere in production" sat unnoticed.
+`scripts/seed-local-supabase.mjs` builds `LOCAL SEED - Osteria Scala`. That
+tenant is the best case for producer completeness and identity links, but the
+reproducible seed does not include direct wine photos or the optional X-Wines
+corpus load. A QA session that only drives the demo tenant is still blind to the
+defects that appear at production's missing-data ratios.
 
 | axis | `LOCAL SEED - Osteria Scala` | production (2026-08-30) | `LOCAL PRODSHAPE - Trattoria Bianca` |
 |---|---|---|---|
 | wines | 250 | 1,385 | 400 |
-| with `hero_image_url` | 250 (100%) | 1 (0.07%) | 1 (0.25%) |
+| with `hero_image_url` | 0 (0%) | 1 (0.07%) | 1 (0.25%) |
 | blank `producer` | 0 (0%) | 321 (23.2%) | 93 (23.2%) |
 | spine-linked (`wine_variant_id`) | 250 (100%) | 1,064 (76.8%) | 307 (76.8%) |
-| corpus images reachable | 250 | 0 | 0 |
+| corpus images reachable on a fresh reproducible stack | 0 | 0 | 0 |
 
 The counts are deliberately not production's; the **ratios** are. 400 wines is
 enough to page, sort, filter and scroll through by hand.
@@ -102,7 +101,8 @@ await fetch("/api/restaurant/de100000-0000-4000-8000-000000000001", { method: "P
 **From a shell**, with a cookie jar:
 
 ```bash
-curl -s -c jar -b jar -L -o /dev/null http://127.0.0.1:3000/api/dev-login
+mkdir -p .tmp
+curl -s -c jar -b jar -L -o .tmp/prodshape-login.html http://127.0.0.1:3000/api/dev-login
 curl -s -X PUT -b jar -c jar http://127.0.0.1:3000/api/restaurant/de200000-0000-4000-8000-000000000001
 curl -s -b jar http://127.0.0.1:3000/cellar | grep -o "LOCAL PRODSHAPE - Trattoria Bianca" | head -1
 ```
