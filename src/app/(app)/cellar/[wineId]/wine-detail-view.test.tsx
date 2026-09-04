@@ -3,6 +3,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { XWinesProfile } from "@/lib/wine-intelligence/xwines-profile";
 import { resolveWineFacts } from "@/lib/wine-intelligence/wine-reference-facts";
+import { aggregateHouseTaste } from "@/domains/wine-profile/resolve-house-profile";
+import {
+  selectReferenceProfile,
+  type ReferenceNoteRow,
+} from "@/domains/wine-profile/resolve-reference-profile";
 import { WineDetailView, type WineDetailViewProps } from "./wine-detail-view";
 
 /** A corpus read that succeeded. The failed one is spelled out where used. */
@@ -41,16 +46,35 @@ const WINE: WineDetailViewProps["wine"] = {
   size_ml: 750,
   colour: "red",
   hero_image_url: null,
-  tasting_notes: null,
   is_eightysixed: false,
   retail_min: null,
   retail_max: null,
   retail_median: null,
   retail_retailer_count: null,
-  rating: null,
-  rating_source: null,
-  review_excerpt: null,
 };
+
+/**
+ * The reference side, run through the real selection rule rather than
+ * hand-built, so these cases keep exercising what the page actually applies.
+ */
+const referenceFor = (profile: XWinesProfile | null, rows: ReferenceNoteRow[] = []) =>
+  selectReferenceProfile({
+    wine: {
+      canonicalWineId: "cw-1",
+      vintage: 2018,
+      drinkWindowStart: null,
+      drinkWindowEnd: null,
+      drinkWindowBasis: null,
+      drinkWindowSetBy: null,
+      drinkWindowSetAt: null,
+    },
+    rows,
+    profile,
+    overrideAuthorName: null,
+  });
+
+const NO_NOTES = { ...aggregateHouseTaste([]), notes: [] };
+const NO_BADGES = { value: [], basis: { kind: "measured" as const, asOf: "2026-09-03" } };
 
 const PROFILE: XWinesProfile = {
   wineId: 174177,
@@ -93,7 +117,17 @@ const BASE: WineDetailViewProps = {
   }),
   profile: ok(null),
   vintageRatings: ok([]),
+  house: NO_NOTES,
+  reference: referenceFor(null),
+  badges: NO_BADGES,
+  currentYear: 2026,
 };
+
+/** A matched profile and the reference profile derived from it, together. */
+const matched = (profile: XWinesProfile): Partial<WineDetailViewProps> => ({
+  profile: ok(profile),
+  reference: referenceFor(profile),
+});
 
 const headings = (el: HTMLElement) =>
   [...el.querySelectorAll("h2")].map((h) => h.textContent);
@@ -192,7 +226,7 @@ describe("corpus imagery in the hero", () => {
 
 describe("with a reference match", () => {
   it("renders both taste axes with the corpus's own wording", async () => {
-    const el = await render({ ...BASE, profile: ok(PROFILE) });
+    const el = await render({ ...BASE, ...matched(PROFILE) });
     expect(el.textContent).toContain("Very full-bodied");
     expect(el.textContent).toContain("High acidity");
     const bars = [...el.querySelectorAll('[role="img"]')].map((b) =>
@@ -205,19 +239,13 @@ describe("with a reference match", () => {
   });
 
   it("omits an axis the corpus has no value for", async () => {
-    const el = await render({
-      ...BASE,
-      profile: ok({ ...PROFILE, acidity: null }),
-    });
+    const el = await render({ ...BASE, ...matched({ ...PROFILE, acidity: null }) });
     expect(el.textContent).toContain("Very full-bodied");
     expect(el.querySelectorAll('[role="img"]')).toHaveLength(1);
   });
 
   it("drops the taste section entirely when neither axis is known", async () => {
-    const el = await render({
-      ...BASE,
-      profile: ok({ ...PROFILE, body: null, acidity: null }),
-    });
+    const el = await render({ ...BASE, ...matched({ ...PROFILE, body: null, acidity: null }) });
     expect(headings(el)).not.toContain("What does this wine taste like?");
   });
 
@@ -283,53 +311,85 @@ describe("when the corpus could not be read", () => {
   });
 });
 
-describe("tasting note attribution", () => {
-  const CRITIC = { rating: 95, rating_source: "Wine Advocate" };
+describe("what the page refuses to render", () => {
+  it("renders every number with a basis sentence, and no bare score", async () => {
+    // The old page printed `rating_source · rating` as a byline — on a
+    // claude_inference wine, the fabrication's own name under its number. The
+    // row's rating columns are no longer even in the view's type; a score
+    // reaches the page only through a resolver, with its basis.
+    const house = {
+      ...aggregateHouseTaste([
+        { id: "n1", body: "", score: 90, tastedOn: null, createdAt: "2026-09-01", attributed: true, authorName: "Devin", descriptors: [] },
+        { id: "n2", body: "", score: 86, tastedOn: null, createdAt: "2026-09-01", attributed: true, authorName: "Sam", descriptors: [] },
+      ]),
+      notes: [],
+    };
+    const el = await render({ ...BASE, house });
+    expect(el.textContent).toMatch(/88\s*\/\s*100/);
+    expect(el.textContent).toMatch(/across 2 house notes/i);
+  });
 
-  it("attributes a critic's excerpt to the critic", async () => {
+  it("shows a published note under its source, never as the house's words", async () => {
     const el = await render({
       ...BASE,
-      wine: { ...WINE, ...CRITIC, review_excerpt: "Dense and brooding." },
+      reference: referenceFor(null, [
+        {
+          vintage: 2018,
+          source_kind: "producer",
+          source_name: "Penfolds sheet",
+          source_url: "https://example.test/sheet",
+          fetched_at: "2026-08-14T00:00:00.000Z",
+          body: "Dense and brooding.",
+          score: null,
+          score_scale: null,
+          drink_window_start: null,
+          drink_window_end: null,
+        },
+      ]),
     });
     expect(el.textContent).toContain("Dense and brooding.");
-    expect(el.querySelector("blockquote footer")?.textContent).toBe("Wine Advocate · 95");
+    expect(el.querySelector("blockquote footer")?.textContent).toMatch(/Penfolds sheet/);
+    expect(el.querySelector("blockquote footer")?.textContent).toMatch(/14 August 2026/);
   });
 
-  it("never signs an in-house note with the critic's byline", async () => {
-    // The bug: tasting_notes won the text, but rating_source was appended
-    // regardless — putting the sommelier's words in Wine Advocate's mouth.
+  it("draws no drink window when none has a basis", async () => {
+    const el = await render(BASE);
+    expect(headings(el)).not.toContain("Drink window");
+    expect(el.querySelector('[data-testid="drink-window-block"]')).toBeNull();
+  });
+
+  it("draws the window when a source states it, and says which source", async () => {
     const el = await render({
       ...BASE,
-      wine: {
-        ...WINE,
-        ...CRITIC,
-        tasting_notes: "Our own note.",
-        review_excerpt: "Dense and brooding.",
-      },
+      reference: referenceFor(null, [
+        {
+          vintage: 2018,
+          source_kind: "producer",
+          source_name: "Penfolds sheet",
+          source_url: "https://example.test/sheet",
+          fetched_at: "2026-08-14T00:00:00.000Z",
+          body: null,
+          score: null,
+          score_scale: null,
+          drink_window_start: 2022,
+          drink_window_end: 2030,
+        },
+      ]),
     });
-    expect(el.textContent).toContain("Our own note.");
-    expect(el.querySelector("blockquote footer")).toBeNull();
-    expect(el.textContent).not.toContain("Wine Advocate");
+    expect(headings(el)).toContain("Drink window");
+    expect(el.textContent).toMatch(/2022–2030/);
+    expect(el.textContent).toMatch(/Penfolds sheet/);
   });
 
-  it("falls through an empty tasting note to a real excerpt", async () => {
-    // `??` kept "" and rendered a blank quote; the display condition used `||`
-    // and disagreed with it.
+  it("renders the badges that fired with their records basis", async () => {
     const el = await render({
       ...BASE,
-      wine: {
-        ...WINE,
-        ...CRITIC,
-        tasting_notes: "   ",
-        review_excerpt: "Dense and brooding.",
+      badges: {
+        value: [{ kind: "last_bottle", label: "Last bottle", rule: "One left on hand." }],
+        basis: { kind: "measured", asOf: "2026-09-03" },
       },
     });
-    expect(el.querySelector("blockquote p")?.textContent).toBe("Dense and brooding.");
-    expect(el.querySelector("blockquote footer")?.textContent).toBe("Wine Advocate · 95");
-  });
-
-  it("renders no tasting-note section when neither text exists", async () => {
-    const el = await render({ ...BASE, wine: { ...WINE, ...CRITIC } });
-    expect(headings(el)).not.toContain("Tasting note");
+    expect(el.textContent).toContain("Last bottle");
+    expect(el.textContent).toMatch(/your own records/i);
   });
 });

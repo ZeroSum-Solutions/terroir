@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import type { HouseNote } from "@/domains/notes/note-list";
+import type { Badge } from "@/domains/wine-profile/badges";
+import type { HouseTaste } from "@/domains/wine-profile/resolve-house-profile";
+import type { ReferenceProfile } from "@/domains/wine-profile/resolve-reference-profile";
 import { CORPUS_IMAGE_NOTE } from "@/lib/wine-intelligence/corpus-image";
 import type { ResolvedWineFacts } from "@/lib/wine-intelligence/wine-reference-facts";
 import { wineDisplayName } from "@/lib/wine-display-name";
+import type { Score, Sourced } from "@/lib/provenance/sourced";
 import type {
   CorpusRead,
   VintageRating,
@@ -12,13 +17,16 @@ import type { ReactNode } from "react";
 import { Section } from "@/components/detail-sections";
 import { CellarSection } from "./blocks/cellar-section";
 import { CorpusUnavailableNote, NoProfileNote } from "./blocks/corpus-notes";
+import { DrinkWindowBlock } from "./blocks/drink-window-block";
 import { FactsSection } from "./blocks/facts-section";
 import { HeroSection } from "./blocks/hero-section";
+import { OperationalBadges } from "./blocks/operational-badges";
 import { PairingSection } from "./blocks/pairing-section";
-import { TasteAxesSection } from "./blocks/taste-axes-section";
-import { TastingNoteSection } from "./blocks/tasting-note-section";
+import { ReferenceNotes } from "./blocks/reference-notes";
+import { ScorePair } from "./blocks/score-pair";
+import { TasteBlock } from "./blocks/taste-block";
 import type { WineRow } from "./blocks/types";
-import { VintageSection, VintageUnavailableSection } from "./blocks/vintage-section";
+import { VintageRail, VintageUnavailableSection } from "./blocks/vintage-rail";
 
 export type WineDetailViewProps = {
   wine: WineRow;
@@ -27,6 +35,12 @@ export type WineDetailViewProps = {
   facts: ResolvedWineFacts;
   profile: CorpusRead<XWinesProfile | null>;
   vintageRatings: CorpusRead<VintageRating[]>;
+  /** The house's own palates: confirmed descriptors and score, and the notes. */
+  house: { taste: Sourced<HouseTaste>; score: Sourced<Score> | null; notes: HouseNote[] };
+  /** What is published about this vintage, and the corpus structure. */
+  reference: ReferenceProfile;
+  badges: Sourced<Badge[]>;
+  currentYear: number;
   /**
    * The house tasting log. Passed in as a slot rather than rendered here so
    * this component stays presentational: the log is a client component that
@@ -43,12 +57,15 @@ export function WineDetailView({
   facts,
   profile: profileRead,
   vintageRatings: ratingsRead,
+  house,
+  reference,
+  badges,
+  currentYear,
   notesSlot,
 }: WineDetailViewProps) {
   // An unreadable corpus renders like an unmatched wine — no taste sections —
   // but says so in its own words below rather than borrowing "no match".
   const profile = profileRead.status === "ok" ? profileRead.value : null;
-  const vintageRatings = ratingsRead.status === "ok" ? ratingsRead.value : [];
 
   // The tenant's own photograph always outranks the corpus's: they uploaded it
   // of the bottle they actually hold. The corpus only fills a hole.
@@ -62,16 +79,6 @@ export function WineDetailView({
   const facets = [facts.country, facts.region, profile?.type ?? null, facts.varietal].filter(
     (value): value is string => Boolean(value),
   );
-
-  // The house's own note outranks a bought-in one, but only the bought-in one
-  // may carry the critic's byline: attributing a sommelier's words to "Wine
-  // Advocate · 95" puts a claim in someone else's mouth. Empty strings are
-  // treated as absent, so a blank tasting_notes cannot win over a real excerpt
-  // and leave an empty blockquote on the page.
-  const houseNote = wine.tasting_notes?.trim() || null;
-  const criticNote = wine.review_excerpt?.trim() || null;
-  const tastingNote = houseNote ?? criticNote;
-  const isCriticNote = houseNote === null && criticNote !== null;
 
   return (
     <div className="bg-canvas">
@@ -94,13 +101,19 @@ export function WineDetailView({
           corpusImage={corpusImage}
         />
 
+        <OperationalBadges badges={badges} />
+
         {profileRead.status === "unavailable" && <CorpusUnavailableNote />}
         {profileRead.status === "ok" && profileRead.value === null && (
           <NoProfileNote producer={wine.producer} />
         )}
 
-        {profile && (profile.body || profile.acidity) && (
-          <TasteAxesSection profile={profile} />
+        <TasteBlock taste={house.taste} structure={reference.structure} notes={house.notes} />
+
+        <ScorePair house={house.score} reference={reference.score} />
+
+        {reference.window !== null && (
+          <DrinkWindowBlock window={reference.window} currentYear={currentYear} />
         )}
 
         {profile && profile.pairings.length > 0 && (
@@ -109,22 +122,14 @@ export function WineDetailView({
 
         <FactsSection wine={wine} profile={profile} facts={facts} />
 
-        {tastingNote !== null && (
-          <TastingNoteSection
-            note={tastingNote}
-            isCriticNote={isCriticNote}
-            ratingSource={wine.rating_source}
-            rating={wine.rating}
-          />
-        )}
+        <ReferenceNotes notes={reference.notes} />
 
         {profile && ratingsRead.status === "unavailable" && <VintageUnavailableSection />}
-
-        {vintageRatings.length > 1 && (
-          <VintageSection
-            vintageRatings={vintageRatings}
-            profile={profile}
+        {ratingsRead.status === "ok" && (
+          <VintageRail
+            rows={{ value: ratingsRead.value, basis: { kind: "corpus", name: "X-Wines" } }}
             wineVintage={wine.vintage}
+            matchedName={profile?.matchedName ?? null}
           />
         )}
 

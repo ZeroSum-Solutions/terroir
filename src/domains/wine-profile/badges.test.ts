@@ -4,7 +4,7 @@ import { computeBadges, type BadgeInput } from "./badges";
 const kinds = (input: BadgeInput) => computeBadges(input).map((b) => b.kind);
 
 const base: BadgeInput = {
-  year: 2026,
+  asOf: "2026-09-03",
   window: null,
   windowBasis: null,
   sellingFormatUnits: 6,
@@ -103,6 +103,15 @@ describe("slow mover", () => {
   it("is not cleared by a depletion older than the threshold", () => {
     expect(
       kinds({ ...base, lastPutAwayAt: daysAgo(400), lastDepletionAt: daysAgo(200), deadStockDays: 90 }),
+    ).toContain("slow_mover");
+  });
+
+  it("measures the days to the date it is given, not to a fixed day of the year", () => {
+    // daysBetween once measured to 3 September of `year` regardless of the
+    // real date, so in December a bottle put away in September read as two
+    // days old. The badge input carries the actual date instead.
+    expect(
+      kinds({ ...base, asOf: "2026-12-15", lastPutAwayAt: "2026-09-01", lastDepletionAt: null, deadStockDays: 90 }),
     ).toContain("slow_mover");
   });
 
