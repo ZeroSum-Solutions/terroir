@@ -67,7 +67,7 @@ export function SortableSectionItem({
               if (e.key === "Enter") onCommitEdit(section.id);
               if (e.key === "Escape") onCancelEdit();
             }}
-            className="min-h-11 min-w-0 flex-1 rounded-pill border border-rule px-sm py-sm text-[14px] text-ink focus-ring"
+            className="min-h-11 min-w-0 flex-1 rounded-pill border border-rule px-sm py-sm text-control text-ink focus-ring"
             autoFocus
           />
           <button
@@ -111,7 +111,7 @@ export function SortableSectionItem({
               <GripVertical className="h-4 w-4" strokeWidth={2} aria-hidden />
             </button>
 
-            <span className="min-w-0 flex-1 break-words text-[14px] font-medium text-ink">
+            <span className="min-w-0 flex-1 break-words text-control font-medium text-ink">
               {section.name}
             </span>
           </div>
