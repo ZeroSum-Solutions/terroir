@@ -11,8 +11,10 @@ import {
   fetchLwinReference,
   resolveWineFacts,
 } from "@/lib/wine-intelligence/wine-reference-facts";
-import { loadWineNotes } from "@/domains/notes/load-wine-notes";
 import { NotesSection } from "@/domains/notes/notes-section";
+import { composeBadges, resolveCellarContext } from "@/domains/wine-profile/resolve-cellar-context";
+import { resolveHouseProfile } from "@/domains/wine-profile/resolve-house-profile";
+import { resolveReferenceProfile } from "@/domains/wine-profile/resolve-reference-profile";
 import { WineDetailView } from "./wine-detail-view";
 
 export const metadata: Metadata = { title: "Wine" };
@@ -25,8 +27,12 @@ type Params = Promise<{ wineId: string }>;
 // to render one.
 // One string literal, deliberately: supabase-js infers the row type from the
 // literal, and a concatenated const degrades it to GenericStringError.
+//
+// rating, rating_source, review_excerpt and tasting_notes are not read. The
+// page renders no number without a basis, and those columns have none (spec
+// §4.7); the resolvers below are the only way a value reaches a block.
 const WINE_COLUMNS =
-  "id, name, producer, vintage, varietal, region, country, size_ml, colour, hero_image_url, tasting_notes, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, peak_year, serving_temp_min, serving_temp_max, serving_temp_label, decant_minutes, retail_min, retail_max, retail_median, retail_retailer_count, rating, rating_source, review_excerpt, canonical_wine_id, lwin_id" as const;
+  "id, name, producer, vintage, varietal, region, country, size_ml, colour, hero_image_url, is_eightysixed, eightysixed_at, drink_window_start, drink_window_end, drink_window_basis, drink_window_set_by, drink_window_set_at, retail_min, retail_max, retail_median, retail_retailer_count, canonical_wine_id, lwin_id" as const;
 
 // This segment catches every /cellar/<x> that is not a static sibling
 // (config, open, reconcile), so `wineId` is whatever was typed. Rejecting a
@@ -59,33 +65,43 @@ export default async function WineDetailPage({ params }: { params: Params }) {
   if (wineError) throw wineError;
   if (!wine) notFound();
 
-  const [inventoryResult, profile, lwin, notes, vocabularyResult] = await Promise.all([
-    supabase
-      .from("inventory_items")
-      .select("quantity, bin_location, section")
-      .eq("wine_id", wineId)
-      .eq("restaurant_id", restaurantId),
-    resolveWineCorpusProfile({
-      supabase,
-      canonicalWineId: wine.canonical_wine_id,
-      producer: wine.producer,
-      name: wine.name,
-    }),
-    // Alongside the other two rather than after: it depends only on a column
-    // the wine query already returned, so serialising it would add a round
-    // trip to every wine detail page for nothing.
+  // The corpus match is started first and shared: the reference resolver
+  // needs it for the structure axes, and the facts and hero need it too.
+  const profilePromise = resolveWineCorpusProfile({
+    supabase,
+    canonicalWineId: wine.canonical_wine_id,
+    producer: wine.producer,
+    name: wine.name,
+  });
+
+  // The three resolvers (spec §4.2) start together. House and cellar go the
+  // moment the wine row is known; the reference resolver's own queries start
+  // the moment the corpus match returns, which is the earliest they can.
+  const [house, cellar, reference, profile, lwin, vocabularyResult] = await Promise.all([
+    resolveHouseProfile(supabase, restaurantId, wineId),
+    resolveCellarContext(supabase, restaurantId, wineId, wine.size_ml),
+    profilePromise.then((read) =>
+      resolveReferenceProfile(
+        supabase,
+        restaurantId,
+        {
+          canonicalWineId: wine.canonical_wine_id,
+          vintage: wine.vintage,
+          drinkWindowStart: wine.drink_window_start,
+          drinkWindowEnd: wine.drink_window_end,
+          drinkWindowBasis: wine.drink_window_basis,
+          drinkWindowSetBy: wine.drink_window_set_by,
+          drinkWindowSetAt: wine.drink_window_set_at,
+        },
+        read.status === "ok" ? read.value : null,
+      ),
+    ),
+    profilePromise,
+    // Depends only on a column the wine query already returned, so it runs
+    // alongside rather than adding a round trip to every wine detail page.
     fetchLwinReference(supabase, wine.lwin_id),
-    // The house's own tasting log. Alongside the rest for the same reason:
-    // serialising it would add a round trip to every wine detail page.
-    loadWineNotes(supabase, restaurantId, wineId),
     supabase.from("descriptors").select("slug, label, family").order("sort"),
   ]);
-
-  // Same reasoning as the wine query, with a worse failure mode: a null here
-  // renders as "None on hand", which is a stock claim invented out of an
-  // outage.
-  if (inventoryResult.error) throw inventoryResult.error;
-  const inventory = inventoryResult.data ?? [];
 
   const facts = resolveWineFacts({
     wine,
@@ -100,31 +116,25 @@ export default async function WineDetailPage({ params }: { params: Params }) {
       ? await fetchVintageRatings(supabase, profile.value.wineId, wine.vintage)
       : ({ status: "ok", value: [] } satisfies CorpusRead<VintageRating[]>);
 
-  const bottleCount = inventory.reduce(
-    (total, item) => total + (item.quantity ?? 0),
-    0,
-  );
-  const locations = [
-    ...new Set(
-      inventory
-        .map((item) => item.bin_location ?? item.section)
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ];
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <WineDetailView
       wine={wine}
-      bottleCount={bottleCount}
-      locations={locations}
+      bottleCount={cellar.bottleCount}
+      locations={cellar.locations}
       facts={facts}
       profile={profile}
       vintageRatings={vintageRatings}
+      house={house}
+      reference={reference}
+      badges={composeBadges(cellar, reference.window, today)}
+      currentYear={Number(today.slice(0, 4))}
       notesSlot={
         <NotesSection
           wineId={wine.id}
           vocabulary={vocabularyResult.data ?? []}
-          notes={notes}
+          notes={house.notes}
         />
       }
     />
