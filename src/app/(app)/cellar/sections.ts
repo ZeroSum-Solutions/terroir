@@ -16,9 +16,23 @@ export type CellarSection = { id: string; name: string };
  * keys or drag order.
  */
 export function normalizeSections(raw: unknown[]): CellarSection[] {
-  return raw.map((entry) =>
-    typeof entry === "string"
-      ? { id: entry, name: entry }
-      : (entry as CellarSection),
-  );
+  const usedIds = new Set<string>();
+
+  return raw.map((entry) => {
+    const section =
+      typeof entry === "string"
+        ? { id: entry, name: entry }
+        : (entry as CellarSection);
+    const baseId = section.id;
+    let id = baseId;
+    let suffix = 2;
+
+    while (usedIds.has(id)) {
+      id = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+
+    usedIds.add(id);
+    return id === section.id ? section : { ...section, id };
+  });
 }

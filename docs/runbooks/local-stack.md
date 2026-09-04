@@ -25,9 +25,14 @@ Idempotent — safe to re-run. It will:
 Then boot the app against it:
 
 ```bash
-pnpm dev -p 3000
-curl -i http://localhost:3000/api/dev-login   # expect a 30x + session cookies
+scripts/local/dev-local.sh
+curl -i http://127.0.0.1:3000/api/dev-login   # expect a 30x + session cookies
 ```
+
+`pnpm test:e2e` uses the same guarded wrapper and starts a fresh server. It does
+not reuse an unrelated process already listening on port 3000. The local auth
+configuration allows 100 OTP verifications per five minutes because the full
+suite performs more than the Supabase default of 30 dev-login verifications.
 
 ## Post-reset readiness
 

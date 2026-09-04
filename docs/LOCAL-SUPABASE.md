@@ -15,10 +15,14 @@ doc is canonical for the richer seed script's contents and usage only.
 - 3 auth users: owner, manager, staff
 - 1 restaurant with cellar config
 - 250 wines across colors, regions, vintages, formats, pricing, enrichment,
-  86'd, manual override, and alert states
+  86'd, manual override, and alert states. The reproducible seed writes no
+  direct `hero_image_url` values; surfaces without a resolved corpus image show
+  the explicit initials fallback.
 - 60 invoice scans with OCR/extraction-like JSON
-- 400 inventory rows across sections, bins, formats, low-stock, and zero-stock
-  cases
+- 400 inventory rows across sections, formats, low-stock, and zero-stock cases.
+  They retain legacy `bin_location` text but are unplaced in the canonical bins
+  model, and the seed creates no `bins` rows. Use the production-shaped tenant
+  when testing `/bins`.
 - 4 wine lists: published BTG, published full list, draft list, archived list
 - Wine-list sections/items with prices, blurbs, hidden items, pour tracking,
   and 86 availability states
@@ -33,13 +37,17 @@ de100000-0000-4000-8000-000000000001
 
 ## Environment
 
-Set `.env.local` to a local Supabase target with migrations already applied:
+The seed process must receive a local Supabase target with migrations already
+applied. A fresh local-only checkout may store these values in `.env.local`.
+On a configured machine where `.env.local` holds production credentials, leave
+that file untouched and export the values from `supabase status` in the current
+shell instead.
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:57321
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<local anon key>
-SUPABASE_SERVICE_ROLE_KEY=<local service role key>
-ACTIVE_RESTAURANT_COOKIE_SECRET=<at least 16 random chars>
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='replace-with-local-anon-key'
+SUPABASE_SERVICE_ROLE_KEY='replace-with-local-service-role-key'
+ACTIVE_RESTAURANT_COOKIE_SECRET=redacted
 DEV_BYPASS_EMAIL=owner+local@terroir.test
 
 # Strongly recommended safety rail. Set this to the prod project ref or
@@ -109,7 +117,7 @@ Terroir-local-123!
 The password can be overridden with:
 
 ```bash
-LOCAL_SEED_USER_PASSWORD=<new local password>
+LOCAL_SEED_USER_PASSWORD=redacted
 ```
 
 ## Smoke Targets
@@ -130,5 +138,9 @@ Once seeded, run authenticated checks against:
 For E2E, set `DEV_BYPASS_EMAIL` and run:
 
 ```bash
-pnpm exec playwright test e2e/pour-flow.test.ts
+pnpm test:e2e
 ```
+
+The Playwright config starts `scripts/local/dev-local.sh` itself and refuses to
+reuse an unknown server on port 3000. The complete suite also needs the
+production-shaped tenant from `docs/runbooks/prodshape-tenant.md`.

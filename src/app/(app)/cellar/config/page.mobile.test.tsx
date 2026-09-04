@@ -299,6 +299,25 @@ describe("Manage Cellar Sections mobile layout", () => {
     )!;
     expect(dragHandle.className).toContain("touch-none");
   });
+
+  it("keeps the sortable handle keyboard-focusable with a visible focus outline", async () => {
+    stubConfigFetch({ id: "a", name: "Reds" });
+    const { container } = await mount(<CellarConfigPage />);
+    await flushLoad();
+
+    const dragHandle = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Drag to reorder Reds"]',
+    )!;
+    expect(dragHandle.tabIndex).toBe(0);
+    expect(dragHandle.className).toContain("focus-ring");
+    expect(dragHandle.getAttribute("aria-keyshortcuts")).toBe(
+      "ArrowUp ArrowDown",
+    );
+    const descriptionId = dragHandle.getAttribute("aria-describedby")!;
+    expect(container.querySelector(`#${CSS.escape(descriptionId)}`)?.textContent).toContain(
+      "Use the Up and Down arrow keys",
+    );
+  });
 });
 
 function stubConfigFetch(sections: unknown) {

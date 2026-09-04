@@ -212,7 +212,9 @@ test.describe("@global-01 every control row fits the phone frame", () => {
    *
    * The table itself may keep scrolling: six columns of bin data are data, not
    * buttons, and the rule is about buttons. What may not happen is a CONTROL
-   * living behind that scroll. `measureRowFit` on the `<tr>` answers exactly
+   * living behind that scroll. The reproducible demo seed has no bin rows, so
+   * this check explicitly enters the production-shaped fixture that owns them.
+   * `measureRowFit` on the `<tr>` answers exactly
    * that — the scroll container is the row's ancestor, not its descendant, so
    * what this asserts is "every control on this row is inside the 390px frame",
    * which is the half of the rule the table geometry does not excuse.
@@ -222,13 +224,18 @@ test.describe("@global-01 every control row fits the phone frame", () => {
   }) => {
     await login(page);
     await page.setViewportSize(PHONE);
-    await page.goto("/bins");
-    await page.locator("[data-bin-row]").first().waitFor();
-    await page.locator("[data-bin-row]").first().scrollIntoViewIfNeeded();
+    await enterProdShape(page);
+    try {
+      await page.goto("/bins");
+      await page.locator("[data-bin-row]").first().waitFor();
+      await page.locator("[data-bin-row]").first().scrollIntoViewIfNeeded();
 
-    const fit = await measureRowFit(page, "[data-bin-row]");
-    expectRowFitsInFrame(fit, "/bins row controls at 390px");
-    expectTouchTargets(fit, "/bins row controls at 390px");
+      const fit = await measureRowFit(page, "[data-bin-row]");
+      expectRowFitsInFrame(fit, "/bins row controls at 390px");
+      expectTouchTargets(fit, "/bins row controls at 390px");
+    } finally {
+      await leaveProdShape(page);
+    }
   });
 
   /**

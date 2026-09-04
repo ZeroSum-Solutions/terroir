@@ -32,16 +32,11 @@ Break any of these and you will cause damage that tests will not catch.
    resolves ahead of any dotenv file. Add `DEV_BYPASS_EMAIL=owner+local@terroir.test`
    so the bypass identity matches the seed instead of inheriting the production address.
 
-   **Latent hazard, unfixed:** `playwright.config.ts` sets
-   `webServer: { command: "pnpm dev", port: 3000, reuseExistingServer: true }`. If no
-   dev server is already running, `pnpm test:e2e` therefore starts a **bare `pnpm dev`**
-   — the hosted one — and then runs write-capable e2e specs against it. Today the only
-   thing preventing that is somebody having run `dev-local.sh` first, which is luck, not
-   a guard. The individual specs' own `isLoopbackSupabaseUrl` checks skip them, so the
-   practical outcome is a silent full skip rather than damage — but the server still
-   comes up against production. Point `webServer.command` at `dev-local.sh`, or add a
-   loopback assertion to the config; verify against CI before changing it, since CI
-   supplies its Supabase env from `supabase status` rather than from a dotenv file.
+   **Playwright is guarded.** `playwright.config.ts` starts
+   `scripts/local/dev-local.sh`, never reuses an unknown server on port 3000, and
+   runs with zero retries. The required CI journey subset also sets
+   `FAIL_ON_SKIPPED_TESTS=1`, so a loopback safety skip fails the gate instead of
+   producing a false green. Keep all three safeguards when changing E2E startup.
 2. **`src/types/database.ts` is generated.** Never hand-edit. `pnpm types:gen` after
    any migration; CI diffs it.
 3. **Service-role usage bypasses RLS entirely.** Every service-role call site must
@@ -77,6 +72,7 @@ first:
 pnpm exec tsc --noEmit          # type-check
 pnpm lint                       # ESLint + jsx-a11y
 pnpm test                       # Vitest (live-DB suites self-skip locally, run in CI)
+pnpm test:e2e                   # Playwright; starts the guarded local server itself
 pnpm check:design               # palette, contrast, token-sync, typography ratchet
 pnpm check:file-size            # file-size ratchet — 400 source / 1000 test; baselined files may shrink, never grow
 pnpm check:control-rows         # GLOBAL-01 control-row ratchet
@@ -98,6 +94,10 @@ baseline to make a gate pass.
 If `pnpm test` passes locally but you touched anything tenant-scoped, **that is not
 proof** — the cross-tenant containment suites only run against a live loopback
 Postgres. Start one (`docs/runbooks/local-stack.md`) or rely on CI.
+
+The full Playwright suite reports its remaining explicit skips. Do not describe a
+run as complete coverage unless the active-test count and skipped count are both
+recorded. The required critical subset fails on any skip.
 
 ## Where things live
 
